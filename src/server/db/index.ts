@@ -33,10 +33,28 @@ export function getDb(): Promise<Db> {
   return holder.promise;
 }
 
+/**
+ * Pool settings for the shared handle (see createPostgresDb for the Transaction-Pooler rules they enforce). Every value can be tuned without a
+ * deploy: DATABASE_POOL_MAX (default 8; use 1-2 behind a SESSION pooler) · DATABASE_QUERY_TIMEOUT_MS (20000; 0 = off) · DATABASE_TX_TIMEOUT_MS (120000; 0 = off).
+ * A hung connection therefore costs a request at most one timeout, never the platform's 60 s / 300 s function limit.
+ */
+function serverlessPoolOptions(): { maxConnections: number; queryTimeoutMs: number; transactionTimeoutMs: number } {
+  const num = (name: string, fallback: number): number => {
+    const raw = process.env[name];
+    const value = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+  };
+  return {
+    maxConnections: Math.max(1, Math.floor(num("DATABASE_POOL_MAX", 8))),
+    queryTimeoutMs: num("DATABASE_QUERY_TIMEOUT_MS", 20_000),
+    transactionTimeoutMs: num("DATABASE_TX_TIMEOUT_MS", 120_000),
+  };
+}
+
 async function open(): Promise<Db> {
   const env = getEnv();
   if (env.DATABASE_URL) {
-    const db = createPostgresDb(env.DATABASE_URL);
+    const db = createPostgresDb(env.DATABASE_URL, serverlessPoolOptions());
     // Dev-only (never in production): pay a fixed "network" cost per statement to rehearse a distant database.
     const ms = Number(process.env.CLANK_DEV_DB_LATENCY_MS ?? 0) || 0;
     return !env.isProduction && ms > 0 ? withLatency(db, Math.min(ms, 1000)) : db;

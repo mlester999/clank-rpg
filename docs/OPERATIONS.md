@@ -6,7 +6,7 @@ See `.env.example` for the annotated list. Production **requires**: `DATABASE_UR
 
 ## First deploy (Supabase + Vercel-style hosting; no Docker anywhere)
 
-1. Create a Supabase project. Copy the **transaction pooler** connection string (port 6543) → `DATABASE_URL`.
+1. Create a Supabase project. Copy the **transaction pooler** connection string (port 6543) → `DATABASE_URL` (the web app). The arena worker and long scripts should use a direct / session connection (5432). Why, the driver's guarantees (no query pipelining, statement timeouts, bounded pool) and how to diagnose a hang: [`DATABASE_CONNECTIONS.md`](DATABASE_CONNECTIONS.md).
 2. `DATABASE_URL=… pnpm db:migrate` (applies `supabase/migrations`, seeds reference data; idempotent). Or `npx supabase db push --db-url "$DATABASE_URL"`.
 3. Set the secrets above on the host. Deploy.
 4. **Keep the arena alive** — pick one:

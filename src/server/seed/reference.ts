@@ -17,6 +17,40 @@ export const DEFAULT_FLAGS: Array<{ key: string; enabled: boolean; description: 
   { key: "feature.world", enabled: false, description: "Explorable world hubs (coming soon)." },
 ];
 
+/**
+ * True when every default row exists and nothing else in the seed would write: no hero is missing its stored sprite, a season exists, and the
+ * game-state row exists. Any doubt (a table or column that a partly-migrated database does not have yet, a failed probe) answers false.
+ */
+async function isFullySeeded(q: Queryable, itemIds: readonly string[]): Promise<boolean> {
+  const ids = {
+    settings: Object.keys(DEFAULT_SETTINGS),
+    classes: DEFAULT_CLASSES.map((c) => c.id),
+    skills: DEFAULT_SKILLS.map((s) => s.id),
+    achievements: DEFAULT_ACHIEVEMENTS.map((a) => a.id),
+    items: [...itemIds],
+    flags: DEFAULT_FLAGS.map((f) => f.key),
+  };
+  const present = (table: string, column: string, key: keyof typeof ids) =>
+    `(select count(*)::int from public.${table} where ${column} in (select jsonb_array_elements_text($1::jsonb -> '${key}'))) = ${ids[key].length}`;
+  try {
+    const [row] = await q.query<{ complete: boolean }>(
+      `select (${present("game_settings", "key", "settings")}
+           and ${present("character_classes", "id", "classes")}
+           and ${present("skills", "id", "skills")}
+           and ${present("achievements", "id", "achievements")}
+           and ${present("item_templates", "id", "items")}
+           and ${present("feature_flags", "key", "flags")}
+           and not exists (select 1 from public.character_appearances where sprite is null)
+           and exists (select 1 from public.seasons)
+           and exists (select 1 from public.game_state)) as complete`,
+      [json(ids)],
+    );
+    return row?.complete === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether `table.column` exists (the seed also runs on databases that are migrated only part of the way). */
 async function hasColumn(q: Queryable, table: string, column: string): Promise<boolean> {
   const rows = await q.query("select 1 from information_schema.columns where table_schema = 'public' and table_name = $1 and column_name = $2", [table, column]);
@@ -29,6 +63,13 @@ async function hasColumn(q: Queryable, table: string, column: string): Promise<b
  */
 export async function seedReferenceData(q: Queryable): Promise<{ inserted: Record<string, number> }> {
   const inserted: Record<string, number> = {};
+  const items = generateDefaultItems();
+  // FAST PATH — the steady state of every database but a brand-new one. The app seeds on EVERY cold start of a serverless instance, and the full
+  // pass below is ~130 sequential round trips (≈ 40 s at 150 ms to the database): every request of a fresh instance waited for it. One statement
+  // answers "is there anything to insert at all?"; only when something is missing does the full pass (unchanged) run.
+  if (await isFullySeeded(q, items.map((i) => i.id))) {
+    return { inserted: { settings: 0, classes: 0, skills: 0, achievements: 0, items: 0, flags: 0, spriteConfigs: 0 } };
+  }
   const count = (key: string, rows: unknown[]) => (inserted[key] = rows.length);
 
   for (const key of Object.keys(DEFAULT_SETTINGS) as SettingsKey[]) {
@@ -75,7 +116,7 @@ export async function seedReferenceData(q: Queryable): Promise<{ inserted: Recor
   inserted.achievements = n;
 
   n = 0;
-  for (const it of generateDefaultItems()) {
+  for (const it of items) {
     n += (
       await q.query(
         `insert into public.item_templates (id, name, description, slot, rarity, class_restriction, stat_mods, look, source_tag)

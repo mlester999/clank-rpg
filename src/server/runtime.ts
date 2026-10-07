@@ -37,8 +37,15 @@ const SETTINGS_TTL_MS = 2000;
 
 export async function getReadyDb(): Promise<Db> {
   const db = await getDb();
-  g.__clankSeeded ??= seedReferenceData(db).then(() => undefined);
-  await g.__clankSeeded;
+  // One seed per process — but a FAILED (or timed-out) seed is forgotten, so the next request tries again instead of every request failing forever.
+  const seeding = (g.__clankSeeded ??= seedReferenceData(db).then(
+    () => undefined,
+    (error: unknown) => {
+      g.__clankSeeded = undefined;
+      throw error;
+    },
+  ));
+  await seeding;
   return db;
 }
 
@@ -148,13 +155,27 @@ export async function advanceForRead(opts: { neverWait?: boolean } = {}): Promis
   return last;
 }
 
+/**
+ * NOTHING CAN ADVANCE while the persisted status is NOT_STARTED or PAUSED — stepArena's gate returns at once for both. Every viewer's state read
+ * comes through here, so in those two states (the whole of the DEVELOPMENT period, and any pause) answer from ONE plain read instead of a
+ * BEGIN / SELECT … FOR UPDATE / COMMIT: three round trips and a row lock on arena_state per poll, for nothing. Every state that CAN advance
+ * (PREPARING, RUNNING, PAUSE_REQUESTED) still goes through the locked gate in advanceArena, unchanged — as does an arena without a state row, the
+ * worker and the scheduler tick. A START / RESUME that commits just after this read is picked up by the very next advance (the lifecycle action
+ * kicks one itself, and viewers and the worker keep polling).
+ */
+async function advanceForViewers(db: Db): Promise<ArenaAdvanceResult> {
+  const [persisted] = await db.query<{ status: string }>("select status from public.arena_state where id = 1");
+  if (persisted?.status === "NOT_STARTED" || persisted?.status === "PAUSED") return { status: persisted.status, steps: [], dueAtMs: null };
+  return advanceArena(db, arenaContext());
+}
+
 async function advanceOnce(minIntervalMs: number): Promise<ArenaAdvanceResult> {
   const state = (g.__clankAdvance ??= { promise: null, at: 0, last: null });
   if (state.promise) return state.promise;
   const overdue = state.last !== null && state.last.dueAtMs !== null && Date.now() >= state.last.dueAtMs;
   if (state.last && !overdue && Date.now() - state.at < minIntervalMs) return state.last;
   const db = await getReadyDb();
-  state.promise = advanceArena(db, arenaContext())
+  state.promise = advanceForViewers(db)
     .then((r) => {
       state.last = r;
       state.at = Date.now();
