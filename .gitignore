@@ -1,0 +1,13 @@
+/node_modules
+/.next/
+/.next-*/
+/out/
+/coverage
+/.data/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+npm-debug.log*

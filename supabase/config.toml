@@ -1,0 +1,7 @@
+# Minimal Supabase CLI config so `supabase db push --db-url <DATABASE_URL>` works against a hosted project.
+# This project does NOT use the Supabase local stack (that requires Docker). Local development uses an
+# embedded Postgres (PGlite) with the very same migration files — see ../README.md.
+project_id = "clank-rpg"
+
+[db]
+major_version = 17

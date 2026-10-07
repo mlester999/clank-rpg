@@ -1,0 +1,194 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { useTokenConfig } from "@/components/leaderboard/useTokenConfig";
+import { ArenaIcon, BagIcon, BookIcon, HeroesIcon, LockIcon, MoreIcon, TrophyIcon, UserIcon } from "@/components/ui/Icons";
+import { BUY_LABEL, CLANK_TRADE_URL } from "@/domain/rewards/buyLink";
+import { FEATURES, FEATURE_ORDER } from "@/content/features";
+
+import { Logo } from "./Logo";
+
+const PRIMARY = [
+  { href: "/", label: "Arena", Icon: ArenaIcon },
+  { href: "/character", label: "Character", Icon: UserIcon },
+  { href: "/inventory", label: "Inventory", Icon: BagIcon },
+  { href: "/leaderboard", label: "Leaderboard", Icon: TrophyIcon },
+  { href: "/heroes", label: "Heroes", Icon: HeroesIcon },
+  { href: "/docs", label: "Docs", Icon: BookIcon },
+] as const;
+// The phone bottom bar keeps five equal slots (a sixth would not fit a 320 px label): Heroes and Docs live in "More" there.
+const BOTTOM = PRIMARY.filter((p) => p.href !== "/heroes" && p.href !== "/docs");
+
+function isActive(path: string, href: string) {
+  return href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
+}
+
+interface MeResponse {
+  viewer: { displayName: string; characterId: string | null; claimed: boolean } | null;
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const path = usePathname();
+  const [me, setMe] = useState<MeResponse["viewer"] | undefined>(undefined);
+  const router = useRouter();
+  // The "Soon" sheet is tied to the page it was opened on, so navigating closes it without an effect.
+  const [moreAt, setMoreAt] = useState<string | null>(null);
+  const more = moreAt === path;
+  const isAdmin = path.startsWith("/admin");
+  // BUY $CLANKRPG: the server decides the link (https://clank.trade/ until the official contract address is configured, then https://clank.trade/<address>);
+  // until it answers the plain site link is used, so the button is never dead and never points anywhere invented.
+  const buyUrl = useTokenConfig()?.buyUrl ?? CLANK_TRADE_URL;
+
+  useEffect(() => {
+    if (isAdmin) return;
+    let live = true;
+    const refresh = () =>
+      fetch("/api/me", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j: MeResponse) => live && setMe(j.viewer))
+        .catch(() => live && setMe(null));
+    void refresh();
+    window.addEventListener("clank-session", refresh);
+    return () => {
+      live = false;
+      window.removeEventListener("clank-session", refresh);
+    };
+  }, [path, isAdmin]);
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    setMe(null);
+    router.push("/");
+    router.refresh();
+  }
+
+  if (isAdmin) return <>{children}</>;
+
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-40 border-b border-white/5 bg-ink-950/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-4 px-4 sm:px-6">
+          <Link href="/" aria-label="Clank RPG — home" className="shrink-0">
+            {/* Below 360 px only the emblem shows, so the BUY button and the account button both fit without overlap (the name is also in the page title and the aria-label). */}
+            <Logo wordmarkClass="hidden min-[360px]:inline" />
+          </Link>
+          <span className="chip hidden border-clank-500/40 bg-clank-500/10 text-clank-300 sm:inline-flex">Beta</span>
+
+          <nav aria-label="Main" className="ml-2 hidden flex-1 items-center gap-1 lg:flex">
+            {PRIMARY.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={isActive(path, href) ? "page" : undefined}
+                className={`relative rounded-md px-3 py-2 font-display text-[0.72rem] tracking-wider uppercase transition-colors ${
+                  isActive(path, href) ? "text-clank-300" : "text-steel-300 hover:text-paper"
+                }`}
+              >
+                {label}
+                {isActive(path, href) && <span className="absolute inset-x-3 -bottom-[13px] h-[3px] rounded-full bg-clank-400 shadow-[0_0_12px_rgba(202,148,249,.8)]" />}
+              </Link>
+            ))}
+            <span className="mx-2 hidden h-5 w-px bg-white/10 xl:block" />
+            {FEATURE_ORDER.map((id) => (
+              <Link
+                key={id}
+                href={`/soon/${id}`}
+                aria-current={isActive(path, `/soon/${id}`) ? "page" : undefined}
+                className={`group hidden items-center gap-1.5 rounded-md px-2.5 py-2 font-display text-[0.62rem] xl:inline-flex tracking-wider uppercase transition-colors ${
+                  isActive(path, `/soon/${id}`) ? "text-paper" : "text-steel-400 hover:text-steel-300"
+                }`}
+                title={`${FEATURES[id].title} — coming soon`}
+              >
+                <LockIcon size={12} />
+                {FEATURES[id].nav}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="ml-auto flex min-w-0 items-center gap-2 lg:ml-0">
+            <a
+              href={buyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-sm shrink-0 px-2.5 text-[0.62rem] tracking-wide whitespace-nowrap min-[400px]:px-3.5 min-[400px]:text-[0.7rem] min-[400px]:tracking-[0.06em]"
+              data-testid="buy-clankrpg"
+              aria-label={`${BUY_LABEL} (opens Clank.trade in a new tab)`}
+            >
+              {BUY_LABEL}
+            </a>
+            <Link href="/character" className="btn btn-ghost btn-sm min-w-0 px-2.5 min-[480px]:px-3.5" aria-label="Your character">
+              <UserIcon size={16} />
+              <span className="hidden max-w-[9rem] truncate min-[480px]:inline">{me === undefined ? "…" : me ? me.displayName || "Your hero" : "Sign in"}</span>
+            </Link>
+            {me && (
+              <button type="button" onClick={signOut} className="btn btn-ghost btn-sm hidden sm:inline-flex" aria-label="Sign out">
+                Sign out
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 pb-24 lg:pb-10">{children}</main>
+
+      <footer className="border-t border-white/5 px-4 pt-5 pb-24 text-center text-xs text-steel-400 sm:px-6 lg:pb-5" data-testid="site-footer">
+        <nav aria-label="Footer" className="mb-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 font-display text-[0.66rem] tracking-wider uppercase">
+          <Link href="/docs" className="text-clank-300 hover:text-clank-200" data-testid="footer-docs">Docs</Link>
+          <Link href="/docs/faq" className="text-steel-300 hover:text-paper">FAQ</Link>
+          <Link href="/docs/rarity" className="text-steel-300 hover:text-paper">Rarity &amp; power</Link>
+          <Link href="/heroes" className="text-steel-300 hover:text-paper">Heroes</Link>
+          <Link href="/leaderboard" className="text-steel-300 hover:text-paper">Leaderboard</Link>
+        </nav>
+        Clank RPG is an independent community game for the Clank.trade ecosystem. Off-chain Clank Gold has no cash value. Beta — heroes, balance and rewards will change.
+      </footer>
+
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-ink-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+        <ul className="mx-auto grid max-w-xl grid-cols-5">
+          {BOTTOM.map(({ href, label, Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                aria-current={isActive(path, href) ? "page" : undefined}
+                className={`flex h-16 min-w-0 flex-col items-center justify-center gap-1 text-[0.56rem] font-bold tracking-normal uppercase min-[360px]:text-[0.62rem] min-[360px]:tracking-wider ${isActive(path, href) ? "text-clank-300" : "text-steel-400"}`}
+              >
+                <Icon size={22} />
+                {label}
+              </Link>
+            </li>
+          ))}
+          <li>
+            <button type="button" onClick={() => setMoreAt((v) => (v === path ? null : path))} aria-expanded={more} data-testid="nav-more" className={`flex h-16 w-full min-w-0 flex-col items-center justify-center gap-1 text-[0.56rem] font-bold tracking-normal uppercase min-[360px]:text-[0.62rem] min-[360px]:tracking-wider ${more || isActive(path, "/heroes") ? "text-clank-300" : "text-steel-400"}`}>
+              <MoreIcon size={22} />
+              More
+            </button>
+          </li>
+        </ul>
+        {more && (
+          <div className="slide-up absolute inset-x-3 bottom-[4.4rem] plate plate-flat p-2">
+            <Link href="/heroes" aria-current={isActive(path, "/heroes") ? "page" : undefined} className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold text-paper active:bg-white/5" data-testid="nav-heroes-mobile">
+              <HeroesIcon size={16} className="text-clank-300" />
+              Heroes
+              <span className="chip ml-auto">Browse</span>
+            </Link>
+            <Link href="/docs" aria-current={isActive(path, "/docs") ? "page" : undefined} className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold text-paper active:bg-white/5" data-testid="nav-docs-mobile">
+              <BookIcon size={16} className="text-clank-300" />
+              Docs
+              <span className="chip ml-auto">Read</span>
+            </Link>
+            <p className="label px-3 pt-2 pb-1">Coming soon</p>
+            {FEATURE_ORDER.map((id) => (
+              <Link key={id} href={`/soon/${id}`} className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold text-paper active:bg-white/5">
+                <LockIcon size={16} className="text-steel-400" />
+                {FEATURES[id].title}
+                <span className="chip ml-auto">Locked</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </nav>
+    </div>
+  );
+}

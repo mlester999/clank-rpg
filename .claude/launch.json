@@ -1,0 +1,277 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "clank-rpg",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "dev"
+      ],
+      "port": 3700
+    },
+    {
+      "name": "clank-rpg-local",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/a9e0b679-0b82-4755-8189-22eda020665c/scratchpad/pglite-dev",
+        "CLANK_DEV_LOGIN=true",
+        "NEXT_DIST_DIR=.next-local",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3711"
+      ],
+      "port": 3711
+    },
+    {
+      "name": "clank-rpg-local-remote-db",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/a9e0b679-0b82-4755-8189-22eda020665c/scratchpad/pglite-dev",
+        "CLANK_DEV_DB_LATENCY_MS=30",
+        "CLANK_DEV_LOGIN=true",
+        "NEXT_DIST_DIR=.next-local",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3711"
+      ],
+      "port": 3711
+    },
+    {
+      "name": "clank-rpg-timing-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/e3a40c49-808b-494c-bbbe-4dad4f9d0798/scratchpad/pglite-timing",
+        "CLANK_DEV_LOGIN=true",
+        "CLANK_ARENA_TIMING_LOG=true",
+        "CLANK_DEV_DB_LATENCY_MS=120",
+        "NEXT_DIST_DIR=.next-local",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3713"
+      ],
+      "port": 3713
+    },
+    {
+      "name": "clank-rpg-timing-pg",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgres://postgres@127.0.0.1:5499/clank_qa",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "TELEGRAM_BOT_TOKEN=",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_ALLOW_DEMO_HEROES=true",
+        "CLANK_DEV_LOGIN=true",
+        "CLANK_DEV_DB_LATENCY_MS=250",
+        "CLANK_ARENA_TIMING_LOG=true",
+        "NEXT_DIST_DIR=.next-local",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3714"
+      ],
+      "port": 3714
+    },
+    {
+      "name": "clank-rpg-rewards-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/56575147-54f5-4f42-ad77-9e38cb2e38ec/scratchpad/pglite-qa2",
+        "CLANK_DEV_LOGIN=true",
+        "NEXT_DIST_DIR=.next-local",
+        "CLANKRPG_CHAIN_ADAPTER=simulated",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3712"
+      ],
+      "port": 3712
+    },
+    {
+      "name": "clank-rpg-boards-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=123456789:AAExampleBotTokenForTestsOnly_abcdefghijk",
+        "SESSION_SECRET=qa-boards-session-secret-0123456789abcdef-xyz",
+        "ADMIN_ACCESS_KEY=qa-boards-admin-key-0123456789abcd",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/1db83f0f-d9a2-4f38-b158-de95548fd133/scratchpad/pglite-qa2",
+        "CLANK_DEV_LOGIN=true",
+        "CLANKRPG_CHAIN_ADAPTER=simulated",
+        "NEXT_DIST_DIR=.next-boards-qa",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3714"
+      ],
+      "port": 3714
+    },
+    {
+      "name": "clank-rpg-notoken-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=123456789:AAExampleBotTokenForTestsOnly_abcdefghijk",
+        "SESSION_SECRET=qa-notoken-session-secret-0123456789abcdef-xyz",
+        "ADMIN_ACCESS_KEY=qa-notoken-admin-key-0123456789abcd",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/65c05521-4222-42ab-9b18-c1d6ef3c6e3a/scratchpad/pg-final-qa",
+        "CLANK_DEV_LOGIN=true",
+        "CLANKRPG_TOKEN_ADDRESS=",
+        "CLANKRPG_CHAIN_ADAPTER=",
+        "NEXT_DIST_DIR=.next-notoken-qa",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3715"
+      ],
+      "port": 3715
+    },
+    {
+      "name": "clank-rpg-contract-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=123456789:AAExampleBotTokenForTestsOnly_abcdefghijk",
+        "SESSION_SECRET=qa-contract-session-secret-0123456789abcdef-xyz",
+        "ADMIN_ACCESS_KEY=qa-contract-admin-key-0123456789abcd",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/65c05521-4222-42ab-9b18-c1d6ef3c6e3a/scratchpad/pglite-contract",
+        "CLANK_DEV_LOGIN=true",
+        "CLANKRPG_CHAIN_ADAPTER=simulated",
+        "NEXT_DIST_DIR=.next-contract-qa",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3716"
+      ],
+      "port": 3716
+    },
+    {
+      "name": "clank-rpg-heroes-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/020ae758-1b81-44e4-b46d-ad39466aa8b5/scratchpad/pglite-heroes-qa",
+        "CLANK_DEV_LOGIN=true",
+        "CLANK_ALLOW_DEMO_HEROES=true",
+        "NEXT_PUBLIC_APP_URL=http://localhost:3717",
+        "NEXT_DIST_DIR=.next-qa-heroes",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3717"
+      ],
+      "port": 3717
+    },
+    {
+      "name": "clank-rpg-rarity-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/9df215b2-66b6-418b-9b4f-9e4b0ff6b024/scratchpad/pglite-rarity-qa",
+        "CLANK_DEV_LOGIN=true",
+        "CLANK_ALLOW_DEMO_HEROES=true",
+        "NEXT_PUBLIC_APP_URL=http://localhost:3718",
+        "NEXT_DIST_DIR=.next-qa-rarity",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3718"
+      ],
+      "port": 3718
+    },
+    {
+      "name": "clank-rpg-rarity-perf-legendary",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/9df215b2-66b6-418b-9b4f-9e4b0ff6b024/scratchpad/pglite-only-LEGENDARY",
+        "CLANK_DEV_LOGIN=true",
+        "CLANK_ALLOW_DEMO_HEROES=true",
+        "NEXT_PUBLIC_APP_URL=http://localhost:3719",
+        "NEXT_DIST_DIR=.next-qa-perf-legendary",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3719"
+      ],
+      "port": 3719
+    },
+    {
+      "name": "clank-rpg-rarity-perf-common",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "CLANK_PGLITE_DIR=/private/tmp/claude-501/-Users-marklesteracak-Documents-Marky-Files-Programming-clank-rpg/9df215b2-66b6-418b-9b4f-9e4b0ff6b024/scratchpad/pglite-only-COMMON",
+        "CLANK_DEV_LOGIN=true",
+        "CLANK_ALLOW_DEMO_HEROES=true",
+        "NEXT_PUBLIC_APP_URL=http://localhost:3720",
+        "NEXT_DIST_DIR=.next-qa-perf-common",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3720"
+      ],
+      "port": 3720
+    }
+  ]
+}

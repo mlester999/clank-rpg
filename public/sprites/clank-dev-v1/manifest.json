@@ -1,0 +1,835 @@
+{
+  "spec": 1,
+  "id": "clank-dev-v1",
+  "name": "Clank Dev Placeholder Set",
+  "status": "dev-placeholder",
+  "credits": "Generated procedurally by scripts/build-dev-sprites.ts. DEV PLACEHOLDER — not production art.",
+  "frame": {
+    "w": 80,
+    "h": 64
+  },
+  "anchor": {
+    "x": 34,
+    "y": 58
+  },
+  "nominalHeightPx": 46,
+  "images": {
+    "body": "body.png",
+    "outfits": "outfits.png",
+    "face": "face.png",
+    "hair": "hair.png",
+    "headgear": "headgear.png",
+    "extras": "extras.png",
+    "weapons": "weapons.png",
+    "rarity-trim": "rarity-trim.png",
+    "rarity-weaponfx": "rarity-weaponfx.png",
+    "rarity-shoulder": "rarity-shoulder.png",
+    "rarity-crest": "rarity-crest.png",
+    "auras": "auras.png"
+  },
+  "clips": {
+    "idle": {
+      "row": 0,
+      "frames": 4,
+      "fps": 6,
+      "loop": true
+    },
+    "move": {
+      "row": 1,
+      "frames": 6,
+      "fps": 12,
+      "loop": true
+    },
+    "attack_slash": {
+      "row": 2,
+      "frames": 5,
+      "fps": 16,
+      "loop": false,
+      "impact": 1
+    },
+    "attack_thrust": {
+      "row": 3,
+      "frames": 5,
+      "fps": 16,
+      "loop": false,
+      "impact": 1
+    },
+    "attack_shoot": {
+      "row": 4,
+      "frames": 5,
+      "fps": 14,
+      "loop": false,
+      "impact": 3
+    },
+    "skill": {
+      "row": 5,
+      "frames": 6,
+      "fps": 12,
+      "loop": false,
+      "impact": 3
+    },
+    "hit": {
+      "row": 6,
+      "frames": 2,
+      "fps": 10,
+      "loop": false
+    },
+    "ko": {
+      "row": 7,
+      "frames": 4,
+      "fps": 7,
+      "loop": false
+    },
+    "victory": {
+      "row": 8,
+      "frames": 4,
+      "fps": 8,
+      "loop": true
+    }
+  },
+  "directions": {
+    "right": {
+      "index": 0
+    },
+    "left": {
+      "mirror": "right"
+    }
+  },
+  "layers": {
+    "body.base": {
+      "image": "body",
+      "x": 0,
+      "y": 0,
+      "z": 10,
+      "tint": "skin"
+    },
+    "body.arm": {
+      "image": "body",
+      "x": 0,
+      "y": 576,
+      "z": 64,
+      "tint": "skin",
+      "of": "body.base"
+    },
+    "outfit.medium": {
+      "image": "outfits",
+      "x": 0,
+      "y": 0,
+      "z": 20,
+      "tint": "primary"
+    },
+    "outfit.medium.trim": {
+      "image": "outfits",
+      "x": 0,
+      "y": 576,
+      "z": 22,
+      "tint": "secondary",
+      "of": "outfit.medium"
+    },
+    "outfit.medium.front": {
+      "image": "outfits",
+      "x": 0,
+      "y": 1152,
+      "z": 66,
+      "tint": "primary",
+      "of": "outfit.medium"
+    },
+    "outfit.robe": {
+      "image": "outfits",
+      "x": 0,
+      "y": 1728,
+      "z": 20,
+      "tint": "primary"
+    },
+    "outfit.robe.trim": {
+      "image": "outfits",
+      "x": 0,
+      "y": 2304,
+      "z": 22,
+      "tint": "secondary",
+      "of": "outfit.robe"
+    },
+    "outfit.robe.front": {
+      "image": "outfits",
+      "x": 0,
+      "y": 2880,
+      "z": 66,
+      "tint": "primary",
+      "of": "outfit.robe"
+    },
+    "outfit.light": {
+      "image": "outfits",
+      "x": 0,
+      "y": 3456,
+      "z": 20,
+      "tint": "primary"
+    },
+    "outfit.light.trim": {
+      "image": "outfits",
+      "x": 0,
+      "y": 4032,
+      "z": 22,
+      "tint": "secondary",
+      "of": "outfit.light"
+    },
+    "outfit.light.front": {
+      "image": "outfits",
+      "x": 0,
+      "y": 4608,
+      "z": 66,
+      "tint": "primary",
+      "of": "outfit.light"
+    },
+    "outfit.heavy": {
+      "image": "outfits",
+      "x": 0,
+      "y": 5184,
+      "z": 20,
+      "tint": "primary"
+    },
+    "outfit.heavy.trim": {
+      "image": "outfits",
+      "x": 0,
+      "y": 5760,
+      "z": 22,
+      "tint": "secondary",
+      "of": "outfit.heavy"
+    },
+    "outfit.heavy.front": {
+      "image": "outfits",
+      "x": 0,
+      "y": 6336,
+      "z": 66,
+      "tint": "primary",
+      "of": "outfit.heavy"
+    },
+    "eyes.0": {
+      "image": "face",
+      "x": 0,
+      "y": 0,
+      "z": 30,
+      "tint": null
+    },
+    "eyes.1": {
+      "image": "face",
+      "x": 0,
+      "y": 576,
+      "z": 30,
+      "tint": null
+    },
+    "eyes.2": {
+      "image": "face",
+      "x": 0,
+      "y": 1152,
+      "z": 30,
+      "tint": null
+    },
+    "eyes.3": {
+      "image": "face",
+      "x": 0,
+      "y": 1728,
+      "z": 30,
+      "tint": null
+    },
+    "mouth.0": {
+      "image": "face",
+      "x": 0,
+      "y": 2304,
+      "z": 31,
+      "tint": null
+    },
+    "mouth.1": {
+      "image": "face",
+      "x": 0,
+      "y": 2880,
+      "z": 31,
+      "tint": null
+    },
+    "mouth.2": {
+      "image": "face",
+      "x": 0,
+      "y": 3456,
+      "z": 31,
+      "tint": null
+    },
+    "hair.0": {
+      "image": "hair",
+      "x": 0,
+      "y": 0,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.1": {
+      "image": "hair",
+      "x": 0,
+      "y": 576,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.2": {
+      "image": "hair",
+      "x": 0,
+      "y": 1152,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.3": {
+      "image": "hair",
+      "x": 0,
+      "y": 1728,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.4": {
+      "image": "hair",
+      "x": 0,
+      "y": 2304,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.5": {
+      "image": "hair",
+      "x": 0,
+      "y": 2880,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.6": {
+      "image": "hair",
+      "x": 0,
+      "y": 3456,
+      "z": 40,
+      "tint": "hair"
+    },
+    "hair.2.back": {
+      "image": "hair",
+      "x": 0,
+      "y": 4032,
+      "z": 8,
+      "tint": "hair",
+      "of": "hair.2"
+    },
+    "headgear.helm": {
+      "image": "headgear",
+      "x": 0,
+      "y": 0,
+      "z": 60,
+      "tint": "secondary"
+    },
+    "headgear.hat": {
+      "image": "headgear",
+      "x": 0,
+      "y": 576,
+      "z": 60,
+      "tint": "primary"
+    },
+    "headgear.hood": {
+      "image": "headgear",
+      "x": 0,
+      "y": 1152,
+      "z": 60,
+      "tint": "primary"
+    },
+    "headgear.cap": {
+      "image": "headgear",
+      "x": 0,
+      "y": 1728,
+      "z": 60,
+      "tint": "primary"
+    },
+    "headgear.halo": {
+      "image": "headgear",
+      "x": 0,
+      "y": 2304,
+      "z": 60,
+      "tint": null
+    },
+    "headgear.crown": {
+      "image": "headgear",
+      "x": 0,
+      "y": 2880,
+      "z": 60,
+      "tint": null
+    },
+    "accessory.goggles": {
+      "image": "extras",
+      "x": 0,
+      "y": 0,
+      "z": 50,
+      "tint": null
+    },
+    "accessory.scarf": {
+      "image": "extras",
+      "x": 0,
+      "y": 576,
+      "z": 24,
+      "tint": "accent"
+    },
+    "accessory.cog-pin": {
+      "image": "extras",
+      "x": 0,
+      "y": 1152,
+      "z": 25,
+      "tint": null
+    },
+    "accessory.monocle": {
+      "image": "extras",
+      "x": 0,
+      "y": 1728,
+      "z": 50,
+      "tint": null
+    },
+    "accessory.headset": {
+      "image": "extras",
+      "x": 0,
+      "y": 2304,
+      "z": 50,
+      "tint": null
+    },
+    "cape.default": {
+      "image": "extras",
+      "x": 0,
+      "y": 2880,
+      "z": 5,
+      "tint": "cape"
+    },
+    "offhand.shield": {
+      "image": "extras",
+      "x": 0,
+      "y": 3456,
+      "z": 65,
+      "tint": null
+    },
+    "weapon.sword": {
+      "image": "weapons",
+      "x": 0,
+      "y": 0,
+      "z": 70,
+      "tint": null,
+      "attack": "attack_slash"
+    },
+    "weapon.mace": {
+      "image": "weapons",
+      "x": 0,
+      "y": 576,
+      "z": 70,
+      "tint": null,
+      "attack": "attack_slash"
+    },
+    "weapon.staff": {
+      "image": "weapons",
+      "x": 0,
+      "y": 1152,
+      "z": 70,
+      "tint": null,
+      "attack": "attack_thrust"
+    },
+    "weapon.tome": {
+      "image": "weapons",
+      "x": 0,
+      "y": 1728,
+      "z": 70,
+      "tint": null,
+      "attack": "attack_thrust"
+    },
+    "weapon.daggers": {
+      "image": "weapons",
+      "x": 0,
+      "y": 2304,
+      "z": 70,
+      "tint": null,
+      "attack": "attack_thrust"
+    },
+    "weapon.bow": {
+      "image": "weapons",
+      "x": 0,
+      "y": 2880,
+      "z": 70,
+      "tint": null,
+      "attack": "attack_shoot"
+    },
+    "trim.rare.heavy": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 0,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.rare.robe": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 576,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.rare.light": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 1152,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.rare.medium": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 1728,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.epic.heavy": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 2304,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.epic.robe": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 2880,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.epic.light": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 3456,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.epic.medium": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 4032,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.legendary.heavy": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 4608,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.legendary.robe": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 5184,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.legendary.light": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 5760,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "trim.legendary.medium": {
+      "image": "rarity-trim",
+      "x": 0,
+      "y": 6336,
+      "z": 23,
+      "tint": "rarity"
+    },
+    "weaponfx.rare.sword": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 0,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.rare.staff": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 576,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.rare.daggers": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 1152,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.rare.bow": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 1728,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.rare.mace": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 2304,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.rare.tome": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 2880,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.epic.sword": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 3456,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.epic.staff": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 4032,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.epic.daggers": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 4608,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.epic.bow": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 5184,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.epic.mace": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 5760,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.epic.tome": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 6336,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.legendary.sword": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 6912,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.legendary.staff": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 7488,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.legendary.daggers": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 8064,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.legendary.bow": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 8640,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.legendary.mace": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 9216,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "weaponfx.legendary.tome": {
+      "image": "rarity-weaponfx",
+      "x": 0,
+      "y": 9792,
+      "z": 71,
+      "tint": "rarity"
+    },
+    "shoulder.epic.heavy": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 0,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.epic.robe": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 576,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.epic.light": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 1152,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.epic.medium": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 1728,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.legendary.heavy": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 2304,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.legendary.robe": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 2880,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.legendary.light": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 3456,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "shoulder.legendary.medium": {
+      "image": "rarity-shoulder",
+      "x": 0,
+      "y": 4032,
+      "z": 67,
+      "tint": "rarity"
+    },
+    "crest.epic.helm": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 0,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.epic.hat": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 576,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.epic.hood": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 1152,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.epic.cap": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 1728,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.epic.halo": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 2304,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.epic.crown": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 2880,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.legendary.helm": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 3456,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.legendary.hat": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 4032,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.legendary.hood": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 4608,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.legendary.cap": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 5184,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.legendary.halo": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 5760,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "crest.legendary.crown": {
+      "image": "rarity-crest",
+      "x": 0,
+      "y": 6336,
+      "z": 62,
+      "tint": "rarity"
+    },
+    "aura.ring": {
+      "image": "auras",
+      "x": 0,
+      "y": 0,
+      "z": -5,
+      "tint": "rarity",
+      "loop": {
+        "frames": 8,
+        "fps": 10
+      }
+    },
+    "aura.sparks": {
+      "image": "auras",
+      "x": 0,
+      "y": 64,
+      "z": -5,
+      "tint": "rarity",
+      "loop": {
+        "frames": 8,
+        "fps": 10
+      }
+    },
+    "aura.flame": {
+      "image": "auras",
+      "x": 0,
+      "y": 128,
+      "z": -5,
+      "tint": "rarity",
+      "loop": {
+        "frames": 8,
+        "fps": 10
+      }
+    }
+  }
+}
