@@ -92,9 +92,10 @@ const toSeasonView = (s: SeasonRow): SeasonView => ({
  * periods that were never finalized are NOT a liability: they were never paid, and the archived development run is never finalized afterwards.
  */
 export async function rewardLiabilities(q: Queryable): Promise<RewardLiabilities> {
-  const [tables] = await q.query<{ accounts: boolean; claims: boolean; results: boolean; boards: boolean }>(
+  const [tables] = await q.query<{ accounts: boolean; claims: boolean; results: boolean; boards: boolean; hero: boolean }>(
     `select to_regclass('public.arena_reward_accounts') is not null as accounts, to_regclass('public.arena_reward_claims') is not null as claims,
-            to_regclass('public.arena_leaderboard_results') is not null as results, to_regclass('public.arena_leaderboards') is not null as boards`,
+            to_regclass('public.arena_leaderboard_results') is not null as results, to_regclass('public.arena_leaderboards') is not null as boards,
+            to_regclass('public.hero_arena_results') is not null as hero`,
   );
   const out: RewardLiabilities = { checked: false, blocking: false, earnedMicro: "0", claimableMicro: "0", reservedMicro: "0", claimedMicro: "0", pendingOrSentClaims: 0, heldPrizes: 0, finalizedBoards: 0, reasons: [] };
   if (!tables?.accounts) return out;
@@ -117,6 +118,15 @@ export async function rewardLiabilities(q: Queryable): Promise<RewardLiabilities
   if (tables.boards) {
     const [b] = await q.query<{ n: number }>("select count(*)::int as n from public.arena_leaderboards");
     out.finalizedBoards = b?.n ?? 0;
+  }
+  // HERO ARENA (a separate program): prizes RESERVED for unclaimed heroes or HELD for review are owed to real owners — credited ones are already in the accounts above.
+  if (tables.hero) {
+    const [o] = await q.query<{ reserved: number; held: number; boards: number }>(
+      `select (count(*) filter (where prize_status = 'RESERVED'))::int as reserved, (count(*) filter (where prize_status = 'HELD'))::int as held, (select count(*)::int from public.hero_arena_boards) as boards from public.hero_arena_results`,
+    );
+    out.heldPrizes += o?.held ?? 0;
+    out.finalizedBoards += o?.boards ?? 0;
+    if ((o?.reserved ?? 0) > 0) out.reasons.push(`${o?.reserved} Hero Arena prize(s) are reserved for heroes whose owners have not claimed them yet.`);
   }
   if (BigInt(out.earnedMicro) > 0n) out.reasons.push("Leaderboard prizes have been credited (they would stay claimable after the token launches).");
   if (BigInt(out.reservedMicro) > 0n) out.reasons.push("A claim is reserved (a payout is in flight).");
@@ -150,20 +160,41 @@ async function activeSeason(q: Queryable, lock: boolean): Promise<SeasonRow | nu
   return row ?? null;
 }
 
-/** Daily / weekly boards of the season that have picks but are not finalized yet (their prizes would be skipped by ending the season now). */
-async function unfinalizedPeriods(q: Queryable, seasonId: string): Promise<number> {
-  const [ready] = await q.query<{ ok: boolean }>("select to_regclass('public.arena_pick_scores') is not null and to_regclass('public.arena_leaderboards') is not null as ok");
-  if (!ready?.ok) return 0;
-  const [r] = await q.query<{ n: number }>(
-    `select (
-        (select count(distinct s.utc_date) from public.arena_pick_scores s where s.season_id = $1
-           and not exists (select 1 from public.arena_leaderboards l where l.kind = 'DAILY' and l.period_start = s.utc_date))
-      + (select count(distinct s.week_start) from public.arena_pick_scores s where s.season_id = $1
-           and not exists (select 1 from public.arena_leaderboards l where l.kind = 'WEEKLY' and l.period_start = s.week_start))
-     )::int as n`,
-    [seasonId],
+/**
+ * Daily / weekly boards of the season that have results but are not finalized yet (their prizes would be skipped by ending the season now): the Arena Picks boards
+ * (picks scored) AND the Hero Arena boards (battles settled) — two programs, each counted on its own.
+ */
+async function unfinalizedPeriods(q: Queryable, seasonId: string, heroPrizesAtStake: boolean): Promise<number> {
+  const [ready] = await q.query<{ picks: boolean; hero: boolean }>(
+    "select (to_regclass('public.arena_pick_scores') is not null and to_regclass('public.arena_leaderboards') is not null) as picks, to_regclass('public.hero_arena_boards') is not null as hero",
   );
-  return r?.n ?? 0;
+  let n = 0;
+  if (ready?.picks) {
+    const [r] = await q.query<{ n: number }>(
+      `select (
+          (select count(distinct s.utc_date) from public.arena_pick_scores s where s.season_id = $1
+             and not exists (select 1 from public.arena_leaderboards l where l.kind = 'DAILY' and l.period_start = s.utc_date))
+        + (select count(distinct s.week_start) from public.arena_pick_scores s where s.season_id = $1
+             and not exists (select 1 from public.arena_leaderboards l where l.kind = 'WEEKLY' and l.period_start = s.week_start))
+       )::int as n`,
+      [seasonId],
+    );
+    n += r?.n ?? 0;
+  }
+  // Hero Arena periods only count when a Hero Arena pool is set and prizes are ON: with no pool there is nothing to skip (the boards still freeze on their own).
+  if (ready?.hero && heroPrizesAtStake) {
+    const [r] = await q.query<{ n: number }>(
+      `select (
+          (select count(distinct date_trunc('day', b.settled_at at time zone 'UTC')::date) from public.arena_battles b where b.season_id = $1 and b.status = 'SETTLED'
+             and not exists (select 1 from public.hero_arena_boards h where h.kind = 'DAILY' and h.period_start = date_trunc('day', b.settled_at at time zone 'UTC')::date))
+        + (select count(distinct date_trunc('week', b.settled_at at time zone 'UTC')::date) from public.arena_battles b where b.season_id = $1 and b.status = 'SETTLED'
+             and not exists (select 1 from public.hero_arena_boards h where h.kind = 'WEEKLY' and h.period_start = date_trunc('week', b.settled_at at time zone 'UTC')::date))
+       )::int as n`,
+      [seasonId],
+    );
+    n += r?.n ?? 0;
+  }
+  return n;
 }
 
 async function battleLabels(q: Queryable, nowIso: string, seasonId: string | null): Promise<GameControl["battles"]> {
@@ -225,6 +256,7 @@ export async function evaluateActions(q: Queryable, deps: { allowDemo: boolean; 
     if (!live && heroes.eligible < groupSize) warnings.push(`Only ${heroes.eligible} hero(es) are Arena-eligible; the Arena needs ${groupSize} to start.`);
     if (!live && open > 0) warnings.push(`${open} unsettled development battle(s) will be voided when the run is archived.`);
     if (!live && settings.arena_picks.enabled) warnings.push("Leaderboard prizes are ON during development: a finalized Daily / Weekly board credits prizes, and a credited prize blocks the launch until it is reversed. Pause prizes in Arena Picks while testing.");
+    if (!live && settings.hero_arena.enabled && (settings.hero_arena.dailyPrizePool !== null || settings.hero_arena.weeklyPrizePool !== null)) warnings.push("Hero Arena prizes are ON during development (a pool is set): a finalized Daily / Weekly Hero Arena board credits or reserves prizes, and they block the launch until resolved. Pause Hero Arena prizes while testing.");
     actions.launch = b.length ? { ...blocked(...b), warnings } : ok({ warnings, phrase: CONFIRM.LAUNCH });
   }
   // START ARENA
@@ -264,8 +296,8 @@ export async function evaluateActions(q: Queryable, deps: { allowDemo: boolean; 
     if (live && season && !stopped) b.push({ code: "ARENA_NOT_STOPPED", message: `The Arena is ${ARENA_STATUS_LABEL[status].toLowerCase()}. Pause it and let it finish its battles first.` });
     if (live && season && open > 0) b.push({ code: "OPEN_BATTLES", message: `${open} battle(s) are committed but not settled.` });
     if (live && season) {
-      const periods = await unfinalizedPeriods(q, season.id);
-      if (periods > 0) b.push({ code: "UNFINALIZED_PERIODS", message: `${periods} Daily/Weekly board(s) of this season have picks but are not finalized yet; ending now would skip their prizes. Wait for the period to end and finalize.` });
+      const periods = await unfinalizedPeriods(q, season.id, settings.hero_arena.enabled && (settings.hero_arena.dailyPrizePool !== null || settings.hero_arena.weeklyPrizePool !== null));
+      if (periods > 0) b.push({ code: "UNFINALIZED_PERIODS", message: `${periods} Daily/Weekly board(s) of this season have results (Picks or Hero Arena) but are not finalized yet; ending now would skip their prizes. Wait for the period to end and finalize.` });
     }
     actions.endSeason = b.length ? blocked(...b) : ok({ phrase: CONFIRM.END_SEASON });
   }

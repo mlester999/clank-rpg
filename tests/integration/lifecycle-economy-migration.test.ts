@@ -26,9 +26,8 @@ afterAll(async () => {
 });
 
 describe("the migration file", () => {
-  it("is the newest migration, right after the game-lifecycle migration", async () => {
+  it("comes right after the game-lifecycle migration (later migrations may follow it)", async () => {
     const all = (await readMigrations()).map((m) => m.version);
-    expect(all.at(-1)).toBe(NEW);
     expect(all.indexOf(NEW)).toBe(all.indexOf(BEFORE) + 1);
   });
 
@@ -75,7 +74,7 @@ describe("applied to a database that holds development progress", () => {
     const ledger = JSON.stringify(await db.query("select * from public.currency_ledger order by id"));
     const unlockedBefore = (await db.query<{ achievement_id: string }>("select achievement_id from public.character_achievements order by 1")).map((r) => r.achievement_id);
 
-    expect((await migrate(db)).applied).toEqual([NEW]);
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([NEW]); // (later migrations are covered by their own tests)
 
     expect(await heroFingerprint(db)).toBe(heroes);
     expect(JSON.stringify(await db.query("select * from public.currency_ledger order by id"))).toBe(ledger);
@@ -87,7 +86,7 @@ describe("applied to a database that holds development progress", () => {
     // a development database is clean for the auditor (it only speaks once the game is LIVE)
     expect(await db.query("select * from public.audit_development_economy()")).toEqual([]);
     // idempotent
-    expect((await migrate(db)).applied).toEqual([]);
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]);
   });
 
   it("schema: an archived unlock does not block a new one; an active duplicate still does; archived loot can never be equipped", async () => {

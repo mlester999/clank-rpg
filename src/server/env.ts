@@ -49,6 +49,13 @@ const schema = z.object({
   CLANKRPG_EXPLORER_TX_URL: z.string().optional(),
   /** "simulated" = an in-memory chain (balances + transfers) for local development, QA and tests. Refused in production. */
   CLANKRPG_CHAIN_ADAPTER: z.string().optional(),
+  /**
+   * Who may ADVANCE the Arena (create / prepare / settle battles, lock Picks, move phases). Unset or "on" (default, unchanged behaviour): any viewer's
+   * state read or home-page render also kicks the coalesced advance, next to the scheduler tick and the worker. "off": viewers are strictly READ-ONLY —
+   * ONE authoritative process (`pnpm arena:worker`, see docs/ARENA_WORKER.md) advances the Arena; the web tier only reads. Do not set "off" until that
+   * worker is running, or the Arena stops moving the moment nobody else advances it.
+   */
+  ARENA_VIEWER_ADVANCE: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema> & { isProduction: boolean };
@@ -97,6 +104,11 @@ export function getSecret(name: "SESSION_SECRET" | "CLASS_ROLL_SECRET" | "TELEGR
 export function demoHeroesAllowed(env: ServerEnv = getEnv()): boolean {
   if (env.CLANK_ALLOW_DEMO_HEROES) return true;
   return !env.isProduction && !env.DATABASE_URL;
+}
+
+/** Whether a viewer's request (the public state read, the home page) may advance the Arena. See ARENA_VIEWER_ADVANCE. */
+export function viewerAdvanceEnabled(env: ServerEnv = getEnv()): boolean {
+  return !["off", "0", "false", "no"].includes((env.ARENA_VIEWER_ADVANCE ?? "").trim().toLowerCase());
 }
 
 /** Dev-only login for demo heroes. Hard-disabled in production regardless of env. */

@@ -21,3 +21,9 @@ export async function lockLifecycleExclusive(tx: Queryable): Promise<void> {
 export async function lockLifecycleShared(tx: Queryable): Promise<void> {
   await tx.query("select pg_advisory_xact_lock_shared($1::bigint)", [LIFECYCLE_LOCK_KEY]);
 }
+
+/**
+ * The SESSION-level advisory lock that makes the Arena worker a singleton (scripts/arena-worker.ts → acquireSessionLock in db/postgres.ts). Unlike the
+ * lifecycle lock above it is held for the worker's whole life on a dedicated direct connection — never through a transaction pooler. Distinct key.
+ */
+export const ARENA_WORKER_LOCK_KEY = 7_300_110;

@@ -103,29 +103,42 @@ export interface PrizeResult {
 export const positionPrizes = (poolMicro: bigint, ladderBps: readonly number[]): bigint[] => ladderBps.map((bps) => (poolMicro * BigInt(bps)) / 10_000n);
 
 /**
- * Distributes the pool over the PRIZE-ELIGIBLE members, who must already be in rank order (`rankBoard`). A tie group occupying
- * positions a..b receives the SUM of those positions' prizes divided equally (integer division); what does not divide returns
- * to the reserve. Example (100,000 pool, 30/20/15/10 %): two exactly tied for #2 → positions 2+3 = 35,000 → each 17,500, and
- * the next member takes #4 (10,000). If a tie group reaches past the last rewarded position, the whole group shares the
- * positions that exist (nobody tied for a rewarded rank is left out).
+ * THE tie rule of every prize ladder, independent of what is being ranked. `eligible` must already be in rank order. A tie group (as judged by
+ * `sameRank`) occupying positions a..b receives the SUM of those positions' prizes divided equally (integer division); what does not divide returns
+ * to the reserve. If a tie group reaches past the last rewarded position, the whole group shares the positions that exist (nobody tied for a
+ * rewarded rank is left out). Positions past the ladder win nothing. Keys are opaque (a Telegram id for Arena Picks, a hero id for Hero Arena).
  */
-export function distributePrizes(eligible: ReadonlyArray<{ userId: number; row: BoardRowInput }>, poolMicro: bigint, ladderBps: readonly number[]): PrizeResult {
+export function distributePrizeGroups<K>(eligible: ReadonlyArray<{ key: K }>, sameRank: (a: K, b: K) => boolean, poolMicro: bigint, ladderBps: readonly number[]): { awards: Array<{ key: K; prizeMicro: bigint }>; returnedMicro: bigint; positionPrizes: bigint[] } {
   const prizes = positionPrizes(poolMicro, ladderBps);
-  const awards: PrizeAward[] = [];
+  const awards: Array<{ key: K; prizeMicro: bigint }> = [];
   let paid = 0n;
   for (let i = 0; i < eligible.length; ) {
-    // Positions past the ladder win nothing — once every position is behind us there is nothing left to distribute.
     if (i >= prizes.length) break;
     let j = i + 1;
-    while (j < eligible.length && compareBoard((eligible[i] as { row: BoardRowInput }).row, (eligible[j] as { row: BoardRowInput }).row) === 0) j++;
+    while (j < eligible.length && sameRank((eligible[i] as { key: K }).key, (eligible[j] as { key: K }).key)) j++;
     let total = 0n;
     for (let pos = i; pos < j && pos < prizes.length; pos++) total += prizes[pos] as bigint;
     const each = total / BigInt(j - i);
-    for (let k = i; k < j; k++) awards.push({ userId: (eligible[k] as { userId: number }).userId, prizeMicro: each });
+    for (let k = i; k < j; k++) awards.push({ key: (eligible[k] as { key: K }).key, prizeMicro: each });
     paid += each * BigInt(j - i);
     i = j;
   }
   return { awards, returnedMicro: poolMicro - paid, positionPrizes: prizes };
+}
+
+/**
+ * Distributes the pool over the PRIZE-ELIGIBLE members, who must already be in rank order (`rankBoard`). Example (100,000 pool, 30/20/15/10 %):
+ * two exactly tied for #2 → positions 2+3 = 35,000 → each 17,500, and the next member takes #4 (10,000). (The tie rule itself: `distributePrizeGroups`.)
+ */
+export function distributePrizes(eligible: ReadonlyArray<{ userId: number; row: BoardRowInput }>, poolMicro: bigint, ladderBps: readonly number[]): PrizeResult {
+  const byUser = new Map(eligible.map((e) => [e.userId, e.row]));
+  const r = distributePrizeGroups(
+    eligible.map((e) => ({ key: e.userId })),
+    (a, b) => compareBoard(byUser.get(a) as BoardRowInput, byUser.get(b) as BoardRowInput) === 0,
+    poolMicro,
+    ladderBps,
+  );
+  return { awards: r.awards.map((a) => ({ userId: a.key, prizeMicro: a.prizeMicro })), returnedMicro: r.returnedMicro, positionPrizes: r.positionPrizes };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

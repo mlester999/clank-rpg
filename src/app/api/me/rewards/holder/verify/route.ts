@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { demoHeroesAllowed } from "@/server/env";
-import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { getChainReader } from "@/server/rewards/context";
 import { getHolderCard, verifyHolderWallet } from "@/server/rewards/holders";
 import { rewardMessage } from "@/server/rewards/messages";
@@ -23,7 +23,7 @@ const STATUS = { INVALID_CHALLENGE: 409, BAD_SIGNATURE: 403, NOT_ELIGIBLE: 403, 
  * configured contract) and logs the first observation. The browser never supplies an address-for-balance, a balance or a tier. Even a
  * holder of 10M earns no bonus yet: a holder bonus needs verified holding continuity from BEFORE a leaderboard period began.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer) return fail("UNAUTHENTICATED", 401);
@@ -46,3 +46,5 @@ export async function POST(req: Request) {
   const view = await tokenView(db);
   return ok({ changed: result.changed, holder: await getHolderCard(db, viewer.telegramUserId, settings, view.token, Date.now(), view.available) });
 }
+
+export const POST = guarded("me/rewards/holder/verify", handlePOST);

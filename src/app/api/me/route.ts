@@ -1,11 +1,11 @@
 import { getEnv } from "@/server/env";
-import { getViewer, ok } from "@/server/http/guards";
+import { getViewer, ok, guarded } from "@/server/http/guards";
 import { isFlagOn } from "@/server/runtime";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const env = getEnv();
   const viewer = await getViewer(req);
   return ok({
@@ -26,3 +26,5 @@ export async function GET(req: Request) {
     features: { claims: await isFlagOn("claims.enabled"), wallet: await isFlagOn("wallet.link") },
   });
 }
+
+export const GET = guarded("me", handleGET);

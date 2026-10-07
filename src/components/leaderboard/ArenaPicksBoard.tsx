@@ -4,23 +4,19 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { BoardInfo } from "@/components/leaderboard/BoardInfo";
+import { EmptyRows, PrizeLadder, SeasonChip, StatusChip } from "@/components/leaderboard/boardParts";
+import { periodLabel } from "@/components/leaderboard/periodLabel";
 import { useServerCountdown } from "@/components/leaderboard/useServerCountdown";
 import { useTokenConfig } from "@/components/leaderboard/useTokenConfig";
 import { EmptyState, SkeletonBlock } from "@/components/ui/bits";
 import { RarityBadge } from "@/components/hero/rarity";
 import type { BoardMeDto, BoardPayload, BoardRowDto } from "@/domain/rewards/leaderboardDto";
 import type { PeriodKind } from "@/domain/rewards/time";
-import { api } from "@/lib/api";
+import { api, friendly, isTransient } from "@/lib/api";
 import { useRemote } from "@/lib/useRemote";
 
 const CURRENT = "CURRENT";
-const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
-/** "2026-10-06" → "OCT 6" (a calendar label for a UTC date — never converted through the viewer's timezone). */
-export function periodLabel(start: string): string {
-  const [, m, d] = start.split("-");
-  return `${MONTHS[Number(m) - 1] ?? "?"} ${Number(d)}`;
-}
+export { periodLabel };
 
 /**
  * ARENA PICKS LEADERBOARDS — DAILY (00:00 UTC → 00:00 UTC) and WEEKLY (Monday 00:00 UTC → next Monday), ranked by points then
@@ -28,11 +24,18 @@ export function periodLabel(start: string): string {
  * between fetches and the board moves to the new day / week by itself when it reaches zero (nobody can reset it). Finished
  * boards are read-only snapshots. Hero identities only; holdings never enter the ranking.
  */
-export function ArenaPicksBoard() {
-  const [kind, setKind] = useState<PeriodKind>("DAILY");
+export function ArenaPicksBoard({ kind: controlled }: { kind?: PeriodKind } = {}) {
+  const [own, setKind] = useState<PeriodKind>("DAILY");
+  // Inside the Hall of Champions the Daily / Weekly choice is the page's shared scope selector (kind is controlled); on its own the board keeps its own tabs.
+  const kind = controlled ?? own;
+  const [lastKind, setLastKind] = useState(kind);
   const [selected, setSelected] = useState<string>(CURRENT);
+  if (lastKind !== kind) {
+    setLastKind(kind);
+    setSelected(CURRENT);
+  }
   const query = `period=${kind.toLowerCase()}${selected === CURRENT ? "" : `&start=${selected}`}`;
-  const { data, loading, reload } = useRemote<BoardPayload>(() => api<BoardPayload>(`/api/leaderboard/picks?${query}`), `picks-board:${query}`);
+  const { data, error, loading, reload } = useRemote<BoardPayload>(() => api<BoardPayload>(`/api/leaderboard/picks?${query}`), `picks-board:${query}`);
   const token = useTokenConfig();
 
   const pickKind = (k: PeriodKind) => {
@@ -42,18 +45,18 @@ export function ArenaPicksBoard() {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Arena Picks board" data-testid="board-kind">
+      {controlled === undefined && <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Arena Picks board" data-testid="board-kind">
         {(["DAILY", "WEEKLY"] as const).map((k) => (
           <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => pickKind(k)} data-testid={`board-kind-${k.toLowerCase()}`}
             className={`rounded-md px-4 py-2 font-display text-xs tracking-wider uppercase ring-1 transition ${kind === k ? "bg-clank-500 text-white ring-clank-300" : "bg-white/5 text-steel-200 ring-white/10 hover:bg-white/10"}`}>
             {k === "DAILY" ? "Daily" : "Weekly"}
           </button>
         ))}
-      </div>
+      </div>}
       {!data && loading ? (
-        <div className="space-y-2" aria-busy="true">{Array.from({ length: 6 }, (_, i) => <SkeletonBlock key={i} className="h-16" />)}</div>
+        <div className="space-y-2" aria-busy="true" data-testid="board-loading">{Array.from({ length: 6 }, (_, i) => <SkeletonBlock key={i} className="h-16" />)}</div>
       ) : !data ? (
-        <EmptyState title="Couldn't load the board" body="Please try again in a moment." action={<button className="btn btn-sm" type="button" onClick={reload}>Retry</button>} />
+        <EmptyState title={error && isTransient(error.error) ? "The board is temporarily unavailable" : "Couldn't load the board"} body={error ? friendly(error.error) : "Please try again in a moment."} action={<button className="btn btn-sm" type="button" onClick={reload} data-testid="board-retry">Retry</button>} />
       ) : (
         <BoardView payload={data} selected={selected} onSelect={setSelected} onReload={reload} officialAddress={token?.address ?? null} />
       )}
@@ -63,7 +66,7 @@ export function ArenaPicksBoard() {
 
 /** The pure view of one board payload (the live board and any finished one). Exported for server-rendered tests. */
 export function BoardView({ payload, selected, onSelect, onReload, officialAddress }: { payload: BoardPayload; selected: string; onSelect: (start: string) => void; onReload: () => void; officialAddress: string | null }) {
-  const { board, me, periods, finalizing } = payload;
+  const { board, me, periods, finalizing, season } = payload;
   const daily = board.kind === "DAILY";
   const isCurrent = board.state === "CURRENT" && selected === CURRENT;
   const word = daily ? "Daily" : "Weekly";
@@ -84,9 +87,11 @@ export function BoardView({ payload, selected, onSelect, onReload, officialAddre
       <header className="plate plate-flat mb-4 p-3.5 sm:p-4">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
               <h2 className="font-display text-lg tracking-wider text-paper uppercase sm:text-xl" data-testid="board-title">{word} Arena Picks</h2>
               <BoardInfo rules={board.rules} officialToken={{ address: officialAddress }} />
+              <StatusChip rewarded scope={board.kind} stats={false} />
+              <SeasonChip season={season} />
             </div>
             <p className="mt-1 text-xs text-steel-300" data-testid="board-subtitle">
               {isCurrent
@@ -149,11 +154,11 @@ export function BoardView({ payload, selected, onSelect, onReload, officialAddre
           ))}
         </div>
 
-        <Ladder rules={board.rules} />
+        <PrizeLadder rules={board.rules} />
       </header>
 
       {board.rows.length === 0 ? (
-        <EmptyState title={isCurrent ? `No picks yet ${daily ? "today" : "this week"}` : "Nobody played then"} body={isCurrent ? `Make a free Arena Pick — every valid Pick counts toward the ${word} score.` : "There are no results to show."} />
+        <EmptyRows text={isCurrent ? "No ranked players yet." : "Nobody played then."} hint={isCurrent ? `Make an Arena Pick to enter ${daily ? "today's" : "this week's"} standings.` : "There are no results to show."} />
       ) : (
         <>
           {isCurrent && <p className="mb-2 text-[0.72rem] text-steel-400">Prizes shown are a projection from the current standings — final only when the {daily ? "day" : "week"} ends. Holder bonuses are decided at the close.</p>}
@@ -176,23 +181,6 @@ function rewardNote(me: BoardMeDto | null): string {
   if (status === "NONE") return me.prizeEligible ? "No prize position" : "Not prize eligible";
   if (bonusStatus === "PENDING") return "Holder bonus pending verification";
   return bonus !== "0" ? `Includes a holder bonus of ${bonus}` : "Added to your claimable rewards";
-}
-
-/** The Top-N prize ladder — straight from the server's rules (one setting), never hard-coded here. */
-function Ladder({ rules }: { rules: BoardPayload["board"]["rules"] }) {
-  return (
-    <div className="mt-3.5" data-testid="board-ladder">
-      <p className="label">Prize ladder · Top {rules.topRewarded}</p>
-      <ol className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
-        {rules.prizes.map((p) => (
-          <li key={p.position} className="min-w-0 rounded-md bg-white/[0.04] px-2 py-1.5 ring-1 ring-white/10" data-position={p.position}>
-            <p className="flex items-baseline justify-between gap-1 font-display text-[0.7rem] text-steel-300"><span>#{p.position}</span><span className="text-[0.62rem] text-steel-400">{p.share}</span></p>
-            <p className="truncate font-display text-sm text-clank-200 tnum" title={`${p.amount} ${rules.symbol}`}>{p.amount}</p>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
 }
 
 function MeStat({ label, value, sub, testId }: { label: string; value: string; sub?: string; testId: string }) {

@@ -55,7 +55,7 @@ const EMPTY_HUD: Hud = { phase: "IDLE", countdown: null, alive: 0 };
  * accepted or refused by the server alone.
  */
 export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
-  const { state, replay, online, loaded, getNow } = useArena(initial);
+  const { state, replay, online, connection, loaded, getNow } = useArena(initial);
   const lib = useSpriteLibrary(state?.visuals.spriteSet ?? DEFAULT_SPRITE_SET);
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -238,7 +238,7 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(340px,27%)] xl:grid-rows-[auto_auto_1fr] xl:gap-x-4">
         {/* status strip — the public header carries nothing about queues, cycles, rounds or scheduling */}
         <div className="xl:col-start-1 xl:row-start-1">
-          <ArenaHeader status={headerStatus(mode, state)} season={state?.season ?? null} phase={state?.phase} online={online} demo={Boolean(state?.demo)} />
+          <ArenaHeader status={headerStatus(mode, state)} season={state?.season ?? null} phase={state?.phase} online={online} connection={connection} demo={Boolean(state?.demo)} />
         </div>
 
         {/* the stage */}

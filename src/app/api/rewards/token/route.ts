@@ -1,5 +1,5 @@
 import { buyUrl } from "@/domain/rewards/buyLink";
-import { ok } from "@/server/http/guards";
+import { ok, guarded } from "@/server/http/guards";
 import { getTokenStatus } from "@/server/rewards/context";
 import { REWARD_SYMBOL } from "@/server/rewards/pool";
 
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  *  - `launched`  an official address is configured. FALSE until the token exists (a normal state).
  *  - `buyUrl`    `https://clank.trade/` until an address is configured, then `https://clank.trade/<address>` — the same BUY $CLANKRPG button, no code change.
  */
-export async function GET() {
+async function handleGET() {
   const t = getTokenStatus();
   return ok(
     {
@@ -31,3 +31,5 @@ export async function GET() {
     { cache: "public, max-age=60" },
   );
 }
+
+export const GET = guarded("rewards/token", handleGET);

@@ -12,12 +12,16 @@ export default function Rewards() {
         head={["What", "How you earn it", "What it does"]}
         rows={[
           ["Points", `A correct Arena Pick is +${r.picks.pointsPerCorrectPick}.`, "Decides your place on the Daily and Weekly leaderboards."],
-          [r.token.symbol, `Finish in the Top ${r.picks.topRewarded} of a leaderboard and meet its minimum Picks.`, "A prize paid from that leaderboard's fixed pool."],
+          [r.token.symbol, `Finish in the Top ${r.picks.topRewarded} of a rewarded Daily or Weekly board — with enough valid Picks for Arena Picks, or enough Arena Wins for Hero Arena.`, "A prize paid from that board's fixed pool."],
         ]}
       />
       <p>
-        <strong>No token is paid per battle.</strong> {r.token.symbol} is only ever paid by the leaderboards: <strong>{r.picks.daily.poolLabel}</strong> a day and <strong>{r.picks.weekly.poolLabel}</strong> a week, each
-        shared by the Top {r.picks.topRewarded}. The pools are fixed — they don&apos;t grow or shrink with the number of players.
+        <strong>No token is paid per battle.</strong> {r.token.symbol} is only ever paid by the rewarded leaderboards. <strong>Arena Picks</strong> pays <strong>{r.picks.daily.poolLabel}</strong> a day and{" "}
+        <strong>{r.picks.weekly.poolLabel}</strong> a week, each shared by the Top {r.picks.topRewarded}. <strong>Hero Arena</strong> is a separate program with its own pools, set by the team and shown on its boards (until
+        they are set, a board says <em>Reward pool not set</em>). The pools are fixed — they don&apos;t grow or shrink with the number of players. Season boards and Hero Records pay nothing.
+      </p>
+      <p>
+        A Hero Arena prize belongs to the hero&apos;s <strong>owner</strong>. If the hero hasn&apos;t been claimed yet, the prize is reserved for it and released to whoever claims it — never to anyone else.
       </p>
 
       <DocH2 id="the-prize-ladder">The prize ladder</DocH2>

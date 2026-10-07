@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { parseTelegramUpdate } from "@/domain/telegram/updates";
 import { safeEqual } from "@/server/crypto";
 import { getEnv } from "@/server/env";
-import { fail } from "@/server/http/guards";
+import { fail, guarded } from "@/server/http/guards";
 import { getIngestDeps, getReadyDb, isFlagOn } from "@/server/runtime";
 import { ingestUpdate } from "@/server/services/telegramIngest";
 
@@ -17,7 +17,7 @@ const MAX_BODY = 512 * 1024;
  * X-Telegram-Bot-Api-Secret-Token header (set via setWebhook secret_token). Only the single
  * official Clank.trade chat is processed; every other chat, bots and malformed updates are ignored.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const env = getEnv();
   if (!env.TELEGRAM_WEBHOOK_SECRET || env.TELEGRAM_OFFICIAL_CHAT_ID === undefined) return fail("NOT_CONFIGURED", 503);
   const provided = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
@@ -45,3 +45,6 @@ export async function POST(req: Request) {
     return fail("PROCESSING_FAILED", 500);
   }
 }
+
+// A database outage → 503 (Telegram retries any 5xx; ingestion is idempotent per update_id / message id).
+export const POST = guarded("telegram/webhook", handlePOST);

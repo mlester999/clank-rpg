@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { USER_SESSION_COOKIE, USER_SESSION_TTL_S, newSession, signSession } from "@/server/auth/session";
 import { devLoginEnabled, getEnv, getSecret } from "@/server/env";
-import { cookieHeader, fail, ok, readJson, sameOriginOk } from "@/server/http/guards";
+import { cookieHeader, fail, ok, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { getReadyDb } from "@/server/runtime";
 import { claimCharacter } from "@/server/services/identity";
 
@@ -16,7 +16,7 @@ const body = z.strictObject({ characterId: z.string().uuid() });
  * can be exercised without a Telegram bot. It is impossible to use in production (devLoginEnabled
  * returns false there regardless of env) and can only target heroes with origin DEV_SEED.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!devLoginEnabled()) return fail("NOT_FOUND", 404);
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const parsed = await readJson(req, body);
@@ -34,3 +34,5 @@ export async function POST(req: Request) {
   res.headers.append("Set-Cookie", cookieHeader(USER_SESSION_COOKIE, token, USER_SESSION_TTL_S));
   return res;
 }
+
+export const POST = guarded("auth/dev", handlePOST);

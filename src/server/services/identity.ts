@@ -2,6 +2,7 @@ import { verifyTelegramLogin, type LoginVerification } from "../auth/telegramLog
 import { buildWalletMessage, normalizeAddress, verifyWalletSignature } from "../auth/wallet";
 import { secureToken } from "../crypto";
 import { json, type Db, type Queryable } from "../db/types";
+import { releaseReservedHeroPrizes } from "../rewards/heroArena";
 
 export type LoginResult =
   | { ok: true; telegramUserId: number; epoch: number; characterId: string | null; claimed: boolean; qualifying: number; threshold: number }
@@ -62,6 +63,14 @@ export type ClaimResult =
  * The character is looked up BY that id, so a username (or any other claim) is never trusted.
  */
 export async function claimCharacter(db: Db, telegramUserId: number, authDate: Date): Promise<ClaimResult> {
+  const result = await claimCharacterTx(db, telegramUserId, authDate);
+  // Whatever Hero Arena prizes were RESERVED for this hero while it was unclaimed are credited to its owner now. A separate transaction on purpose: a reward
+  // problem must never block a claim, and the reward sweep releases anything this misses (releaseClaimedReservations).
+  if (result.ok) await db.transaction((tx) => releaseReservedHeroPrizes(tx, { now: () => new Date() }, result.characterId, telegramUserId)).catch((error: unknown) => console.error("[hero-arena] releasing reserved prizes failed (the sweep will retry)", error instanceof Error ? error.message : error));
+  return result;
+}
+
+async function claimCharacterTx(db: Db, telegramUserId: number, authDate: Date): Promise<ClaimResult> {
   return db.transaction(async (tx) => {
     const [hero] = await tx.query<{ id: string; kind: string; status: string }>(
       "select id, kind, status from public.characters where telegram_user_id = $1 for update",

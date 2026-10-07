@@ -280,9 +280,9 @@ function PhotoPanel({ hero, onDone }: { hero: HeroDetail; onDone: () => void }) 
     }
   }
 
-  const upload = () => prepared && void send(() => fetch(`/api/admin/heroes/${hero.id}/photo`, { method: "PUT", headers: { "content-type": prepared.blob.type }, body: prepared.blob, credentials: "same-origin", cache: "no-store" }), "Photo saved.");
-  const remove = () => void send(() => fetch(`/api/admin/heroes/${hero.id}/photo`, { method: "DELETE", credentials: "same-origin", cache: "no-store" }), "Admin photo removed.");
-  const refreshTelegram = () => void send(() => fetch(`/api/admin/heroes/${hero.id}/photo/telegram-refresh`, { method: "POST", credentials: "same-origin", cache: "no-store" }), "Asked Telegram.");
+  const upload = () => prepared && void send(() => fetch(`/api/admin/heroes/${hero.id}/photo`, { method: "PUT", headers: { "content-type": prepared.blob.type }, body: prepared.blob, credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(30_000) }), "Photo saved.");
+  const remove = () => void send(() => fetch(`/api/admin/heroes/${hero.id}/photo`, { method: "DELETE", credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(30_000) }), "Admin photo removed.");
+  const refreshTelegram = () => void send(() => fetch(`/api/admin/heroes/${hero.id}/photo/telegram-refresh`, { method: "POST", credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(30_000) }), "Asked Telegram.");
 
   const tg = photo.telegram;
   return (

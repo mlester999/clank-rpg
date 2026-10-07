@@ -1,6 +1,6 @@
 import { ADMIN_SESSION_COOKIE, USER_SESSION_COOKIE, USER_SESSION_TTL_S, newSession, signSession } from "@/server/auth/session";
 import { getEnv, getSecret } from "@/server/env";
-import { clientKey, cookieHeader, fail, ok, rateLimited, sameOriginOk } from "@/server/http/guards";
+import { clientKey, cookieHeader, fail, ok, rateLimited, sameOriginOk, guarded } from "@/server/http/guards";
 import { getReadyDb, getSettings } from "@/server/runtime";
 import { loginWithTelegram } from "@/server/services/identity";
 import { z } from "zod";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 void ADMIN_SESSION_COOKIE;
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   if (rateLimited(`login:${clientKey(req)}`, 20, 60_000)) return fail("RATE_LIMITED", 429);
   const env = getEnv();
@@ -29,3 +29,5 @@ export async function POST(req: Request) {
   res.headers.append("Set-Cookie", cookieHeader(USER_SESSION_COOKIE, token, USER_SESSION_TTL_S));
   return res;
 }
+
+export const POST = guarded("auth/telegram", handlePOST);

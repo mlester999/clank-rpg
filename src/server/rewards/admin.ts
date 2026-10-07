@@ -20,7 +20,7 @@ import type { TokenStatus } from "./context";
 import type { TokenMetadataView } from "./tokenMetadata";
 import { computeHolderLive, EVIDENCE_DISPLAY_EXTRA_MS, liveTerms } from "./holders";
 import { auditRewardAccounts, lockRewardAccount, postRewardLedger, rewardTotals } from "./ledger";
-import { boardRules, expirePendingBonus, getLiveBoard, reconcileBonus, resolveHeldPrize } from "./leaderboard";
+import { boardRules, COUNTING_SEASON_SCORE, expirePendingBonus, getLiveBoard, reconcileBonus, resolveHeldPrize } from "./leaderboard";
 import { REWARD_SYMBOL } from "./pool";
 
 /**
@@ -657,7 +657,7 @@ export async function boardsAdminOverview(q: Queryable, ctx: { settings: GameSet
       [win.start],
     );
     current[kind] = { start: win.start, endsAt: win.endsAt, serverNow: ctx.nowMs, remainingMs: Math.max(win.endsAt - ctx.nowMs, 0), prizePool: board.rules.prizePool, minimumPicks: board.rules.minimumPicks, participants: board.participants, eligibleParticipants: board.eligibleParticipants, reviewAccounts: Number(rev?.n ?? 0) };
-    for (const u of await q.query<{ start: string }>(`select distinct ${col}::text as start from public.arena_pick_scores s where ${col} < $1::date and not exists (select 1 from public.arena_leaderboards l where l.kind = $2 and l.period_start = ${col}) and public.period_season($2::text, ${col}) is not null order by 1`, [win.start, kind])) unfinalized.push({ kind, start: u.start });
+    for (const u of await q.query<{ start: string }>(`select distinct ${col}::text as start from public.arena_pick_scores s where ${col} < $1::date and not exists (select 1 from public.arena_leaderboards l where l.kind = $2 and l.period_start = ${col}) and ${COUNTING_SEASON_SCORE} order by 1`, [win.start, kind])) unfinalized.push({ kind, start: u.start });
   }
   const boards = await q.query<{ kind: PeriodKind; period_start: string; participants: number; eligible: number; pool: string; awarded: string; returned: string; credited: number; held: number; forfeited: number; bonuses: number; bonus_total: string; pending: number; finalized_at: Date }>(
     `select l.kind, l.period_start::text, l.participants, l.eligible_participants as eligible, l.prize_pool_micro::text as pool, l.base_awarded_micro::text as awarded, l.returned_to_reserve_micro::text as returned,

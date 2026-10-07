@@ -86,7 +86,7 @@ const otherArena = async (db: Db): Promise<string> =>
 describe("the migration file", () => {
   it("sorts right after the rarity-power migration (the development-economy migration, 2100, comes after it)", async () => {
     const all = (await readMigrations()).map((m) => m.version);
-    expect(all.at(-1)).toBe("20261006002100");
+    expect(all.indexOf("20261006002100")).toBe(all.indexOf(NEW) + 1); // (later migrations may follow)
     expect(all.indexOf(NEW)).toBe(all.indexOf(BEFORE) + 1);
   });
 

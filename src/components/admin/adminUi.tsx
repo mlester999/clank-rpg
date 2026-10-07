@@ -16,7 +16,9 @@ export const fmtDate = (v: unknown) => {
 
 export function useAdminData<T>(path: string) {
   const { data, error, reload } = useRemote<T>(() => api<T>(path), path);
-  return { data, error: error ? friendly(error.error) : null, reload: async () => reload() };
+  // A database outage carries an operator-grade message from the server (what happened, whether a write may have been applied, what to do next).
+  const serverMessage = error?.error === "DB_UNAVAILABLE" && typeof error.detail?.message === "string" ? error.detail.message : null;
+  return { data, error: error ? (serverMessage ?? friendly(error.error)) : null, reload: async () => reload() };
 }
 
 export async function act(path: string, method: string, json?: unknown, reload?: () => void | Promise<void>, setMsg?: (m: string) => void) {

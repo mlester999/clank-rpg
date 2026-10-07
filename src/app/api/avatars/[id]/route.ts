@@ -1,4 +1,4 @@
-import { fail } from "@/server/http/guards";
+import { fail, guarded } from "@/server/http/guards";
 import { getReadyDb } from "@/server/runtime";
 import { loadPhotoBytes } from "@/server/services/heroPhotos";
 import { getAvatarStore } from "@/server/storage";
@@ -18,7 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * Defence in depth for a user-influenced file: served with the stored, allow-listed image type, `nosniff`, and a
  * CSP that disables everything (even if something opened it as a document, nothing could run).
  */
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleGET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!UUID.test(id)) return fail("NOT_FOUND", 404);
   try {
@@ -44,3 +44,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     return fail("AVATAR_UNAVAILABLE", 503);
   }
 }
+
+export const GET = guarded("avatars/[id]", handleGET);

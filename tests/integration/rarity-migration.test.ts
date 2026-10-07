@@ -22,7 +22,8 @@ describe("the migration file", () => {
   it("is sorted right after the hero-version migration it extends (the lifecycle migration comes after it)", async () => {
     const all = (await readMigrations()).map((m) => m.version);
     expect(all.slice(all.indexOf("20261005001800"), all.indexOf("20261006001900") + 1)).toEqual(["20261005001800", "20261006001900"]);
-    expect(all.slice(all.indexOf("20261006001900"))).toEqual(["20261006001900", "20261006002000", "20261006002100"]);
+    // (later migrations may follow the development-economy one — each has its own test)
+    expect(all.slice(all.indexOf("20261006001900"), all.indexOf("20261006002100") + 1)).toEqual(["20261006001900", "20261006002000", "20261006002100"]);
   });
 
   it("changes no data: no INSERT / UPDATE / DELETE / TRUNCATE anywhere, only DDL (constraints, one function, one comment) and the schema hardening call", () => {

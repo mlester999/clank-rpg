@@ -1,3 +1,4 @@
+import { isCapacityError, isConnectionError } from "@/server/db/postgres";
 import { holdDelayMs, isStaleAcrossBoundary } from "@/domain/arena/boundary";
 import { demoHeroesAllowed } from "@/server/env";
 import { fail, ok } from "@/server/http/guards";
@@ -117,7 +118,10 @@ export async function GET(req?: Request) {
     }
     return ok({ state: stamp((await load()).state) });
   } catch (error) {
-    console.error("[arena/state]", error);
-    return fail("ARENA_UNAVAILABLE", 503);
+    console.error("[arena/state]", isConnectionError(error) || isCapacityError(error) ? `database unavailable (${String((error as { code?: unknown }).code)})` : error);
+    // The viewer backs off on any non-2xx (see arenaPoller); Retry-After tells it how long the server would like to be left alone.
+    const res = fail("ARENA_UNAVAILABLE", 503);
+    res.headers.set("Retry-After", "3");
+    return res;
   }
 }

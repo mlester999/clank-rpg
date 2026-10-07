@@ -195,7 +195,7 @@ describe.skipIf(!url)("createPostgresDb against a real server, behind the pooler
     const db = track(createPostgresDb(`postgres://${target.user}@${target.host}:${target.port}/${target.db}`, { queryTimeoutMs: 5_000 }));
     await expect(db.query("select 1/0")).rejects.toMatchObject({ code: "22012" });
     await expect(db.transaction(async (tx) => tx.query("select * from public.no_such_table_anywhere"))).rejects.toMatchObject({ code: "42P01" });
-    expect(db.stats).toEqual({ recycles: 0, retries: 0, timeouts: 0 });
+    expect(db.stats).toMatchObject({ recycles: 0, retries: 0, timeouts: 0 });
     expect((await db.query<{ ok: number }>("select 1 as ok"))[0]?.ok).toBe(1);
   });
 
@@ -227,14 +227,20 @@ describe.skipIf(!url)("createPostgresDb against a real server, behind the pooler
       expect((await db.query<{ ok: number }>("select 1 as ok"))[0]?.ok).toBe(1); // the pool was replaced
     });
 
-    it("a transaction on a dead connection fails within the statement timeout instead of hanging, and the next one works", async () => {
+    it("a transaction whose BEGIN hits a dead connection is cut off within the statement timeout and — its body never having run — replayed ONCE on a fresh connection", async () => {
       const proxy = track(await startPgProxy(target));
-      const db = track(createPostgresDb(through(proxy, "dead-tx"), { maxConnections: 2, queryTimeoutMs: 400, transactionTimeoutMs: 10_000 }));
+      const db = track(createPostgresDb(through(proxy, "dead-tx"), { maxConnections: 2, queryTimeoutMs: 400, transactionTimeoutMs: 10_000, livenessAfterIdleMs: 0 }));
       await readAll(db, 2);
       proxy.drop();
       const t0 = Date.now();
-      const failure = await db.transaction(async (tx) => tx.query("select 1")).then(() => "ok", (e: unknown) => e);
-      expect(isConnectionError(failure)).toBe(true);
+      let bodies = 0;
+      const result = await db.transaction(async (tx) => {
+        bodies++;
+        return (await tx.query<{ ok: number }>("select 1 as ok"))[0]?.ok;
+      });
+      expect(result).toBe(1);
+      expect(bodies).toBe(1); // the first attempt died before BEGIN completed: its body never executed
+      expect(db.stats.txRetries).toBe(1);
       expect(Date.now() - t0).toBeLessThan(3_000);
       expect(await db.transaction(async (tx) => (await tx.query<{ ok: number }>("select 1 as ok"))[0]?.ok)).toBe(1);
     });
@@ -261,7 +267,7 @@ describe.skipIf(!url)("createPostgresDb against a real server, behind the pooler
       const db = track(createPostgresDb(through(proxy, "no-timeout"), { maxConnections: 2 }));
       const [row] = await db.query<{ ok: number }>("select 1 as ok, pg_sleep(0.6)");
       expect(row?.ok).toBe(1);
-      expect(db.stats).toEqual({ recycles: 0, retries: 0, timeouts: 0 });
+      expect(db.stats).toMatchObject({ recycles: 0, retries: 0, timeouts: 0 });
     });
   });
 });

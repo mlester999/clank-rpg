@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { safeEqual } from "@/server/crypto";
-import { getEnv } from "@/server/env";
+import { demoHeroesAllowed, getEnv } from "@/server/env";
 import { getChainReader } from "@/server/rewards/context";
 import { refreshDueHolders } from "@/server/rewards/holders";
 import { settleDueRewards } from "@/server/rewards/settlement";
+import { finalizeDueHeroBoards } from "@/server/rewards/heroArena";
 import { finalizeDueBoards } from "@/server/rewards/leaderboard";
 import { verifiedTokenMetadata } from "@/server/rewards/tokenMetadata";
-import { fail } from "@/server/http/guards";
+import { fail, guarded } from "@/server/http/guards";
 import { ensureArenaAdvanced, getEnabledClasses, getProviders, getReadyDb, getSettings } from "@/server/runtime";
 import { syncCharacterHoldings } from "@/server/services/holdings";
 import { createBotApiPhotoSource, syncTelegramPhotoBatch } from "@/server/services/telegramPhotos";
@@ -46,6 +47,8 @@ async function handle(req: Request) {
   out.rewards = {
     settlement: await settleDueRewards(db, { now: () => new Date() }).catch((e: unknown) => ({ error: String(e) })),
     boards: await finalizeDueBoards(db, { now: () => new Date(), settings }).catch((e: unknown) => ({ error: String(e) })),
+    // HERO ARENA: a separate program with its own sweep (never throws; one program failing cannot affect the other).
+    heroArena: await finalizeDueHeroBoards(db, { now: () => new Date(), settings, allowDemo: demoHeroesAllowed() }),
     holders: await getChainReader().then((reader) => refreshDueHolders(db, { now: () => new Date() }, reader, settings)).catch((e: unknown) => ({ error: String(e) })),
     // Keep the persisted token metadata (symbol / decimals / verified_at, read from the CONTRACT) fresh; null = not launched or not verifiable (features stay closed).
     token: await getChainReader().then(async (reader) => ((await verifiedTokenMetadata(db, reader)) ? "VERIFIED" : reader ? "UNVERIFIED" : "NOT_LAUNCHED")).catch((e: unknown) => ({ error: String(e) })),
@@ -96,5 +99,5 @@ async function handle(req: Request) {
   return NextResponse.json({ ok: true, ...out }, { headers: { "Cache-Control": "no-store" } });
 }
 
-export const GET = handle;
-export const POST = handle;
+export const GET = guarded("internal/tick", handle);
+export const POST = guarded("internal/tick", handle);

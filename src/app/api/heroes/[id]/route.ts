@@ -1,6 +1,6 @@
 import { isSelfHeroStatus } from "@/domain/heroOwnership";
 import { loadRuleset } from "@/server/config/settingsRepo";
-import { fail, getViewer, ok } from "@/server/http/guards";
+import { fail, getViewer, ok, guarded } from "@/server/http/guards";
 import { getReadyDb, getSettings } from "@/server/runtime";
 import { getBalance } from "@/server/services/economy";
 import { loadFighters } from "@/server/services/characters";
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleGET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!UUID.test(id)) return fail("NOT_FOUND", 404);
   const db = await getReadyDb();
@@ -38,3 +38,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const self = status && isSelfHeroStatus(status.status) ? { heroStatus: status.status } : null;
   return ok({ hero, isOwner, owner, classVisual: cls ? classVisuals([cls])[cls.id] : null, self });
 }
+
+export const GET = guarded("heroes/[id]", handleGET);

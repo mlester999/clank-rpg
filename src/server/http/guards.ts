@@ -4,12 +4,40 @@ import { NextResponse } from "next/server";
 import type { z } from "zod";
 
 import { USER_SESSION_COOKIE, ADMIN_SESSION_COOKIE, verifySession } from "../auth/session";
+import { isCapacityError, isConnectionError } from "../db/postgres";
 import { getReadyDb, getSettings } from "../runtime";
 import { getEnv, getSecret } from "../env";
 
 /** Error bodies are short, stable codes. Internals (SQL, stack traces) never reach the browser. */
 export function fail(code: string, status: number, message?: string): NextResponse {
   return NextResponse.json({ ok: false, error: code, ...(message ? { message } : {}) }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+/**
+ * The database could not be reached (a connection-class failure that outlived the driver's single safe retry). Public and Admin callers get the same
+ * short, stable answer — never the driver's message, SQL, or the pooler's host — and a Retry-After so clients back off instead of hammering.
+ */
+export function dbUnavailable(message = "The database is temporarily unavailable. Please try again in a moment."): NextResponse {
+  return NextResponse.json(
+    { ok: false, error: "DB_UNAVAILABLE", message },
+    { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } },
+  );
+}
+
+/**
+ * Wraps a route handler so a database outage becomes `dbUnavailable()` (503) instead of an unhandled 500. Everything else — validation errors, auth, bugs —
+ * is left exactly as the handler had it (rethrown). The raw error goes to the server log only, with its code.
+ */
+export function guarded<A extends unknown[]>(label: string, handler: (...args: A) => Promise<Response>): (...args: A) => Promise<Response> {
+  return async (...args: A) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      if (!isConnectionError(error) && !isCapacityError(error)) throw error;
+      console.error(`[${label}] database unavailable (${String((error as { code?: unknown }).code)})`, (error as { cause?: unknown }).cause ?? "");
+      return dbUnavailable();
+    }
+  };
 }
 
 export function ok<T extends object>(body: T, init?: { status?: number; cache?: string }): NextResponse {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { demoHeroesAllowed } from "@/server/env";
-import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { requestClaim, type ClaimDestinationInput, type ClaimRejection } from "@/server/rewards/claims";
 import { rewardsReady } from "@/server/rewards/pool";
 import { rewardMessage } from "@/server/rewards/messages";
@@ -27,7 +27,7 @@ const STATUS: Record<ClaimRejection, number> = {
   BELOW_MINIMUM: 409, NOTHING_TO_CLAIM: 409, CLAIM_IN_PROGRESS: 409,
 };
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer) return fail("UNAUTHENTICATED", 401);
@@ -57,3 +57,5 @@ export async function POST(req: Request) {
     replayed: result.replayed,
   });
 }
+
+export const POST = guarded("me/rewards/claim", handlePOST);

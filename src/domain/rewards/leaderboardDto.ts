@@ -109,4 +109,9 @@ export interface BoardPayload {
   /** An ended period that is not frozen yet (shown as FINALIZING in the selector), or null. */
   finalizing: string | null;
   serverNow: number;
+  /**
+   * The season being played now ("Development", "Season 1"…): the Hall of Champions says DEVELOPMENT / BETA when it is a development run. Optional so a payload
+   * served by an older server (or built by a test) stays valid.
+   */
+  season?: { label: string; kind: "DEVELOPMENT" | "COMPETITIVE" } | null;
 }

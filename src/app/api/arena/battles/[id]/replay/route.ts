@@ -1,4 +1,4 @@
-import { fail, ok } from "@/server/http/guards";
+import { fail, ok, guarded } from "@/server/http/guards";
 import { getReadyDb } from "@/server/runtime";
 import { BattleIntegrityError } from "@/server/services/arena";
 import { getReplayDto } from "@/server/services/views";
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleGET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!UUID.test(id)) return fail("NOT_FOUND", 404);
   try {
@@ -22,3 +22,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return fail("REPLAY_UNAVAILABLE", 503);
   }
 }
+
+export const GET = guarded("arena/battles/[id]/replay", handleGET);

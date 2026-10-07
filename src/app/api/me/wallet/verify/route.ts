@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { getEnabledClasses, getProviders, getReadyDb, getSettings } from "@/server/runtime";
 import { syncCharacterHoldings } from "@/server/services/holdings";
 import { verifyWalletLink } from "@/server/services/identity";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 const body = z.strictObject({ nonce: z.string().min(16).max(128), signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/) });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer?.characterId) return fail("UNAUTHENTICATED", 401);
@@ -24,3 +24,5 @@ export async function POST(req: Request) {
   const sync = await syncCharacterHoldings(db, viewer.characterId, { reader: getProviders().reader, settings: await getSettings(), classes: await getEnabledClasses(), force: true }).catch(() => ({ status: "UNAVAILABLE" as const, reason: "Chain data unavailable." }));
   return ok({ linked: true, holdings: sync });
 }
+
+export const POST = guarded("me/wallet/verify", handlePOST);

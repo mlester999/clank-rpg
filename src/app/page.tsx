@@ -1,7 +1,7 @@
 import { loadClasses } from "@/server/config/settingsRepo";
 import { demoHeroesAllowed } from "@/server/env";
 import { getPicksRewardDto } from "@/server/rewards/pool";
-import { ensureArenaAdvanced, getReadyDb, getSettings, isFlagOn } from "@/server/runtime";
+import { advanceForPage, getReadyDb, getSettings, isFlagOn } from "@/server/runtime";
 import { getArenaState, type ArenaStateDto } from "@/server/services/views";
 
 import { ArenaScreen } from "@/components/arena/ArenaScreen";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 async function initialState(): Promise<ArenaStateDto | null> {
   try {
-    await ensureArenaAdvanced().catch(() => null);
+    await advanceForPage();
     const db = await getReadyDb();
     const settings = await getSettings();
     return await getArenaState(db, Date.now(), settings, { allowDemo: demoHeroesAllowed(), classes: await loadClasses(db, false), picksEnabled: await isFlagOn("arena.picks"), reward: await getPicksRewardDto(db, settings, Date.now()) });

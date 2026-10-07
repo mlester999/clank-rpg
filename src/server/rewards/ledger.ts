@@ -15,6 +15,8 @@ export type RewardKind =
   | "DAILY_LEADERBOARD_HOLDER_BONUS"
   | "WEEKLY_LEADERBOARD_BASE_REWARD"
   | "WEEKLY_LEADERBOARD_HOLDER_BONUS"
+  | "HERO_ARENA_DAILY_REWARD"
+  | "HERO_ARENA_WEEKLY_REWARD"
   | "CLAIM_RESERVED"
   | "CLAIM_SENT"
   | "CLAIM_RELEASED"
@@ -22,6 +24,13 @@ export type RewardKind =
 
 export const leaderboardKind = (period: PeriodKind, part: "BASE" | "BONUS"): RewardKind =>
   `${period}_LEADERBOARD_${part === "BASE" ? "BASE_REWARD" : "HOLDER_BONUS"}` as RewardKind;
+
+/** The ledger kind of a Hero Arena prize (a separate program from Arena Picks: its own kinds, its own reference columns, its own reward source). */
+export const heroArenaKind = (period: PeriodKind): RewardKind => (period === "DAILY" ? "HERO_ARENA_DAILY_REWARD" : "HERO_ARENA_WEEKLY_REWARD");
+
+/** Where a credit came from, as the ledger's generated `reward_source` column spells it. */
+export type RewardSource = "ARENA_PICKS_DAILY" | "ARENA_PICKS_WEEKLY" | "HERO_ARENA_DAILY" | "HERO_ARENA_WEEKLY";
+export const REWARD_SOURCES: readonly RewardSource[] = ["ARENA_PICKS_DAILY", "ARENA_PICKS_WEEKLY", "HERO_ARENA_DAILY", "HERO_ARENA_WEEKLY"];
 
 export interface RewardLedgerInput {
   userId: number;
@@ -34,6 +43,10 @@ export interface RewardLedgerInput {
   /** Leaderboard kinds: which board and the UTC date its period started on (a Monday for WEEKLY). */
   periodKind?: PeriodKind;
   periodStart?: string;
+  /** HERO ARENA kinds only: the board and the hero the prize belongs to (these never overlap the Arena Picks columns above). */
+  heroPeriodKind?: PeriodKind;
+  heroPeriodStart?: string;
+  heroCharacterId?: string;
   meta?: Record<string, unknown>;
   idempotencyKey: string;
 }
@@ -107,13 +120,23 @@ export async function postRewardLedger(q: Queryable, e: RewardLedgerInput): Prom
   const reserved = e.reservedDelta ?? 0n;
   const claimed = e.claimedDelta ?? 0n;
   const earned = e.earnedDelta ?? 0n;
-  const inserted = await q.query<{ id: number }>(
-    `insert into public.arena_reward_ledger
-       (telegram_user_id, kind, claimable_delta, reserved_delta, claimed_delta, earned_delta, claim_id, period_kind, period_start, meta, idempotency_key)
-     values ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7, $8, $9::date, $10::jsonb, $11)
-     on conflict (idempotency_key) do nothing returning id`,
-    [e.userId, e.kind, e.claimableDelta.toString(), reserved.toString(), claimed.toString(), earned.toString(), e.claimId ?? null, e.periodKind ?? null, e.periodStart ?? null, json(e.meta ?? {}), e.idempotencyKey],
-  );
+  // Hero Arena credits have their own reference columns; every other kind is inserted EXACTLY as before (so Arena Picks keeps working whether or not
+  // the Hero Arena migration has been applied yet).
+  const inserted = e.heroCharacterId
+    ? await q.query<{ id: number }>(
+        `insert into public.arena_reward_ledger
+           (telegram_user_id, kind, claimable_delta, reserved_delta, claimed_delta, earned_delta, claim_id, hero_period_kind, hero_period_start, hero_character_id, meta, idempotency_key)
+         values ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7, $8, $9::date, $10::uuid, $11::jsonb, $12)
+         on conflict (idempotency_key) do nothing returning id`,
+        [e.userId, e.kind, e.claimableDelta.toString(), reserved.toString(), claimed.toString(), earned.toString(), e.claimId ?? null, e.heroPeriodKind ?? null, e.heroPeriodStart ?? null, e.heroCharacterId, json(e.meta ?? {}), e.idempotencyKey],
+      )
+    : await q.query<{ id: number }>(
+        `insert into public.arena_reward_ledger
+           (telegram_user_id, kind, claimable_delta, reserved_delta, claimed_delta, earned_delta, claim_id, period_kind, period_start, meta, idempotency_key)
+         values ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7, $8, $9::date, $10::jsonb, $11)
+         on conflict (idempotency_key) do nothing returning id`,
+        [e.userId, e.kind, e.claimableDelta.toString(), reserved.toString(), claimed.toString(), earned.toString(), e.claimId ?? null, e.periodKind ?? null, e.periodStart ?? null, json(e.meta ?? {}), e.idempotencyKey],
+      );
   if (inserted[0]) return { applied: true };
   const [existing] = await q.query<{ telegram_user_id: number; kind: string; claimable_delta: string; reserved_delta: string; claimed_delta: string }>(
     "select telegram_user_id, kind, claimable_delta::text, reserved_delta::text, claimed_delta::text from public.arena_reward_ledger where idempotency_key = $1",

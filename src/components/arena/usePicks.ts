@@ -119,7 +119,7 @@ export function usePicks(upcomingId: string | null, currentId: string | null, en
   /** Asks the server what this member has on a battle. Pure I/O: the caller decides whether the answer is still wanted. */
   const fetchBattle = useCallback(async (id: string): Promise<Stored | null> => {
     try {
-      const res = await fetch(`/api/arena/picks?battleId=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const res = await fetch(`/api/arena/picks?battleId=${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
       if (!res.ok) return null;
       const json = (await res.json()) as PicksResponse;
       return { signedIn: json.signedIn, eligibility: json.eligibility, pick: json.pick, round: json.round };
@@ -205,7 +205,7 @@ export function usePicks(upcomingId: string | null, currentId: string | null, en
           return next;
         });
       try {
-        const res = await fetch("/api/arena/picks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ battleId: id, characterId }) });
+        const res = await fetch("/api/arena/picks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ battleId: id, characterId }), signal: AbortSignal.timeout(15_000) });
         const json = (await res.json().catch(() => ({}))) as { ok?: boolean; pick?: MyPick; error?: PickErrorCode; message?: string };
         if (res.ok && json.pick) {
           setByBattle((all) => ({ ...all, [id]: { signedIn: true, eligibility: all[id]?.eligibility ?? null, round: all[id]?.round ?? null, pick: json.pick as MyPick } }));

@@ -10,10 +10,11 @@ import { act, Card, fmtDate, Note, Table, useAdminData, type Row } from "./admin
 import { ArenaOpsPanel, type ArenaOpsData } from "./ArenaOpsPanel";
 import { ArenaPicksAdmin } from "./ArenaPicksAdmin";
 import { GameControlPanel } from "./GameControlPanel";
+import { HeroArenaAdmin } from "./HeroArenaAdmin";
 import { HeroManager } from "./HeroManager";
 
 const SECTIONS = [
-  ["overview", "Overview"], ["game", "Game control"], ["heroes", "Heroes"], ["telegram", "Telegram"], ["config", "Balance & config"], ["arena", "Arena"], ["picks", "Arena Picks"],
+  ["overview", "Overview"], ["game", "Game control"], ["heroes", "Heroes"], ["telegram", "Telegram"], ["config", "Balance & config"], ["arena", "Arena"], ["picks", "Arena Picks"], ["hero-arena", "Hero Arena rewards"],
   ["items", "Items"], ["achievements", "Achievements"], ["tokens", "Coins & bosses"], ["flags", "Feature flags"], ["special", "Special characters"], ["audit", "Audit log"],
 ] as const;
 type SectionId = (typeof SECTIONS)[number][0];
@@ -52,6 +53,7 @@ export function AdminConsole() {
         {section === "config" && <Config />}
         {section === "arena" && <ArenaAdmin />}
         {section === "picks" && <ArenaPicksAdmin />}
+        {section === "hero-arena" && <HeroArenaAdmin />}
         {section === "items" && <JsonCrud title="Item templates" listPath="/api/admin/items" listKey="items" putPath="/api/admin/items" columns={["id", "name", "slot", "rarity", "enabled"]} template={ITEM_TEMPLATE} />}
         {section === "achievements" && <JsonCrud title="Achievements" listPath="/api/admin/achievements" listKey="achievements" putPath="/api/admin/achievements" columns={["id", "name", "category", "unlocked", "enabled"]} template={ACH_TEMPLATE} />}
         {section === "tokens" && <Tokens />}

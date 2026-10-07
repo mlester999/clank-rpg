@@ -75,6 +75,12 @@ type Input = BoardRowInput & { agg: AggRow };
 
 /** Where a period's pick scores live: a UTC date for DAILY, the Monday for WEEKLY. */
 const scoreColumn = (kind: PeriodKind): string => (kind === "DAILY" ? "s.utc_date" : "s.week_start");
+/**
+ * "This score row belongs to a season that counts." A period has an OWNER (`public.period_season`) exactly when some score in it is of a counting season, so for a scan
+ * that lists the periods with scores the owner test IS this row-level test — evaluated against the few season rows once (a hashed sub-select), not by a call to
+ * `period_season` per score row (which itself scans the scores of the period: quadratic in the number of picks, on every request).
+ */
+export const COUNTING_SEASON_SCORE = "s.season_id in (select z.id from public.seasons z where public.season_counts(z.id))";
 
 /**
  * The season whose picks a period's board ranks: the season of the LAST COUNTING pick scored in it (see `public.period_season`). A pick of an archived
@@ -388,7 +394,7 @@ export async function findFinalizingPeriod(q: Queryable, kind: PeriodKind, nowMs
   const [r] = await q.query<{ start: string }>(
     `select distinct ${scoreColumn(kind)}::text as start from public.arena_pick_scores s
       where ${scoreColumn(kind)} < $1::date and not exists (select 1 from public.arena_leaderboards l where l.kind = $2 and l.period_start = ${scoreColumn(kind)})
-        and public.period_season($2::text, ${scoreColumn(kind)}) is not null
+        and ${COUNTING_SEASON_SCORE}
       order by 1 desc limit 1`,
     [periodWindow(kind, nowMs).start, kind],
   );
@@ -749,7 +755,7 @@ export async function finalizeDueBoards(db: Db, ctx: BoardCtx, onError: (label: 
       due = await db.query<{ start: string }>(
         `select distinct ${scoreColumn(kind)}::text as start from public.arena_pick_scores s
           where ${scoreColumn(kind)} < $1::date and not exists (select 1 from public.arena_leaderboards l where l.kind = $2 and l.period_start = ${scoreColumn(kind)})
-            and public.period_season($2::text, ${scoreColumn(kind)}) is not null order by 1 limit 8`,
+            and ${COUNTING_SEASON_SCORE} order by 1 limit 8`,
         [periodWindow(kind, nowMs).start, kind],
       );
     } catch (error) {

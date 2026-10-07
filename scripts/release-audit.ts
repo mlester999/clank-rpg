@@ -247,6 +247,16 @@ void run(async (ctx) => {
   line("  would a launch / reset be BLOCKED by them?", liabilities.blocking ? `YES — ${liabilities.reasons.join(" ")}` : "no");
   const pickScores = await tryQuery<{ n: number; finalized: number }>(db, "select (select count(*)::int from public.arena_pick_scores) as n, (select count(*)::int from public.arena_leaderboards) as finalized");
   line("  pick scores (test data) / finalized boards", pickScores ? `${pickScores[0]?.n} / ${pickScores[0]?.finalized}` : "(not present)");
+  const heroBoards = await tryQuery<{ boards: number; reserved: number; held: number; credited: number }>(
+    db,
+    `select (select count(*)::int from public.hero_arena_boards) as boards,
+            (select count(*)::int from public.hero_arena_results where prize_status = 'RESERVED') as reserved,
+            (select count(*)::int from public.hero_arena_results where prize_status = 'HELD') as held,
+            (select count(*)::int from public.hero_arena_results where prize_status = 'CREDITED') as credited`,
+  );
+  line("  Hero Arena frozen boards / prizes reserved / held / credited", heroBoards ? `${heroBoards[0]?.boards} / ${heroBoards[0]?.reserved} / ${heroBoards[0]?.held} / ${heroBoards[0]?.credited}` : "NOT PRESENT (pending 20261007002200)");
+  const heroFindings = heroBoards ? await tryQuery<{ problem: string }>(db, "select problem from public.audit_hero_arena()") : null;
+  line("  audit_hero_arena() findings (must be 0)", heroBoards ? (heroFindings?.length ?? "n/a") : "n/a");
   console.log("  LAUNCH PRECONDITIONS (all must hold; the launch itself re-checks them under a lock):");
   const pre: Array<[string, boolean]> = [
     ["every migration through 20261006002100 is applied", pending.length === 0 && lifecycleApplied && econApplied],

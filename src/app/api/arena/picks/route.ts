@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { eligibilityExplanation, getRewardEligibility, publicIneligibleReason } from "@/server/rewards/eligibility";
 import { rewardsReady } from "@/server/rewards/pool";
 import { getPickRound } from "@/server/rewards/summary";
@@ -23,7 +23,7 @@ const STATUS: Record<PickRejection, number> = { NOT_FOUND: 404, NOT_A_FIGHTER: 4
  * see domain/arena/picksWindow.ts), the crowd (per-fighter counts) only AFTER it closed, and the member's own outcome once the
  * battle is over. Nobody else's pick is ever returned.
  */
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const battleId = new URL(req.url).searchParams.get("battleId") ?? "";
   if (!UUID.test(battleId)) return fail("INVALID_BATTLE", 400);
   const db = await getReadyDb();
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
  * exist. The clock, the roster, the one-pick rule and the eligibility are enforced in the service and the database; this layer
  * only authenticates and validates.
  */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer) return fail("UNAUTHENTICATED", 401);
@@ -68,3 +68,6 @@ export async function POST(req: Request) {
   if (!result.ok) return fail(result.reason, STATUS[result.reason], result.reason === "NOT_ELIGIBLE" ? eligibilityExplanation(settings.telegram.qualifyingThreshold) : undefined);
   return ok({ pick: result.pick, changed: result.changed });
 }
+
+export const GET = guarded("arena/picks", handleGET);
+export const POST = guarded("arena/picks", handlePOST);

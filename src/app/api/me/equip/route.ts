@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { getReadyDb, getSettings, getEnabledClasses } from "@/server/runtime";
 import { refreshPower } from "@/server/services/characters";
 import { setEquipped } from "@/server/services/inventory";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 const body = z.strictObject({ itemId: z.string().uuid(), equip: z.boolean() });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer?.characterId) return fail("UNAUTHENTICATED", 401);
@@ -27,3 +27,5 @@ export async function POST(req: Request) {
   if (!result.ok) return fail(result.reason, result.reason === "NOT_FOUND" ? 404 : 403);
   return ok({ equipped: result.equipped });
 }
+
+export const POST = guarded("me/equip", handlePOST);

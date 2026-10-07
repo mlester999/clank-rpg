@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, getViewer, ok, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { getReadyDb } from "@/server/runtime";
 import { setTactic } from "@/server/services/inventory";
 
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const body = z.strictObject({ tactic: z.enum(["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer?.characterId) return fail("UNAUTHENTICATED", 401);
@@ -18,3 +18,5 @@ export async function POST(req: Request) {
   const changed = await setTactic(await getReadyDb(), viewer.characterId, parsed.data.tactic);
   return changed ? ok({ tactic: parsed.data.tactic }) : fail("NOT_CLAIMED", 403);
 }
+
+export const POST = guarded("me/tactic", handlePOST);

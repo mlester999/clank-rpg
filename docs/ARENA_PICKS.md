@@ -242,6 +242,15 @@ Tabs: **Overview · Claims · Daily & Weekly · Holders & token · Recent battle
 * **Review**, **Accounts** (member detail: wallet, balance, observed tier, qualification, picks, correct, points, claimable/sent, review state, latest observations, recent board results), audited balance adjustment, **Reconciliation** (base ledger = credited base prizes; bonus ledger = credited bonuses; board totals; pending bonuses past their window; empty = healthy).
 * Dev/QA only (simulated adapter only — a real chain answers 409): `POST /api/admin/picks/sim/balance`, `POST /api/admin/picks/sim/transfer`, and `POST /api/admin/picks/sim/outage {on}` (switches the simulated RPC off/on, to rehearse a failed close verification → bonus PENDING VERIFICATION → *Re-verify bonus now*).
 
+## Hall of Champions — Picks Season, and what changed around Picks (2026-10-07)
+
+The Leaderboard page now has three sections (Arena Picks · Hero Arena · Hero Records) with one Daily/Weekly/Season selector — see [HERO_ARENA.md](HERO_ARENA.md). **Picks rules are unchanged** (UTC day / Monday week, minimums 20 / 100 valid Picks, +10 per correct Pick, pools 100,000 / 500,000, the Top-10 ladder). What is new for Picks:
+
+* **Season = standings only.** `GET /api/leaderboard/picks?period=season[&season=<id>]` is the cumulative correct-Picks standing of one season (current by default): no prize ladder, no payout, no finalization. Season 2 starts at zero; past seasons stay browsable.
+* The Daily/Weekly payload carries the season's label and kind (so the UI can show **Development / Beta**).
+* Performance: the per-request scan `findFinalizingPeriod`, the Picks sweep and the admin overview no longer call `public.period_season()` per score row (it scans the period's scores itself — quadratic in the number of picks). They use the equivalent row-level `COUNTING_SEASON_SCORE` test; results are identical (1,338 ms → 14 ms on the scratch data set). Guarded by `tests/unit/period-scan.test.ts`.
+* Hero Arena is a **separate** reward program: its own pools, tables, finalization and ledger source (`reward_source` labels every ledger row `ARENA_PICKS_DAILY` / `ARENA_PICKS_WEEKLY` / `HERO_ARENA_DAILY` / `HERO_ARENA_WEEKLY`). The Picks ledger insert path is untouched.
+
 ## Player surfaces
 
 * **Arena → Picks panel:** (owned by the arena-lifecycle work) free unlimited picks; short copy from `state.picks.reward` (`PicksRewardDto`: points per correct pick, the Daily/Weekly minimums and pools — no per-battle token amount, no daily cap); results show Points and whether the pick counted toward the boards.

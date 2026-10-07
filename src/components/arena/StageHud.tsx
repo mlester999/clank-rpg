@@ -70,7 +70,7 @@ export function PhaseBanner({ phase, sinceCombatStartMs }: { phase: ArenaPhase; 
  * The public page header: nothing about queues, cycles, rounds or scheduling. While the game is in DEVELOPMENT it says so, always — a development run's
  * battles are test data and must never be mistaken for an official Season. "Reconnecting…" is only for a REAL failure to reach the server.
  */
-export function ArenaHeader({ status, season, phase, online, demo }: { status: HeaderStatus; season: { kind: "DEVELOPMENT" | "COMPETITIVE"; label: string } | null; phase: "DEVELOPMENT" | "LIVE" | undefined; online: boolean; demo: boolean }) {
+export function ArenaHeader({ status, season, phase, online, connection, demo }: { status: HeaderStatus; season: { kind: "DEVELOPMENT" | "COMPETITIVE"; label: string } | null; phase: "DEVELOPMENT" | "LIVE" | undefined; online: boolean; connection?: "live" | "syncing" | "reconnecting"; demo: boolean }) {
   const tone = status.tone === "live" ? "border-teal/30 bg-teal/10 text-teal" : status.tone === "warn" ? "border-danger/40 bg-danger/10 text-danger" : "border-clank-400/40 bg-clank-500/10 text-clank-300";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="arena-header">
@@ -90,6 +90,7 @@ export function ArenaHeader({ status, season, phase, online, demo }: { status: H
         season && <span className="chip uppercase" data-testid="arena-season-chip">{season.label}</span>
       )}
       {!online && <span className="chip border-danger/40 bg-danger/10 text-danger" data-testid="arena-reconnecting">Reconnecting…</span>}
+      {online && connection === "syncing" && <span className="chip border-clank-400/40 bg-clank-500/10 text-clank-300" data-testid="arena-syncing">Syncing…</span>}
       {demo && (
         <span className="chip border-violet/40 bg-violet/10 text-violet" title="Local preview heroes — not real community members">
           Demo heroes

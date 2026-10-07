@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { getEnv } from "@/server/env";
-import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, readJson, sameOriginOk, guarded } from "@/server/http/guards";
 import { getReadyDb, isFlagOn } from "@/server/runtime";
 import { createWalletChallenge } from "@/server/services/identity";
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 const body = z.strictObject({ address: z.string().min(40).max(64) });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer?.characterId) return fail("UNAUTHENTICATED", 401);
@@ -22,3 +22,5 @@ export async function POST(req: Request) {
   if (!r.ok) return fail(r.reason, r.reason === "BAD_ADDRESS" ? 422 : 409);
   return ok({ nonce: r.nonce, message: r.message, expiresAt: r.expiresAt.toISOString() });
 }
+
+export const POST = guarded("me/wallet/challenge", handlePOST);

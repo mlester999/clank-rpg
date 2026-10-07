@@ -1,7 +1,7 @@
 import { cardKey } from "@/domain/hero/card";
 import { isPublicHeroId } from "@/domain/hero/publicId";
 import { demoHeroesAllowed } from "@/server/env";
-import { clientKey, fail, rateLimited } from "@/server/http/guards";
+import { clientKey, fail, rateLimited, guarded } from "@/server/http/guards";
 import { renderHeroCardPng } from "@/server/heroes/cardImage";
 import { getAllClasses, getReadyDb, getSettings } from "@/server/runtime";
 import { getCachedHeroCard, putCachedHeroCard } from "@/server/services/heroCache";
@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  *    so a stale image can never be reused); otherwise the current card is served without long-term caching.
  *  · `?download=1` sets a download filename. Nothing is read from the request except the id, the key and that flag.
  */
-export async function GET(req: Request, ctx: { params: Promise<{ publicId: string }> }) {
+async function handleGET(req: Request, ctx: { params: Promise<{ publicId: string }> }) {
   const { publicId } = await ctx.params;
   if (!isPublicHeroId(publicId)) return fail("NOT_FOUND", 404);
   if (rateLimited(`herocard:${clientKey(req)}`, 120, 60_000)) return fail("RATE_LIMITED", 429);
@@ -45,3 +45,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ publicId: strin
   if (req.headers.get("if-none-match") === `"${key}"`) return new Response(null, { status: 304, headers });
   return new Response(new Uint8Array(png), { headers });
 }
+
+export const GET = guarded("hero-cards/[publicId]", handleGET);

@@ -1,4 +1,4 @@
-import { fail, getViewer, ok, rateLimited, sameOriginOk } from "@/server/http/guards";
+import { fail, getViewer, ok, rateLimited, sameOriginOk, guarded } from "@/server/http/guards";
 import { getChainReader } from "@/server/rewards/context";
 import { getHolderCard, refreshHolder } from "@/server/rewards/holders";
 import { rewardMessage } from "@/server/rewards/messages";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** "Refresh holdings": the SERVER re-reads the verified wallet's balance (throttled per member) and logs the observation. No body: nothing for the browser to claim. */
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!sameOriginOk(req)) return fail("BAD_ORIGIN", 403);
   const viewer = await getViewer(req);
   if (!viewer) return fail("UNAUTHENTICATED", 401);
@@ -25,3 +25,5 @@ export async function POST(req: Request) {
   const holder = await getHolderCard(db, viewer.telegramUserId, settings, view.token, Date.now(), view.available);
   return ok({ refresh: r.status, holder });
 }
+
+export const POST = guarded("me/rewards/holder/refresh", handlePOST);

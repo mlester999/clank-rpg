@@ -3,6 +3,7 @@ import { loadClasses, loadSettings } from "@/server/config/settingsRepo";
 import { withLatency } from "@/server/db/latency";
 import { createPgliteDb } from "@/server/db/pglite";
 import { migrate } from "@/server/db/migrate";
+import { createPostgresDb } from "@/server/db/postgres";
 import type { Db, Queryable } from "@/server/db/types";
 import type { ArenaCtx } from "@/server/services/arena";
 import { createCharacterForUser } from "@/server/services/characters";
@@ -45,7 +46,44 @@ export async function factoryArenaState(q: Queryable): Promise<void> {
   await q.query("update public.arena_state set status = 'NOT_STARTED', last_advance_at = null, started_at = null where id = 1");
 }
 
+/**
+ * OPT-IN: run a suite on the REAL Postgres driver instead of PGlite, with the production pool shape — to prove nothing in the app needs more connections than
+ * `DATABASE_POOL_MAX=1` gives it (a service that queries the outer `db` from inside a `db.transaction(...)` callback, or calls a cache helper there, needs a
+ * SECOND connection: with a pool of one that is a deadlock, which the transaction timeout turns into a failing test).
+ *
+ *   CLANK_TEST_DRIVER=postgres CLANK_TEST_POOL=1 CLANK_TEST_PG_URL=postgres://postgres@127.0.0.1:5498/postgres pnpm exec vitest run
+ *
+ * Needs a THROWAWAY server: each test database is created fresh and dropped on close().
+ */
+async function createScratchPostgresDb(): Promise<Db> {
+  const base = process.env.CLANK_TEST_PG_URL as string;
+  if (!/(127\.0\.0\.1|localhost|\[::1\])/.test(base)) throw new Error("CLANK_TEST_PG_URL must point at a local throwaway server");
+  const name = `clank_t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const admin = createPostgresDb(base, { maxConnections: 1 });
+  await admin.exec(`create database ${name}`);
+  const u = new URL(base);
+  u.pathname = `/${name}`;
+  const pool = Math.max(1, Number(process.env.CLANK_TEST_POOL ?? 1));
+  const inner = createPostgresDb(u.toString(), { maxConnections: pool, queryTimeoutMs: 30_000, transactionTimeoutMs: 45_000, livenessAfterIdleMs: 0 });
+  await inner.exec(SUPABASE_ROLE_SHIM);
+  await migrate(inner);
+  await seedReferenceData(inner);
+  await runArena(inner);
+  let closed = false;
+  return {
+    ...inner,
+    async close() {
+      if (closed) return;
+      closed = true;
+      await inner.close();
+      await admin.exec(`drop database if exists ${name} with (force)`).catch(() => undefined);
+      await admin.close();
+    },
+  };
+}
+
 export async function createTestDb(): Promise<Db> {
+  if (process.env.CLANK_TEST_DRIVER === "postgres" && process.env.CLANK_TEST_PG_URL) return createScratchPostgresDb();
   const db = await createPgliteDb();
   await db.exec(SUPABASE_ROLE_SHIM);
   await migrate(db);

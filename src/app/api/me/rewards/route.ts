@@ -1,4 +1,4 @@
-import { fail, getViewer, ok } from "@/server/http/guards";
+import { fail, getViewer, ok, guarded } from "@/server/http/guards";
 import { demoHeroesAllowed } from "@/server/env";
 import { rewardsReady } from "@/server/rewards/pool";
 import { getPickStats, getRewardSummary, listPickHistory } from "@/server/rewards/summary";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** The signed-in member's own Arena Picks stats, reward balances, claims and recent rewards (their own only), and pick history. */
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const viewer = await getViewer(req);
   if (!viewer) return fail("UNAUTHENTICATED", 401);
   const db = await getReadyDb();
@@ -24,3 +24,5 @@ export async function GET(req: Request) {
   ]);
   return ok({ rewards: summary, stats, history, freshAuthMinutes: settings.arena_picks.walletChangeFreshMinutes });
 }
+
+export const GET = guarded("me/rewards", handleGET);

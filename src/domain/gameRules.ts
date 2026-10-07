@@ -1,7 +1,7 @@
 import { RARITIES, type Rarity } from "./character/appearance";
 import { DEFAULT_CLASSES } from "./content/classes";
 import { BUY_LABEL, CLANK_TRADE_URL } from "./rewards/buyLink";
-import { DEFAULT_ARENA_PICKS, DEFAULT_SETTINGS } from "./settings";
+import { DEFAULT_ARENA_PICKS, DEFAULT_HERO_ARENA, DEFAULT_SETTINGS } from "./settings";
 import { POWER_RANGE, RARITY_LADDER } from "./hero/rarity";
 import { RARITY_VISUALS } from "./hero/rarityVisuals";
 import { STAT_KEYS, STAT_LABELS, type StatKey } from "./stats";
@@ -140,6 +140,13 @@ export const GAME_RULES = Object.freeze({
     /** The smallest balance a claim can be made for, in whole tokens. */
     minimumClaim: picks.minimumClaim,
     minimumClaimLabel: formatWhole(picks.minimumClaim),
+  },
+  /** The HERO competition (Daily / Weekly rewarded, Season standings only). Its pools are NOT a rule: they are set by the team, so none is stated anywhere. */
+  heroArena: {
+    minimumWins: DEFAULT_HERO_ARENA.minimumWins,
+    /** Prize shares by position, in percent — the same shape of ladder as the Picks boards. */
+    prizeLadderPercent: DEFAULT_HERO_ARENA.prizeSplitBps.map(pct),
+    topRewarded: DEFAULT_HERO_ARENA.prizeSplitBps.length,
   },
   holderBonus: {
     /** How long before a period starts a holding must be verified for the bonus to apply (hours). */

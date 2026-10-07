@@ -3,6 +3,7 @@ import { periodWindow, type PeriodKind } from "@/domain/rewards/time";
 import { formatTokenAmount, LOGICAL_DECIMALS, parseTokenAmount } from "@/domain/rewards/tokens";
 import type { GameSettings } from "@/domain/settings";
 
+import { isCapacityError, isConnectionError } from "../db/postgres";
 import type { Queryable } from "../db/types";
 
 export const REWARD_SYMBOL = "$CLANKRPG";
@@ -19,8 +20,16 @@ export const minimumPicksFor = (settings: GameSettings, kind: PeriodKind): numbe
 /**
  * True when the leaderboard tables exist (migration 20261005001400 has been applied). Cached briefly — it is asked on every state
  * build. Before the migration the app keeps working: picks are free, nothing is scored, boards answer "unavailable".
+ *
+ * A DATABASE OUTAGE IS NOT AN ANSWER: if the question itself fails because the connection is gone, that is thrown to the caller (→ 503 + Retry-After) and
+ * NEVER cached as "not ready" — caching it kept the Picks boards 503 for 30 s after the database had recovered (seen in the soak).
  */
 const readiness = { at: 0, ready: false };
+/** Test hook: forget the cached answer. */
+export function resetRewardsReadiness(): void {
+  readiness.at = 0;
+  readiness.ready = false;
+}
 export async function rewardsReady(q: Queryable, nowMs = Date.now()): Promise<boolean> {
   if (nowMs - readiness.at < 30_000 && readiness.at !== 0) return readiness.ready;
   try {
@@ -30,7 +39,8 @@ export async function rewardsReady(q: Queryable, nowMs = Date.now()): Promise<bo
           and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'arena_picks' and column_name = 'reward_eligible') as ok`,
     );
     readiness.ready = Boolean(r?.ok);
-  } catch {
+  } catch (error) {
+    if (isConnectionError(error) || isCapacityError(error)) throw error;
     readiness.ready = false;
   }
   readiness.at = nowMs;

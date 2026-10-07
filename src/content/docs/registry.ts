@@ -158,15 +158,19 @@ export const DOC_PAGES: readonly DocPageMeta[] = [
   {
     slug: "leaderboards",
     title: "Leaderboards",
-    summary: "The Daily and Weekly leaderboards: how they rank, and what the prizes are.",
+    summary: "The Hall of Champions: Arena Picks, Hero Arena and Hero Records — how each ranks, and what the prizes are.",
     group: "Arena",
     sections: [
+      { id: "the-hall", title: "The Hall of Champions" },
       { id: "daily", title: "Daily leaderboard" },
       { id: "weekly", title: "Weekly leaderboard" },
       { id: "ranking-and-ties", title: "Ranking and ties" },
       { id: "prize-eligibility", title: "Prize eligibility" },
+      { id: "hero-arena", title: "Hero Arena" },
+      { id: "hero-records", title: "Hero Records" },
+      { id: "seasons", title: "Seasons" },
     ],
-    keywords: ["daily", "weekly", "leaderboard", "rank", "utc", "top 10", "prize pool", "minimum"],
+    keywords: ["daily", "weekly", "season", "leaderboard", "rank", "utc", "top 10", "prize pool", "minimum", "hero arena", "arena wins", "hero records", "hall of champions", "ties"],
   },
   {
     slug: "rewards",

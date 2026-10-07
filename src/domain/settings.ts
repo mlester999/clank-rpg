@@ -325,6 +325,41 @@ export const arenaPicksSettingsSchema = z.preprocess(
   }),
 ) as z.ZodType<z.output<typeof arenaPicksBaseSchema>, ArenaPicksInput | Record<string, unknown>>;
 
+/**
+ * HERO ARENA REWARDS — a reward program SEPARATE from Arena Picks (its own pools, its own ladder, its own ledger source). It pays the OWNERS of the heroes
+ * with the most Arena Wins in a UTC day / UTC week. Season standings pay nothing.
+ *
+ * NO POOL AMOUNT HAS BEEN CHOSEN YET, so none is invented: both pools default to `null` = "REWARD POOL NOT SET" — the boards run, rank and finalize, and
+ * pay nothing until an admin sets a pool here (an audited settings change like any other). The ladder defaults to the same Top-10 shape Arena Picks uses,
+ * but it is this program's own setting. There is NO holder bonus on Hero Arena prizes: they reward what the hero did, never what a wallet holds.
+ */
+export const heroArenaSettingsSchema = z.strictObject({
+  /** Prizes ON/OFF for this program only (the boards keep ranking when off; a period finalized while off freezes a zero pool). */
+  enabled: z.boolean(),
+  /** Whole $CLANKRPG paid by the DAILY Hero Arena board (UTC day). null = REWARD POOL NOT SET. */
+  dailyPrizePool: tokenAmount.nullable(),
+  /** Whole $CLANKRPG paid by the WEEKLY Hero Arena board (Monday 00:00 UTC → next Monday). null = REWARD POOL NOT SET. */
+  weeklyPrizePool: tokenAmount.nullable(),
+  /** The payout ladder by position, in basis points of a pool. Positions beyond the list win nothing; the total may not exceed 10000. */
+  prizeSplitBps: z
+    .array(z.number().int().min(1).max(10_000))
+    .min(1)
+    .max(10)
+    .refine((a) => a.reduce((x, y) => x + y, 0) <= 10_000, "the prize ladder cannot exceed 100%"),
+  /** Arena Wins a hero needs in the period to be prize-eligible (at least 1: a prize for zero wins is meaningless). */
+  minimumWins: z.number().int().min(1).max(1000),
+});
+export type HeroArenaSettings = z.infer<typeof heroArenaSettingsSchema>;
+
+/** Not configured on purpose: see the schema above. */
+export const DEFAULT_HERO_ARENA: HeroArenaSettings = {
+  enabled: true,
+  dailyPrizePool: null,
+  weeklyPrizePool: null,
+  prizeSplitBps: [3000, 2000, 1500, 1000, 800, 600, 400, 300, 200, 200],
+  minimumWins: 1,
+};
+
 /** Visual configuration: which sprite set the clients load and which cosmetics are switched off. */
 export const visualSettingsSchema = z.strictObject({
   spriteSet: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/),
@@ -413,6 +448,7 @@ export const settingsSchemas = {
   combat: combatSettingsSchema,
   picks: picksSettingsSchema,
   arena_picks: arenaPicksSettingsSchema,
+  hero_arena: heroArenaSettingsSchema,
   visuals: visualSettingsSchema,
 } as const;
 
@@ -440,6 +476,7 @@ export interface GameSettings {
   combat: CombatSettings;
   picks: PicksSettings;
   arena_picks: ArenaPicksSettings;
+  hero_arena: HeroArenaSettings;
   visuals: VisualSettings;
 }
 
@@ -598,6 +635,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   },
   picks: { rewardGold: 2 },
   arena_picks: DEFAULT_ARENA_PICKS,
+  hero_arena: DEFAULT_HERO_ARENA,
   visuals: { spriteSet: "clank-dev-v1", disabledCosmetics: [] },
 };
 

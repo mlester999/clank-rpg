@@ -55,7 +55,7 @@ describe("DAILY ARENA PICKS — the header", () => {
     expect(t).toMatch(/Ends in 23H 59M 59S/);
     expect(t).toMatch(/Picks 0 Correct 0 Accuracy — Points 0 Current rank — Not ranked yet/);
     expect(t).toMatch(/Not yet prize eligible — make 20 more picks this day \(20 needed\)/);
-    expect(t).toMatch(/No picks yet today/);
+    expect(t).toMatch(/No ranked players yet\. Make an Arena Pick to enter today's standings\./); // a compact, intentional state — not a large awkward card
   });
 
   it("WEEKLY reads 6D 23H 59M 59S one second into the week, with the 500,000 pool", () => {
@@ -78,6 +78,15 @@ describe("the Top 10 ladder and the rows", () => {
     expect(d).toMatch(/Prize ladder · Top 10 #1 30% 30,000 #2 20% 20,000 #3 15% 15,000 #4 10% 10,000 #5 8% 8,000 #6 6% 6,000 #7 4% 4,000 #8 3% 3,000 #9 2% 2,000 #10 2% 2,000/);
     const w = text(view(payload(board({ kind: "WEEKLY", rules: rules("WEEKLY") }))));
     expect(w).toMatch(/#1 30% 150,000 #2 20% 100,000 #3 15% 75,000 #4 10% 50,000 #5 8% 40,000 #6 6% 30,000 #7 4% 20,000 #8 3% 15,000 #9 2% 10,000 #10 2% 10,000/);
+  });
+
+  it("a phone gets three tiles to a row (five from sm up), so a six-figure prize is never cut to \"150,0…\" — the same ladder serves both programs", () => {
+    const w = view(payload(board({ kind: "WEEKLY", rules: rules("WEEKLY") })));
+    const ladder = w.slice(w.indexOf('data-testid="board-ladder"'));
+    expect(ladder).toContain("grid-cols-3");
+    expect(ladder).toContain("sm:grid-cols-5");
+    expect(ladder).not.toContain("grid-cols-5 gap-1 "); // the old phone-width five-up that clipped the amounts
+    expect(text(w)).toContain("150,000");
   });
 
   it("a RUNNING board shows prizes as projections and says holder bonuses are decided at the close; a member under the minimum is marked NOT YET PRIZE ELIGIBLE (never hidden)", () => {

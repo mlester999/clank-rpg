@@ -4,9 +4,10 @@ import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_TTL_S, newSession, signSession } fr
 import { safeEqual } from "@/server/crypto";
 import type { Db } from "@/server/db/types";
 import { demoHeroesAllowed, getEnv, getSecret } from "@/server/env";
-import { clearCookieHeader, clientKey, cookieHeader, fail, isAdmin, ok, rateLimited, readBytes, readJson, sameOriginOk } from "@/server/http/guards";
+import { clearCookieHeader, clientKey, cookieHeader, fail, isAdmin, ok, rateLimited, readBytes, readJson, sameOriginOk, dbUnavailable } from "@/server/http/guards";
 import { ensureArenaAdvanced, getEnabledClasses, getIngestDeps, getProviders, getReadyDb, getSettings, invalidateArenaCaches, invalidateConfigCache, invalidateFlagCache } from "@/server/runtime";
 import * as rewardsAdmin from "@/server/rewards/admin";
+import { adminResolveHeroPrize, heroArenaAdminOverview } from "@/server/rewards/heroArenaAdmin";
 import { getChainReader, getTokenHealth, getTokenStatus } from "@/server/rewards/context";
 import { buyUrl } from "@/domain/rewards/buyLink";
 import { heroUrl } from "@/domain/hero/publicId";
@@ -27,6 +28,7 @@ import { createBotApiPhotoSource, syncTelegramPhoto } from "@/server/services/te
 import { getAvatarStore } from "@/server/storage";
 import { AVATAR_MAX_BYTES } from "@/domain/media/image";
 import { scanCatalog } from "@/server/services/tokens";
+import { isCapacityError, isConnectionError } from "@/server/db/postgres";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -447,6 +449,17 @@ route("POST", "picks/boards/:kind/:start/prizes/:user/resolve", async (c) => {
   const result = await rewardsAdmin.adminResolveHeldPrize(c.db, { now: () => new Date() }, { kind, start: c.seg[3] as string, userId, ...body.data }, ACTOR);
   return result.ok ? ok({ status: result.status }) : fail(result.reason, result.reason === "NOT_FOUND" ? 404 : result.reason === "REASON_REQUIRED" ? 422 : 409);
 });
+// --- HERO ARENA REWARDS: a program SEPARATE from Arena Picks. Its pools are the `hero_arena` setting (Balance & config); this is the audited view of what it paid, reserved and holds.
+route("GET", "hero-arena/overview", async (c) => ok({ overview: await heroArenaAdminOverview(c.db, await getSettings()) }));
+route("POST", "hero-arena/boards/:kind/:start/prizes/:hero/resolve", async (c) => {
+  const kind = (c.seg[2] ?? "").toUpperCase();
+  const hero = c.seg[5] ?? "";
+  if (!isPeriodKind(kind) || !isPeriodStart(kind, c.seg[3] ?? "") || !/^[0-9a-f-]{36}$/i.test(hero)) return fail("NOT_FOUND", 404);
+  const body = await json(c, z.strictObject({ action: z.enum(["release", "forfeit"]), reason: z.string().trim().min(3).max(300) }), 2_000);
+  if (!body.ok) return body.response;
+  const result = await adminResolveHeroPrize(c.db, { now: () => new Date() }, { kind, start: c.seg[3] as string, characterId: hero, ...body.data }, ACTOR);
+  return result.ok ? ok({ status: result.status }) : fail(result.reason, result.reason === "NOT_FOUND" ? 404 : result.reason === "REASON_REQUIRED" ? 422 : 409);
+});
 // A holder bonus whose close verification failed waits PENDING VERIFICATION: re-verify it now, or give up on it. The base prize is never touched.
 route("POST", "picks/boards/:kind/:start/bonuses/:user/reconcile", async (c) => {
   const kind = (c.seg[2] ?? "").toUpperCase();
@@ -592,6 +605,15 @@ async function dispatch(req: Request, ctx: { params: Promise<{ path: string[] }>
       if (error instanceof AdminError) return fail(error.code, error.status, error.message === error.code ? undefined : error.message);
       if (error instanceof HeroVersionError) return fail(error.code, error.status, error.message === error.code ? undefined : error.message);
       if (error instanceof z.ZodError) return fail("INVALID_INPUT", 422, error.issues[0]?.message);
+      if (isConnectionError(error) || isCapacityError(error)) {
+        console.error("[admin]", joined, `database unavailable (${String((error as { code?: unknown }).code)})`, (error as { cause?: unknown }).cause ?? "");
+        // Actionable: say what happened, whether a write may have been applied, and what to do next. Never the driver's text.
+        return dbUnavailable(
+          (error as { ambiguous?: boolean }).ambiguous
+            ? "The connection to the database dropped while this change was being saved, so its outcome is unknown. Reload this page and check the current state before repeating the action."
+            : "The database is unreachable right now (its connection pooler may be restarting). Nothing was changed. Wait a few seconds and retry; if it keeps failing, check Supabase status and the DATABASE_URL pooler settings.",
+        );
+      }
       console.error("[admin]", joined, error);
       return fail("INTERNAL_ERROR", 500);
     }

@@ -201,6 +201,32 @@ describe("docs content states CURRENT product truth, from the shared rules", () 
     expect(x).toMatch(/no effect/i);
   });
 
+  it("leaderboards: the Hall's three sections, Hero Arena rules (wins only, ties, owner, reserved, pool not invented), Hero Records pay nothing, seasons start clean", () => {
+    const x = t("leaderboards");
+    for (const w of ["Hall of Champions", "Arena Picks", "Hero Arena", "Hero Records"]) expect(x, w).toContain(w);
+    expect(x).toMatch(/Daily and Weekly are rewarded\. Season is standings only/);
+    expect(x).toMatch(/Arena Wins/);
+    expect(x).toMatch(/settled\s+battles of the current season/);
+    expect(x).toContain(`Top ${r.heroArena.topRewarded} heroes with at least ${r.heroArena.minimumWins} win`);
+    for (const percent of r.heroArena.prizeLadderPercent) expect(x).toContain(`${percent}%`);
+    expect(x).toMatch(/Ties share/);
+    expect(x).toMatch(/prize goes to the hero's owner/);
+    expect(x).toMatch(/reserved/i);
+    expect(x).toMatch(/never redistributed/);
+    expect(x).toMatch(/Reward pool not set/);
+    expect(x).toMatch(/No amount is promised before it is shown/);
+    expect(x).toMatch(/holder bonus does not apply to Hero Arena/i);
+    expect(x).toMatch(/Hero Records are statistics/);
+    expect(x).toMatch(/They carry no prizes/);
+    expect(x).toMatch(/every Season board starts at zero/);
+    expect(x).toMatch(/Development \/ Beta/);
+    // the Hero Arena pools are a decision of the team: no amount of them is written anywhere
+    expect(Object.keys(r.heroArena)).not.toContain("dailyPrizePool");
+    const rewards = t("rewards");
+    expect(rewards).toMatch(/Hero Arena.*separate program/s);
+    expect(rewards).toMatch(/Season boards and Hero Records pay nothing/);
+  });
+
   it("rewards / holder bonus / claims: tiers, never pay-to-win, manual verified payout, claims closed before launch, no invented address", () => {
     const holder = t("holder-bonus");
     for (const tier of r.holderBonus.tiers) {

@@ -10,7 +10,7 @@ import { loadClasses, loadSettings } from "./config/settingsRepo";
 import { classVisuals, type ClassVisual } from "./services/views";
 import { makeTextHasher, secureSeed } from "./crypto";
 import { getDb, type Db } from "./db";
-import { demoHeroesAllowed, getEnv, getSecret } from "./env";
+import { demoHeroesAllowed, getEnv, getSecret, viewerAdvanceEnabled } from "./env";
 import { seedReferenceData } from "./seed/reference";
 import { advanceArena, replayBattle, type ArenaAdvanceResult, type ArenaCtx } from "./services/arena";
 import type { IngestDeps } from "./services/telegramIngest";
@@ -141,6 +141,8 @@ const COLD_READ_WAIT_CAP_MS = 1500;
  * `neverWait`: a snapshot built for a FUTURE instant does not depend on anything in flight right now.
  */
 export async function advanceForRead(opts: { neverWait?: boolean } = {}): Promise<Pick<ArenaAdvanceResult, "status"> | null> {
+  // ARENA_VIEWER_ADVANCE=off: a viewer's read is strictly READ-ONLY — the worker (or the scheduler tick) is the only thing that moves the Arena.
+  if (!viewerAdvanceEnabled()) return null;
   const st = g.__clankAdvance;
   const last = st?.last ?? null;
   const inFlight = Boolean(st?.promise);
@@ -153,6 +155,11 @@ export async function advanceForRead(opts: { neverWait?: boolean } = {}): Promis
   if (!last) return Promise.race([run, new Promise<null>((resolve) => setTimeout(() => resolve(null), COLD_READ_WAIT_CAP_MS))]);
   if (!inFlight && now - (st?.at ?? 0) > READ_ADVANCE_MAX_AGE_MS) return run;
   return last;
+}
+
+/** The home page's server render: advances the Arena like a state read does — and, like it, not at all when viewers are read-only. */
+export async function advanceForPage(): Promise<void> {
+  if (viewerAdvanceEnabled()) await ensureArenaAdvanced().catch(() => null);
 }
 
 /**
@@ -214,6 +221,10 @@ function sweepRewards(db: Db, justSettled: boolean): void {
     .finally(() => {
       state.running = false;
     });
+  // HERO ARENA is a separate reward program: its own sweep, its own failure domain (a problem in one never touches the other).
+  void import("./rewards/heroArena")
+    .then(async ({ finalizeDueHeroBoards }) => finalizeDueHeroBoards(db, { now: () => new Date(), settings: await getSettings(), allowDemo: demoHeroesAllowed() }))
+    .catch((error) => console.error("[hero-arena] sweep failed", error));
 }
 
 export async function getIngestDeps(): Promise<IngestDeps> {

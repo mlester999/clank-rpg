@@ -197,7 +197,7 @@ describe("player-facing UI carries no XP / level language", () => {
   it("the Arena, results, Current Round, hero page and leaderboards have no level/XP markup at all", () => {
     for (const rel of [
       "components/arena/ArenaScreen.tsx", "components/arena/ArenaRenderer.ts", "components/arena/ArenaPicks.tsx", "components/arena/RecentWinners.tsx",
-      "components/arena/SpectatorStrip.tsx", "components/character/HeroView.tsx", "components/character/LeaderboardView.tsx", "components/character/InventoryView.tsx",
+      "components/arena/SpectatorStrip.tsx", "components/character/HeroView.tsx", "components/leaderboard/HallOfChampions.tsx", "components/leaderboard/HeroBoards.tsx", "components/leaderboard/PicksSeasonBoard.tsx", "components/character/InventoryView.tsx",
     ]) {
       expect(code(join(SRC, rel)), rel).not.toMatch(FORBIDDEN);
     }

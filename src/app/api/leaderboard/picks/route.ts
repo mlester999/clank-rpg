@@ -1,8 +1,9 @@
 import { isPeriodStart, periodWindow, type PeriodKind } from "@/domain/rewards/time";
-import { fail, getViewer, ok } from "@/server/http/guards";
+import { fail, getViewer, ok, guarded } from "@/server/http/guards";
 import { findFinalizingPeriod, getFinalBoard, getLiveBoard, listFinalizedPeriods, type BoardDto, type BoardMeDto, type BoardPayload } from "@/server/rewards/leaderboard";
 import { rewardsReady } from "@/server/rewards/pool";
 import { getReadyDb, getSettings } from "@/server/runtime";
+import { getPicksSeasonPayload, listLeaderboardSeasons, pickSeason } from "@/server/services/heroBoards";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,10 +23,15 @@ const MEMO_MS = 4_000;
  * nobody can reset a leaderboard). `?start=YYYY-MM-DD` shows a past period from its frozen rows — or, for the one that just ended
  * and is still being frozen, its live standings marked FINALIZING. A signed-in member also gets their own standing (`me`).
  */
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const url = new URL(req.url);
   const periodParam = (url.searchParams.get("period") ?? "daily").toLowerCase();
-  if (periodParam !== "daily" && periodParam !== "weekly") return fail("INVALID_PERIOD", 400, "Choose daily or weekly.");
+  // SEASON: the cumulative standings of one season (default the current one) — standings only, no prize ladder, no payout.
+  if (periodParam === "season") {
+    const viewer = await getViewer(req);
+    return ok(await getPicksSeasonPayload(await getReadyDb(), { nowMs: Date.now(), seasonId: url.searchParams.get("season"), viewerId: viewer?.telegramUserId ?? null, limit: 50 }), { cache: "no-store" });
+  }
+  if (periodParam !== "daily" && periodParam !== "weekly") return fail("INVALID_PERIOD", 400, "Choose daily, weekly or season.");
   const kind: PeriodKind = periodParam === "weekly" ? "WEEKLY" : "DAILY";
   const start = url.searchParams.get("start");
   const nowMs = Date.now();
@@ -67,6 +73,9 @@ export async function GET(req: Request) {
     }
   }
   const periods = await listFinalizedPeriods(db, kind, 30);
-  const payload: BoardPayload = { board, me, periods, current: { kind, start: current.start, startsAt: current.startsAt, endsAt: current.endsAt }, finalizing, serverNow: nowMs };
+  const season = pickSeason(await listLeaderboardSeasons(db), null);
+  const payload: BoardPayload = { board, me, periods, current: { kind, start: current.start, startsAt: current.startsAt, endsAt: current.endsAt }, finalizing, serverNow: nowMs, season: season ? { label: season.label, kind: season.kind } : null };
   return ok(payload, { cache: "no-store" });
 }
+
+export const GET = guarded("leaderboard/picks", handleGET);

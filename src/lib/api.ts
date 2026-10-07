@@ -13,9 +13,18 @@ export interface ApiErr {
   detail?: Record<string, unknown>;
 }
 
-export async function api<T = Record<string, unknown>>(path: string, init?: { method?: string; json?: unknown }): Promise<ApiOk<T> | ApiErr> {
+/**
+ * A request never waits forever: a hung connection must end in an error state with a Retry button, never in a skeleton that is never replaced. (The server
+ * itself gives up on the database after ~20 s per statement, so a healthy-but-degraded answer — a 503 — normally arrives first.)
+ */
+const API_TIMEOUT_MS = 25_000;
+
+export async function api<T = Record<string, unknown>>(path: string, init?: { method?: string; json?: unknown; timeoutMs?: number }): Promise<ApiOk<T> | ApiErr> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), init?.timeoutMs ?? API_TIMEOUT_MS);
   try {
     const res = await fetch(path, {
+      signal: controller.signal,
       method: init?.method ?? "GET",
       headers: init?.json !== undefined ? { "content-type": "application/json" } : undefined,
       body: init?.json !== undefined ? JSON.stringify(init.json) : undefined,
@@ -28,7 +37,9 @@ export async function api<T = Record<string, unknown>>(path: string, init?: { me
     if (init?.method && init.method !== "GET" && /^\/api\/(auth|me\/claim)/.test(path)) window.dispatchEvent(new Event("clank-session"));
     return { ok: true, data: body as T };
   } catch {
-    return { ok: false, error: "NETWORK", status: 0 };
+    return { ok: false, error: controller.signal.aborted ? "TIMEOUT" : "NETWORK", status: 0 };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -38,6 +49,10 @@ const MESSAGES: Record<string, string> = {
   NO_HERO: "You don't have a hero yet — keep chatting in the official Clank.trade Telegram!",
   RATE_LIMITED: "Slow down a moment and try again.",
   NETWORK: "Can't reach the server. Check your connection.",
+  TIMEOUT: "The server is taking too long to answer. Please try again in a moment.",
+  DB_UNAVAILABLE: "This is temporarily unavailable. Please try again in a moment.",
+  ARENA_UNAVAILABLE: "The Arena is temporarily unavailable. Please try again in a moment.",
+  REPLAY_UNAVAILABLE: "The replay is temporarily unavailable. Please try again in a moment.",
   CLASS_RESTRICTED: "That item is for a different class.",
   BAD_SIGNATURE: "That signature didn't match the wallet. Try again.",
   EXPIRED: "That request timed out. Start again.",
@@ -64,3 +79,6 @@ const MESSAGES: Record<string, string> = {
 };
 
 export const friendly = (code: string): string => MESSAGES[code] ?? "Something went wrong. Please try again.";
+
+/** True for the failures that mean "the service is having a moment — try again" (as opposed to "you did something wrong"). */
+export const isTransient = (code: string): boolean => code === "NETWORK" || code === "TIMEOUT" || code === "DB_UNAVAILABLE" || code === "ARENA_UNAVAILABLE" || code === "REPLAY_UNAVAILABLE";
