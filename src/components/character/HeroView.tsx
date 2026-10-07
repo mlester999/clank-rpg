@@ -6,22 +6,18 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { RARITY_COLOR } from "@/components/hero/colors"; // gear item rarities (they include UNCOMMON) — hero rarity uses the shared RARITY_VISUALS
-import { HeroAvatar } from "@/components/hero/HeroAvatar";
-import { HeroArena } from "@/components/hero/HeroArena";
 import { lookFor } from "@/components/hero/look";
-import { PwrValue, RarityBadge } from "@/components/hero/rarity";
 import type { Rarity } from "@/domain/character/appearance";
-import { RARITY_RULES } from "@/domain/hero/rarity";
+import { heroOwnership, type SelfHeroStatus } from "@/domain/heroOwnership";
 import { EmptyState, SkeletonBlock } from "@/components/ui/bits";
 import { CheckIcon, LockIcon } from "@/components/ui/Icons";
+import { lighten } from "@/domain/util/color";
 import { STAT_KEYS, STAT_LABELS, type StatKey } from "@/domain/stats";
 import { api, friendly } from "@/lib/api";
 import type { CharacterDto, ClassVisual, InventoryItemView } from "@/lib/dto";
 import { useRemote } from "@/lib/useRemote";
 
-import { eligibilityState } from "@/domain/heroEligibility";
-
-import { HeroStatusCard } from "./EligibilityCards";
+import { HeroIdentityPanel, HeroStandingPanel } from "./HeroIdentity";
 import { ArenaPicksPanel } from "@/components/rewards/ArenaPicksPanel";
 import { WalletPanel } from "./WalletPanel";
 
@@ -30,6 +26,8 @@ interface HeroResponse {
   isOwner: boolean;
   owner: { tactic: "AGGRESSIVE" | "BALANCED" | "DEFENSIVE"; gold: number; inventory: InventoryItemView[]; wallet: string | null } | null;
   classVisual: ClassVisual | null;
+  /** Only present when the signed-in member is looking at their OWN hero: facts the public hero data never carries. */
+  self?: { heroStatus: SelfHeroStatus } | null;
 }
 
 interface Viewer {
@@ -66,7 +64,8 @@ export function HeroView({ id }: { id: string }) {
   const state: "loading" | "missing" | "error" | "ok" = bundle ? "ok" : error ? (error.status === 404 ? "missing" : "error") : loading ? "loading" : "error";
   const load = async () => reload();
   const [tab, setTab] = useState<"overview" | "picks" | "tactics" | "wallet">("overview");
-  const [note, setNote] = useState<string | null>(null);
+  const [claimNote, setClaimNote] = useState<string | null>(null);
+  const [tacticNote, setTacticNote] = useState<string | null>(null);
 
   if (state === "loading") return <HeroSkeleton />;
   if (state === "missing") return <EmptyState title="Hero not found" body="This hero doesn't exist (or hasn't been created yet)." action={<Link href="/leaderboard" className="btn btn-sm">See the leaderboard</Link>} />;
@@ -75,79 +74,49 @@ export function HeroView({ id }: { id: string }) {
   const { hero, isOwner, owner, classVisual } = data;
   const look = lookFor(hero.appearance, classVisual ?? undefined);
   const winRate = formatWinRate(hero.record.battles, hero.record.wins);
-  const canClaim = Boolean(viewer && viewer.characterId === hero.id && !viewer.claimed && !hero.claimed);
+  const ownership = heroOwnership({ hero: { id: hero.id, kind: hero.kind, isDemo: hero.isDemo, claimed: hero.claimed }, viewer });
   // Arena Picks rewards belong to the signed-in Telegram identity — available on your own hero even before you "claim" it.
   const isMine = Boolean(viewer && viewer.characterId === hero.id);
 
   async function claim() {
-    setNote(null);
+    setClaimNote(null);
     const r = await api("/api/me/claim", { method: "POST", json: {} });
     if (r.ok) {
-      setNote("Hero claimed! You can now manage tactics, gear and your Arena Picks rewards.");
+      setClaimNote("Hero claimed! You can now manage tactics, gear and your Arena Picks rewards.");
       await load();
-    } else setNote(friendly(r.error));
+    } else setClaimNote(friendly(r.error));
+  }
+
+  async function signOut() {
+    await api("/api/auth/logout", { method: "POST", json: {} });
+    window.dispatchEvent(new Event("clank-session"));
+    router.push("/");
+    router.refresh();
   }
 
   async function setTactic(t: string) {
     const r = await api("/api/me/tactic", { method: "POST", json: { tactic: t } });
-    setNote(r.ok ? "Tactic saved. It applies from your next battle." : friendly(r.error));
+    setTacticNote(r.ok ? "Tactic saved. It applies from your next battle." : friendly(r.error));
     if (r.ok) await load();
   }
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-3 py-5 sm:px-6">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        {/* identity */}
-        <section className="plate plate-clank rivets p-5 text-center lg:sticky lg:top-20 lg:self-start">
-          <HeroArena look={look} animate label={hero.name} className="mx-auto w-full max-w-[280px]" />
-          {/* Profile photo (the person) beside the name; the animated hero above is the fighter. No photo → the generated class portrait. */}
-          <div className="mt-3 flex items-center justify-center gap-3">
-            <HeroAvatar avatarUrl={hero.avatarUrl} look={look} size={64} label={hero.name} className="rounded-xl" />
-            <h1 className="min-w-0 text-left font-display text-2xl break-words text-paper">{hero.name}</h1>
-          </div>
-          <p className="mt-1 text-center text-xs"><Link href={`/heroes/${hero.publicId}`} className="text-clank-300 hover:text-clank-200" data-testid="hero-public-link">View the public card · download · share ↗</Link></p>
-          {hero.title && <p className="text-sm font-semibold text-clank-300">{hero.title}</p>}
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-            <span className="chip text-paper">{classVisual?.name ?? hero.classId}</span>
-            <RarityBadge rarity={hero.appearance.rarity as Rarity} size="sm" />
-            {hero.kind === "SPECIAL_CHARACTER" && <span className="chip border-teal/40 text-teal">Team</span>}
-            {hero.isDemo && <span className="chip border-violet/40 text-violet">Demo</span>}
-            <span className={`chip ${hero.claimed ? "border-ok/40 text-ok" : ""}`}>{hero.claimed ? "Claimed" : "Unclaimed"}</span>
-          </div>
-          {classVisual && <p className="mt-3 text-xs text-steel-300">{classVisual.tagline}</p>}
-          <SeasonRankBlock season={hero.season} />
-          <div className="mt-3 rounded-md border border-white/10 bg-white/5 p-3">
-            <PwrValue power={hero.power} rarity={hero.appearance.rarity as Rarity} size="lg" />
-            <p className="mt-1.5 text-[0.65rem] text-steel-400">{RARITY_RULES[hero.appearance.rarity as Rarity].label} tier. PWR estimates a hero&apos;s combat strength from its stats — class matchups and the fight itself still decide every battle.</p>
-          </div>
-          {viewer && viewer.characterId === hero.id && (
-            <div className="mt-4">
-              <HeroStatusCard state={eligibilityState({ viewer: { characterId: viewer.characterId, claimed: viewer.claimed || hero.claimed, qualifyingMessages: null }, threshold: viewer.threshold ?? 0 })} threshold={viewer.threshold ?? 0}>
-                {canClaim && <button className="btn mt-3 w-full" onClick={claim} type="button">Claim this hero</button>}
-              </HeroStatusCard>
-            </div>
-          )}
-          {!hero.claimed && !canClaim && hero.kind === "COMMUNITY" && (
-            <p className="mt-4 rounded-md border border-white/10 bg-white/5 p-3 text-left text-xs text-steel-300">
-              <b className="text-paper">Is this you?</b> This hero was created from Telegram activity and is already fighting. <Link href="/character" className="text-clank-300 underline">Sign in with Telegram</Link> to claim it.
-            </p>
-          )}
-          {note && <p role="status" className="mt-3 text-sm text-clank-300">{note}</p>}
-          {isOwner && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm mt-4 w-full sm:hidden"
-              onClick={async () => {
-                await api("/api/auth/logout", { method: "POST", json: {} });
-                window.dispatchEvent(new Event("clank-session"));
-                router.push("/");
-                router.refresh();
-              }}
-            >
-              Sign out
-            </button>
-          )}
-        </section>
+        {/* identity + standing: the top hero section below `lg`, the left column above it */}
+        <div className="hero-rail min-w-0 space-y-4">
+          <HeroIdentityPanel
+            hero={hero}
+            classVisual={classVisual}
+            look={look}
+            ownership={ownership}
+            selfStatus={data.self?.heroStatus}
+            note={claimNote}
+            onClaim={ownership === "UNCLAIMED_CLAIMABLE" ? claim : undefined}
+            onSignOut={isOwner ? signOut : undefined}
+          />
+          <HeroStandingPanel power={hero.power} rarity={hero.appearance.rarity as Rarity} season={hero.season} />
+        </div>
 
         {/* details */}
         <div className="min-w-0 space-y-4">
@@ -167,6 +136,7 @@ export function HeroView({ id }: { id: string }) {
             <section className="plate p-5">
               <h2 className="font-display text-lg text-paper">Battle tactics</h2>
               <p className="mt-1 text-sm text-steel-300">Your hero fights on its own — tactics shape how. Class abilities and targeting still follow its class.</p>
+              {tacticNote && <p role="status" className="mt-2 text-sm text-clank-300">{tacticNote}</p>}
               <div className="mt-4 grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Tactic">
                 {TACTICS.map((t) => (
                   <button key={t.id} type="button" role="radio" aria-checked={owner.tactic === t.id} onClick={() => void setTactic(t.id)} className={`plate p-4 text-left transition ${owner.tactic === t.id ? "plate-clank" : "plate-flat hover:brightness-125"}`}>
@@ -332,42 +302,12 @@ function Tile({ label, value, text, accent = false, color }: { label: string; va
   return (
     <div className="min-w-0">
       <dt className="label !text-[0.6rem]">{label}</dt>
-      <dd className={`truncate font-display text-xl tnum ${accent ? "text-clank-300" : "text-paper"}`} style={color && !accent ? { color } : undefined}>{text ?? (value ?? 0).toLocaleString()}</dd>
+      <dd className={`truncate font-display text-xl tnum ${accent ? "text-clank-300" : "text-paper"}`} style={color && !accent ? { color: lighten(color, 0.5) } : undefined}>{text ?? (value ?? 0).toLocaleString()}</dd>
     </div>
   );
 }
 
 type SeasonInfo = CharacterDto["season"];
-
-/** The seasonal ladder as pips (not a progress bar): status only — a tier never changes stats or POWER. */
-function RankPips({ rank }: { rank: NonNullable<SeasonInfo>["rank"] }) {
-  return (
-    <span className="flex items-center gap-1" aria-hidden>
-      {Array.from({ length: rank.tierCount }, (_, i) => (
-        <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= rank.index ? "bg-clank-400" : "bg-white/10"}`} />
-      ))}
-    </span>
-  );
-}
-
-function SeasonRankBlock({ season }: { season: SeasonInfo }) {
-  return (
-    <div className="mt-4 rounded-md border border-white/10 bg-white/5 p-3 text-left">
-      <p className="label">{season ? `${season.label} rank` : "Season rank"}</p>
-      {season ? (
-        <>
-          <p className="font-display text-2xl text-paper" data-testid="season-rank-name">{season.rank.name}</p>
-          <div className="mt-1.5"><RankPips rank={season.rank} /></div>
-          <p className="mt-1.5 text-[0.7rem] text-steel-300 tnum">
-            {!season.ranked ? "Fight your first battle to get ranked" : `${season.points.toLocaleString()} pts${season.rank.next && season.rank.pointsToNext !== null ? ` · ${season.rank.pointsToNext.toLocaleString()} to ${season.rank.next.name}` : " · top tier"}`}
-          </p>
-        </>
-      ) : (
-        <p className="mt-1 text-sm text-steel-300">No season is running yet.</p>
-      )}
-    </div>
-  );
-}
 
 function SeasonCard({ season }: { season: SeasonInfo }) {
   return (
@@ -413,8 +353,11 @@ function Locked({ title, body }: { title: string; body: string }) {
 
 function HeroSkeleton() {
   return (
-    <div className="mx-auto grid w-full max-w-[1200px] gap-4 px-3 py-5 sm:px-6 lg:grid-cols-[320px_1fr]" aria-busy="true" aria-label="Loading hero">
-      <SkeletonBlock className="h-[520px]" />
+    <div className="mx-auto grid w-full max-w-[1200px] gap-4 px-3 py-5 sm:px-6 lg:grid-cols-[320px_minmax(0,1fr)]" aria-busy="true" aria-label="Loading hero">
+      <div className="space-y-4">
+        <SkeletonBlock className="h-[560px]" />
+        <SkeletonBlock className="h-64" />
+      </div>
       <div className="space-y-4">
         <SkeletonBlock className="h-64" />
         <SkeletonBlock className="h-40" />

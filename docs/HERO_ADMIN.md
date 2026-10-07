@@ -57,7 +57,8 @@ Player-facing copy lives in `src/content/heroEligibility.ts`; the state machine 
 | --- | --- |
 | Arena, under the stage | "Who becomes a hero?" card + **Learn more** (native `<dialog>`: focus-trapped, Esc / backdrop / "Got it" close it, scrolls inside the viewport on small screens) |
 | `/character`, signed out | "Become a Clank RPG hero" card (+ "Already have a hero? Sign in with Telegram to claim it.") |
-| `/character` and the hero page, signed in | A status card for the member's own state (below) |
+| `/character`, signed in | A status card for the member's own state (below) |
+| The hero page (`/character/<id>`), signed in as that hero's member | The **ownership block** in the identity panel instead of the card — see [HERO_PROFILE_UI.md](HERO_PROFILE_UI.md) |
 
 | State | Trigger | Shown |
 | --- | --- | --- |

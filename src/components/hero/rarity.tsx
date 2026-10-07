@@ -57,6 +57,41 @@ export function RarityBadge({ rarity, size = "sm", className = "" }: { rarity: R
   );
 }
 
+const PLAQUE_CUT = "polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)";
+
+/**
+ * The collectible rarity tag on a hero's profile: a chamfered plaque (the panels' own corner cut), the tier's icon shape, a "RARITY" caption and
+ * the tier name. Common is a quiet dark-steel plate; Rare / Epic / Legendary are solid in the tier's colour, with a sheen, and a glow that grows
+ * with the tier. Same colours, icons and names as `RarityBadge` — never colour alone.
+ */
+export function RarityPlaque({ rarity, className = "" }: { rarity: Rarity; className?: string }) {
+  const v = rarityVisual(rarity);
+  const solid = v.tier > 0;
+  const fill = solid ? `linear-gradient(180deg, ${v.colors.light}, ${v.colors.base} 78%, ${v.colors.dark})` : "linear-gradient(180deg, #3b4454, #262d3a)";
+  const sheen = solid ? "linear-gradient(115deg, transparent 38%, rgba(255,255,255,0.3) 50%, transparent 62%)" : "none";
+  return (
+    <span
+      className={`inline-flex min-w-0 ${className}`}
+      style={{ filter: v.tier >= 2 ? `drop-shadow(0 0 ${4 + v.tier * 3}px ${v.colors.glow})` : undefined }}
+      data-testid="rarity-plaque"
+      data-rarity={rarity}
+      data-tier={v.tier}
+      title={`${RARITY_RULES[rarity].label} rarity`}
+    >
+      <span
+        className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 py-1.5 pr-4 pl-3 uppercase"
+        style={{ clipPath: PLAQUE_CUT, backgroundImage: `${sheen}, ${fill}`, color: solid ? v.colors.ink : v.colors.light, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22)" }}
+      >
+        <RarityIcon rarity={rarity} size={20} />
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="text-[0.55rem] font-bold tracking-[0.18em] opacity-80">Rarity</span>
+          <span className="truncate font-display text-sm tracking-[0.1em]">{RARITY_RULES[rarity].label}</span>
+        </span>
+      </span>
+    </span>
+  );
+}
+
 const PWR_SIZE = {
   xs: { label: "text-[0.5rem]", value: "text-sm" },
   sm: { label: "text-[0.56rem]", value: "text-lg" },

@@ -5,7 +5,7 @@ import type { Db } from "@/server/db/types";
 import { resetEnvCache } from "@/server/env";
 import { resetRuntimeCaches } from "@/server/runtime";
 
-import { createTestDb, insertStubHero, resetDb, seedHeroes } from "../support/db";
+import { createTestDb, insertStubHero, resetDb, seedEligibleMember, seedHeroes } from "../support/db";
 
 const ORIGIN = "http://localhost:3700";
 const BOT_TOKEN = "123456789:AAExampleBotTokenForTestsOnly_abcdefghijk";
@@ -385,6 +385,31 @@ describe("public read endpoints", () => {
     expect(h.isOwner).toBe(false);
     expect(h.owner).toBeNull();
     expect(JSON.stringify(h)).not.toMatch(/telegram_user_id|address|session/i);
+  });
+
+  it("a hero's own Arena availability is told to its own member only — never in the public data, never with a reason", async () => {
+    const hero = await import("@/app/api/heroes/[id]/route");
+    const member = await seedEligibleMember(db, { id: 4_100_001, heroStatus: "SUSPENDED" });
+    const stranger = await seedEligibleMember(db, { id: 4_100_002 });
+    const [row] = await db.query<{ id: string }>("select id from public.characters where telegram_user_id = $1", [member]);
+    const id = row!.id;
+    const get = async (cookie?: string) => (await call(hero.GET, req(`/api/heroes/${id}`, { method: "GET", ...(cookie ? { cookie } : {}) }), { params: Promise.resolve({ id }) })).json();
+
+    const anonymous = await get();
+    expect(anonymous.self).toBeNull();
+    expect(JSON.stringify(anonymous)).not.toMatch(/heroStatus|SUSPENDED|INACTIVE/);
+
+    const other = await get((await loginAs(stranger)).cookie);
+    expect(other.self).toBeNull();
+    expect(JSON.stringify(other)).not.toMatch(/heroStatus|SUSPENDED|INACTIVE/);
+
+    const own = await get((await loginAs(member)).cookie);
+    expect(own.self).toEqual({ heroStatus: "SUSPENDED" });
+    expect(own.isOwner).toBe(false); // signed in as this hero's member, but it is not claimed yet
+    expect(JSON.stringify(own)).not.toMatch(/moderation|reason|review/i); // a status, never a why
+
+    await db.query("update public.characters set status = 'ACTIVE' where id = $1", [id]);
+    expect((await get((await loginAs(member)).cookie)).self).toEqual({ heroStatus: "ACTIVE" });
   });
 
   it("replay endpoint: unknown/malformed ids are 404; a live battle replays with matching hash", async () => {

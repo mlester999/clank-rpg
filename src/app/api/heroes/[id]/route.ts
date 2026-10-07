@@ -1,3 +1,4 @@
+import { isSelfHeroStatus } from "@/domain/heroOwnership";
 import { loadRuleset } from "@/server/config/settingsRepo";
 import { fail, getViewer, ok } from "@/server/http/guards";
 import { getReadyDb, getSettings } from "@/server/runtime";
@@ -32,5 +33,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       }
     : null;
   const cls = ruleset.classes[hero.classId];
-  return ok({ hero, isOwner, owner, classVisual: cls ? classVisuals([cls])[cls.id] : null });
+  // The hero's own availability is told to its own member only (claimed or not) — never to the public, and never with a reason.
+  const [status] = viewer && viewer.characterId === id ? await db.query<{ status: string }>("select status from public.characters where id = $1", [id]) : [];
+  const self = status && isSelfHeroStatus(status.status) ? { heroStatus: status.status } : null;
+  return ok({ hero, isOwner, owner, classVisual: cls ? classVisuals([cls])[cls.id] : null, self });
 }

@@ -269,6 +269,10 @@ body {
   padding: 0 0.85rem;
   font-size: 0.7rem;
 }
+/* An icon beside a label never gets squeezed by it. */
+.btn > svg {
+  flex-shrink: 0;
+}
 
 .chip {
   display: inline-flex;
@@ -294,6 +298,20 @@ body {
   color: var(--color-steel-300);
 }
 
+}
+
+/* The hero profile's left column (identity + standing). It only sticks when it fits the viewport — a column taller than the window would
+   otherwise be pinned with its bottom cut off and unreachable. Below `lg` it is simply the top section of the page. */
+@media (min-width: 64rem) {
+  .hero-rail {
+    align-self: start;
+  }
+}
+@media (min-width: 64rem) and (min-height: 62rem) {
+  .hero-rail {
+    position: sticky;
+    top: 5rem;
+  }
 }
 
 /* ---------- Motion ---------- */

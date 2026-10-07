@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { xIntentUrl, type HeroCardModel } from "@/domain/hero/card";
+import { copyText } from "@/lib/clipboard";
 
 /**
  * DOWNLOAD CARD · SHARE TO X · COPY LINK.
@@ -16,26 +17,7 @@ export function HeroActions({ model, url, downloadHref, note = true, className =
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setState("copied");
-    } catch {
-      // clipboard blocked (permissions / insecure context): fall back to a temporary selection
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = url;
-        ta.setAttribute("readonly", "");
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand("copy");
-        ta.remove();
-        setState(ok ? "copied" : "failed");
-      } catch {
-        setState("failed");
-      }
-    }
+    setState((await copyText(url)) ? "copied" : "failed");
     window.setTimeout(() => setState("idle"), 2500);
   }
 
