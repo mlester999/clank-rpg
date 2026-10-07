@@ -97,3 +97,15 @@ export const MoreIcon = ({ size, ...p }: P) => (
     <circle cx="18.5" cy="12" r="1.6" fill="currentColor" />
   </svg>
 );
+/** A paper plane — the Telegram mark in this icon set's outline style. */
+export const TelegramIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M21 4L3 11.2l5.6 2.1L10.8 20l3.1-4.1 4.5 3.3L21 4z" />
+    <path d="M8.6 13.3L21 4" />
+  </svg>
+);
+export const ChevronDownIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M6 9.5l6 6 6-6" />
+  </svg>
+);

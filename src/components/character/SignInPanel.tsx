@@ -64,16 +64,16 @@ export function SignInPanel({ login, onSignedIn }: { login: LoginInfo; onSignedI
 
   return (
     <div className="plate plate-clank p-5 sm:p-6">
-      <h2 className="font-display text-lg text-clank-300">Sign in to find your hero</h2>
+      <h2 className="font-display text-lg text-clank-300">Sign in with Telegram</h2>
       <p className="mt-1 max-w-xl text-sm text-steel-300">
-        If you&apos;ve been active in the official Clank.trade Telegram, a hero may already be waiting for you. Signing in proves you&apos;re the same Telegram member — we never rely on usernames.
+        If you&apos;ve been active in the official Clank.trade Telegram, a hero may already be waiting for you. Signing in proves you&apos;re the same Telegram member — we never rely on usernames. You are not signed in yet.
       </p>
       <div className="mt-4">
         {login.telegramBot ? (
-          <div ref={holder} className="min-h-[44px]" />
+          <div ref={holder} className="min-h-[44px]" data-testid="telegram-login-widget" />
         ) : (
           <p className="rounded-md border border-white/10 bg-white/5 p-3 text-sm text-steel-300">
-            Telegram sign-in isn&apos;t connected on this server yet. Your hero is still fighting in the arena — claiming opens as soon as the bot is linked.
+            Sign in with Telegram isn&apos;t available on this site yet — it opens as soon as the Telegram bot is linked. Your hero is still fighting in the arena meanwhile; nothing is lost by waiting.
           </p>
         )}
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}

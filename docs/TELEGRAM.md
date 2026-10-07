@@ -109,6 +109,6 @@ Migration `20261005001600` changes only a stored `qualifyingThreshold` value of 
 1. Create a bot with **@BotFather** → `TELEGRAM_BOT_TOKEN`. Add it to the official group. Make it an **admin** (needed for reactions) and either turn **privacy mode off** (`/setprivacy`) or keep admin rights so it sees all messages.
 2. Choose `TELEGRAM_WEBHOOK_SECRET` (A–Z a–z 0–9 `_-`, ≥ 16 chars) and find the group's chat id → `TELEGRAM_OFFICIAL_CHAT_ID` (e.g. `-1001234567890`).
 3. `pnpm telegram:webhook -- set https://<your-domain>/api/telegram/webhook` (registers the secret token and `message` + `message_reaction` updates). `-- info` shows delivery status.
-4. For sign-in: `@BotFather → /setdomain` for your domain, and set `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`.
+4. For sign-in: `@BotFather → /setdomain` for your domain, and set `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` (**both** it and `TELEGRAM_BOT_TOKEN` are required, or the button is not offered). Full behavior, cookies and the production checklist: [`PLAYER_AUTH.md`](PLAYER_AUTH.md).
 
 The webhook rejects missing/wrong secret tokens (403, constant-time compare), non-JSON (400) and oversize (413) bodies; malformed-but-authentic updates get a 200 so Telegram doesn't retry them forever; real processing errors return 500 (Telegram retries; ingestion is idempotent).

@@ -45,7 +45,7 @@ const MESSAGES: Record<string, string> = {
   BAD_ADDRESS: "That doesn't look like a valid wallet address.",
   LOGIN_REJECTED: "Telegram sign-in couldn't be verified. Please try again.",
   LOGIN_REPLAYED: "That sign-in was already used. Please try again.",
-  LOGIN_UNAVAILABLE: "Telegram sign-in isn't connected yet.",
+  LOGIN_UNAVAILABLE: "Sign in with Telegram isn't available on this site yet.",
   CLAIMS_PAUSED: "Claiming is paused for a moment.",
   CLAIMED_BY_OTHER: "This hero was already claimed.",
   SUSPENDED: "This hero is currently suspended.",

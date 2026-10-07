@@ -38,7 +38,7 @@ export function InventoryView() {
   if (state === "anon")
     return (
       <Shell>
-        <EmptyState title="Sign in to see your inventory" body="Your hero's gear and Clank Gold live here. Sign in with Telegram to open it." action={<Link href="/character" className="btn btn-sm">Sign in</Link>} />
+        <EmptyState title="Sign in to see your inventory" body="Your hero's gear and Clank Gold live here. Sign in with Telegram to open it." action={<Link href="/character" className="btn btn-sm">Sign in with Telegram</Link>} />
       </Shell>
     );
   if (state === "error" || !data) return <Shell><EmptyState title="Couldn't load your inventory" body="Please try again in a moment." action={<button className="btn btn-sm" type="button" onClick={load}>Retry</button>} /></Shell>;

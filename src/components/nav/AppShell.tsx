@@ -9,6 +9,7 @@ import { ArenaIcon, BagIcon, BookIcon, HeroesIcon, LockIcon, MoreIcon, TrophyIco
 import { BUY_LABEL, CLANK_TRADE_URL } from "@/domain/rewards/buyLink";
 import { FEATURES, FEATURE_ORDER } from "@/content/features";
 
+import { AccountControl, resolveAccount, type AccountViewer } from "./AccountControl";
 import { Logo } from "./Logo";
 
 const PRIMARY = [
@@ -27,11 +28,12 @@ function isActive(path: string, href: string) {
 }
 
 interface MeResponse {
-  viewer: { displayName: string; characterId: string | null; claimed: boolean } | null;
+  viewer: AccountViewer | null;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  // undefined = still asking · null = signed out (anonymous) · object = signed in. Only a real answer from the server ever means "signed in".
   const [me, setMe] = useState<MeResponse["viewer"] | undefined>(undefined);
   const router = useRouter();
   // The "Soon" sheet is tied to the page it was opened on, so navigating closes it without an effect.
@@ -45,11 +47,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isAdmin) return;
     let live = true;
+    // A slow or failed answer must never leave the visitor staring at a blank control: after the timeout (or on any error) an UNKNOWN state becomes the
+    // sign-in call to action, while a state we already knew is kept (one failed refresh does not sign anybody out of the navbar).
     const refresh = () =>
-      fetch("/api/me", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((j: MeResponse) => live && setMe(j.viewer))
-        .catch(() => live && setMe(null));
+      fetch("/api/me", { cache: "no-store", signal: AbortSignal.timeout(8_000) })
+        .then((r) => (r.ok ? (r.json() as Promise<MeResponse>) : null))
+        .then((answer) => live && setMe((previous) => resolveAccount(previous, answer)))
+        .catch(() => live && setMe((previous) => resolveAccount(previous, null)));
     void refresh();
     window.addEventListener("clank-session", refresh);
     return () => {
@@ -72,18 +76,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-white/5 bg-ink-950/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-4 px-4 sm:px-6">
           <Link href="/" aria-label="Clank RPG — home" className="shrink-0">
-            {/* Below 360 px only the emblem shows, so the BUY button and the account button both fit without overlap (the name is also in the page title and the aria-label). */}
-            <Logo wordmarkClass="hidden min-[360px]:inline" />
+            {/* Below 440 px only the emblem shows, so the BUY button and the sign-in / account control both fit without overlap or sideways scrolling (the name is also in the page title and the aria-label). */}
+            <Logo wordmarkClass="hidden min-[440px]:inline" />
           </Link>
-          <span className="chip hidden border-clank-500/40 bg-clank-500/10 text-clank-300 sm:inline-flex">Beta</span>
+          <span className="chip hidden border-clank-500/40 bg-clank-500/10 text-clank-300 sm:inline-flex lg:hidden 2xl:inline-flex">Beta</span>
 
-          <nav aria-label="Main" className="ml-2 hidden flex-1 items-center gap-1 lg:flex">
+          <nav aria-label="Main" className="ml-2 hidden min-w-0 flex-1 items-center gap-1 lg:flex">
             {PRIMARY.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
                 aria-current={isActive(path, href) ? "page" : undefined}
-                className={`relative rounded-md px-3 py-2 font-display text-[0.72rem] tracking-wider uppercase transition-colors ${
+                className={`relative rounded-md px-2 py-2 font-display text-[0.72rem] tracking-wider uppercase transition-colors xl:px-3 ${
                   isActive(path, href) ? "text-clank-300" : "text-steel-300 hover:text-paper"
                 }`}
               >
@@ -91,13 +95,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {isActive(path, href) && <span className="absolute inset-x-3 -bottom-[13px] h-[3px] rounded-full bg-clank-400 shadow-[0_0_12px_rgba(202,148,249,.8)]" />}
               </Link>
             ))}
-            <span className="mx-2 hidden h-5 w-px bg-white/10 xl:block" />
+            <span className="mx-2 hidden h-5 w-px bg-white/10 min-[1700px]:block" />
             {FEATURE_ORDER.map((id) => (
               <Link
                 key={id}
                 href={`/soon/${id}`}
                 aria-current={isActive(path, `/soon/${id}`) ? "page" : undefined}
-                className={`group hidden items-center gap-1.5 rounded-md px-2.5 py-2 font-display text-[0.62rem] xl:inline-flex tracking-wider uppercase transition-colors ${
+                className={`group hidden items-center gap-1.5 rounded-md px-2.5 py-2 font-display text-[0.62rem] min-[1700px]:inline-flex tracking-wider uppercase transition-colors ${
                   isActive(path, `/soon/${id}`) ? "text-paper" : "text-steel-400 hover:text-steel-300"
                 }`}
                 title={`${FEATURES[id].title} — coming soon`}
@@ -119,15 +123,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               {BUY_LABEL}
             </a>
-            <Link href="/character" className="btn btn-ghost btn-sm min-w-0 px-2.5 min-[480px]:px-3.5" aria-label="Your character">
-              <UserIcon size={16} />
-              <span className="hidden max-w-[9rem] truncate min-[480px]:inline">{me === undefined ? "…" : me ? me.displayName || "Your hero" : "Sign in"}</span>
-            </Link>
-            {me && (
-              <button type="button" onClick={signOut} className="btn btn-ghost btn-sm hidden sm:inline-flex" aria-label="Sign out">
-                Sign out
-              </button>
-            )}
+            <AccountControl viewer={me} pathKey={path} onSignOut={signOut} />
           </div>
         </div>
       </header>
