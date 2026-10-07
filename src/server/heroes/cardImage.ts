@@ -10,7 +10,7 @@ import { getHeroSheet, type CanvasFactory, type SpriteSource } from "@/component
 import { drawHeroSprite, playbackFor } from "@/components/sprites/draw";
 import { drawRarityAura, drawRarityGround, drawRarityMark, drawRarityParticles } from "@/components/arena/rarityFx";
 import { CARD_NAME_MAX, CARD_STATS, CLANK_PURPLE, cardText, formatPower, type HeroCardModel } from "@/domain/hero/card";
-import { bandLabel, positionInBand, RARITY_RULES } from "@/domain/hero/rarity";
+import { HERO_CARD_BACKGROUND_DIR, heroArenaLayout, heroCardBackgroundFile } from "@/domain/hero/cardBackground";
 import { rarityVisual, type RarityVisual } from "@/domain/hero/rarityVisuals";
 import { parseManifest } from "@/domain/sprites/spec";
 import { mix } from "@/domain/util/color";
@@ -23,9 +23,11 @@ import { mix } from "@/domain/util/color";
  * painted with canvas calls, never as markup, so a hero name can inject nothing; and nothing is fetched from anywhere else.
  * It is deterministic: the same card always produces the same bytes (the looping aura is pinned to a frame, and the rarity particles to a fixed instant).
  *
- * RARITY: the card is dressed entirely from the shared RARITY_VISUALS table (the same one the web card, the portraits and the Arena read) — the
- * frame's layers and corner ornaments, the backdrop and its pattern, the ground rings, glow and sparks, the badge icon — so a Legendary card
- * clearly looks more premium than a Common one. PWR is one of the biggest things on it, with where it sits inside its rarity's band.
+ * RARITY: the card is dressed from the shared RARITY_VISUALS table (the same one the web card, the portraits and the Arena read) — the frame's layers
+ * and corner ornaments, the glow, the badge icon — and the hero stands in the rarity's ARENA image: the very file the web card shows
+ * (the file in `public/` that domain/hero/cardBackground.ts names for the rarity), fitted with "cover" and with the hero sized and placed by the
+ * same `heroArenaLayout`. If that file cannot be read the neutral rarity backdrop is drawn instead. PWR is one of the biggest things on the card; the
+ * rarity's PWR band is a game rule and is never printed on it.
  */
 export const CARD_SIZE = 1200;
 
@@ -78,9 +80,35 @@ async function loadSpriteSource(setId: string): Promise<SpriteSource | null> {
   return hit;
 }
 
+type ArenaImage = Awaited<ReturnType<typeof loadImage>>;
+const arenaImages = new Map<string, Promise<ArenaImage | null>>();
+
+/** The arena image of a rarity, read ONCE from this project's `public/` (the same file the browser is served), or null → the neutral backdrop. */
+function loadArenaImage(rarity: unknown, dir: string): Promise<ArenaImage | null> {
+  const file = heroCardBackgroundFile(rarity);
+  if (!file) return Promise.resolve(null);
+  const key = `${dir}\0${file}`;
+  let hit = arenaImages.get(key);
+  if (!hit) {
+    hit = readFile(path.join(dir, file))
+      .then((bytes) => loadImage(bytes))
+      .catch((e: unknown) => {
+        // not cached: a transient failure must not leave this instance on the neutral backdrop until it restarts
+        arenaImages.delete(key);
+        console.warn(`[hero-card] arena image ${file} could not be read — drawing the neutral backdrop instead:`, e instanceof Error ? e.message : e);
+        return null;
+      });
+    arenaImages.set(key, hit);
+  }
+  return hit;
+}
+
+const defaultArenaDir = () => path.join(process.cwd(), "public", HERO_CARD_BACKGROUND_DIR.replace(/^\/+/, ""));
+
 /** Test hook: forget loaded art / font state. */
 export function resetCardImageState(): void {
   sources.clear();
+  arenaImages.clear();
   fontReady = undefined;
 }
 
@@ -219,24 +247,36 @@ function drawBadge(ctx: SKRSContext2D, v: RarityVisual, right: number, y: number
   spaced(ctx, label, x + pad + iconR * 2 + 14, y + h / 2 + labelPx * 0.35, 5, "left");
 }
 
-function drawArt(ctx: SKRSContext2D, model: HeroCardModel, src: SpriteSource | null, box: { x: number; y: number; w: number; h: number }, v: RarityVisual): void {
-  const cx = box.x + box.w / 2;
-  const floor = box.y + box.h - 58;
-  const heroH = box.h * 0.78;
+function drawArt(ctx: SKRSContext2D, model: HeroCardModel, src: SpriteSource | null, box: { x: number; y: number; w: number; h: number }, v: RarityVisual, arena: ArenaImage | null): void {
+  // The hero is a small figure standing in the arena: its size and its feet come from the same layout the web card uses.
+  const layout = heroArenaLayout({ w: box.w, h: box.h });
+  const cx = box.x + layout.hero.feetX;
+  const floor = box.y + layout.hero.feetY;
+  const heroH = layout.hero.height;
   const k = heroH / 104; // the hero is ≈ 104 local units tall: the Arena's effect geometry scales with it
 
-  // ground rings, then a floor shadow (the same effects the Arena draws under a hero of this rarity)
-  ctx.save();
-  ctx.translate(cx, floor);
-  ctx.scale(k, k);
-  drawRarityGround(ctx as unknown as CanvasRenderingContext2D, v.id, STILL_NOW, 0, 1, true);
-  ctx.restore();
-  ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.42)";
-  ctx.beginPath();
-  ctx.ellipse(cx, floor + 4, 25 * k, 7 * k, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  if (arena) {
+    // the arena image already carries the rarity (and its own ground): only a contact shadow, then the hero
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.42)";
+    ctx.beginPath();
+    ctx.ellipse(cx, floor + 3, heroH * 0.34, heroH * 0.075, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else {
+    // neutral fallback: the ground rings and a floor shadow (the same effects the Arena draws under a hero of this rarity)
+    ctx.save();
+    ctx.translate(cx, floor);
+    ctx.scale(k, k);
+    drawRarityGround(ctx as unknown as CanvasRenderingContext2D, v.id, STILL_NOW, 0, 1, true);
+    ctx.restore();
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.42)";
+    ctx.beginPath();
+    ctx.ellipse(cx, floor + 4, 25 * k, 7 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   const look: HeroLook = { rarity: model.rarity, parts: model.look.parts, sprite: model.look.sprite, colors: model.look.colors, weapon: model.look.weapon, headgear: model.look.headgear, body: model.look.body };
   const sheet = src ? getHeroSheet(src, look.sprite, look.colors, look.rarity) : null;
@@ -254,23 +294,25 @@ function drawArt(ctx: SKRSContext2D, model: HeroCardModel, src: SpriteSource | n
     drawHero(ctx as unknown as CanvasRenderingContext2D, look, { ...IDLE_POSE, t: 0.4 });
   }
   ctx.restore();
-  // sparks / embers, frozen at a pinned instant (Epic and Legendary)
-  ctx.save();
-  ctx.translate(cx, floor);
-  ctx.scale(k * 1.2, k * 1.2);
-  drawRarityParticles(ctx as unknown as CanvasRenderingContext2D, v.id, STILL_NOW, 0, 1, false);
-  ctx.restore();
+  if (!arena) {
+    // sparks / embers, frozen at a pinned instant (Epic and Legendary) — the arena images carry their own
+    ctx.save();
+    ctx.translate(cx, floor);
+    ctx.scale(k * 1.2, k * 1.2);
+    drawRarityParticles(ctx as unknown as CanvasRenderingContext2D, v.id, STILL_NOW, 0, 1, false);
+    ctx.restore();
+  }
 }
 
 /** Renders a hero card. Never throws for a valid model: missing art falls back to the vector hero, a missing font to a system one. */
-export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?: string } = {}): Promise<Buffer> {
+export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?: string; backgroundDir?: string } = {}): Promise<Buffer> {
   ensureFont();
   const src = await loadSpriteSource(opts.spriteSet ?? "clank-dev-v1");
+  const arena = await loadArenaImage(model.rarity, opts.backgroundDir ?? defaultArenaDir());
   const S = CARD_SIZE;
   const canvas = createCanvas(S, S);
   const ctx = canvas.getContext("2d");
   const v = rarityVisual(model.rarity);
-  const rule = RARITY_RULES[model.rarity];
   const accent = v.colors.base;
 
   // — background + plate —
@@ -316,7 +358,7 @@ export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?
   drawBadge(ctx, v, S - 112, 82, 58, 28);
 
   // — art panel —
-  const art = { x: 110, y: 160, w: S - 220, h: 484 };
+  const art = { x: 110, y: 156, w: S - 220, h: 560 };
   ctx.save();
   chamfer(ctx, art.x, art.y, art.w, art.h, 30);
   ctx.clip();
@@ -325,7 +367,14 @@ export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?
   panel.addColorStop(1, mix(v.surface.to, "#000000", 0.3));
   ctx.fillStyle = panel;
   ctx.fillRect(art.x, art.y, art.w, art.h);
-  if (v.tier >= 2) {
+  if (arena) {
+    // the arena image, "cover"-fitted (filled and cropped, never stretched) exactly like the web card; the neutral panel shows through its transparent corners
+    const { image } = heroArenaLayout({ w: art.w, h: art.h });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(arena, art.x + image.x, art.y + image.y, image.size, image.size);
+  }
+  if (!arena && v.tier >= 2) {
     // woven pattern in the backdrop of the two top tiers
     ctx.strokeStyle = v.surface.accent;
     ctx.globalAlpha = 0.5;
@@ -343,12 +392,14 @@ export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
-  const glow = ctx.createRadialGradient(S / 2, art.y + art.h * 0.58, 20, S / 2, art.y + art.h * 0.58, art.w * 0.5);
-  glow.addColorStop(0, v.colors.glow);
-  glow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(art.x, art.y, art.w, art.h);
-  drawArt(ctx, model, src, art, v);
+  if (!arena) {
+    const glow = ctx.createRadialGradient(S / 2, art.y + art.h * 0.58, 20, S / 2, art.y + art.h * 0.58, art.w * 0.5);
+    glow.addColorStop(0, v.colors.glow);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(art.x, art.y, art.w, art.h);
+  }
+  drawArt(ctx, model, src, art, v, arena);
   ctx.restore();
   ctx.lineWidth = v.frame.width + 2;
   ctx.strokeStyle = v.tier === 0 ? mix(accent, CLANK_PURPLE.ink, 0.4) : accent;
@@ -388,21 +439,21 @@ export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?
   ctx.fillStyle = "#f4efff";
   const name = fitText(ctx, imageName(model.name), S - 260, 70, 36);
   ctx.font = font(name.px);
-  ctx.fillText(name.text, S / 2, 716);
+  ctx.fillText(name.text, S / 2, 792);
   ctx.font = font(38);
   const cls = imageName(model.className).toUpperCase();
   const classW = Array.from(cls).reduce((a, ch) => a + ctx.measureText(ch).width + 5, 0) - 5;
   const iconR = 15;
   const lineW = iconR * 2 + 16 + classW;
-  drawRarityMark(ctx as unknown as CanvasRenderingContext2D, v.id, S / 2 - lineW / 2 + iconR, 756, iconR);
+  drawRarityMark(ctx as unknown as CanvasRenderingContext2D, v.id, S / 2 - lineW / 2 + iconR, 832, iconR);
   ctx.fillStyle = v.colors.light;
-  spaced(ctx, cls, S / 2 - lineW / 2 + iconR * 2 + 16, 768, 5, "left");
+  spaced(ctx, cls, S / 2 - lineW / 2 + iconR * 2 + 16, 844, 5, "left");
 
   // PWR: caption, then one of the largest numbers on the card
   ctx.textAlign = "center";
   ctx.fillStyle = CLANK_PURPLE.light;
   ctx.font = font(28);
-  spaced(ctx, "PWR", S / 2, 826, 10, "center");
+  spaced(ctx, "PWR", S / 2, 886, 10, "center");
   ctx.save();
   if (v.tier >= 2) {
     ctx.shadowColor = v.colors.glow;
@@ -411,29 +462,8 @@ export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?
   ctx.fillStyle = v.tier === 0 ? "#f1f5fb" : v.colors.light;
   ctx.font = font(128);
   ctx.textAlign = "center";
-  ctx.fillText(formatPower(model.power), S / 2, 936);
+  ctx.fillText(formatPower(model.power), S / 2, 1000);
   ctx.restore();
-
-  // tier meter: where this PWR sits inside the rarity's band
-  const mw = 440;
-  const mx = S / 2 - mw / 2;
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
-  chamfer(ctx, mx, 958, mw, 12, 5);
-  ctx.fill();
-  const pos = positionInBand(model.rarity, model.power);
-  if (pos !== null) {
-    const g = ctx.createLinearGradient(mx, 0, mx + mw, 0);
-    g.addColorStop(0, v.colors.dark);
-    g.addColorStop(0.6, v.colors.base);
-    g.addColorStop(1, v.colors.light);
-    ctx.fillStyle = g;
-    chamfer(ctx, mx, 958, Math.max(14, mw * pos), 12, 5);
-    ctx.fill();
-  }
-  ctx.fillStyle = mix(CLANK_PURPLE.light, "#ffffff", 0.2);
-  ctx.font = font(24, "400");
-  ctx.textAlign = "center";
-  ctx.fillText(`${rule.label.toUpperCase()} TIER · ${bandLabel(model.rarity)}`, S / 2, 1000);
 
   // — the seven stats —
   const sx = 110;
@@ -441,15 +471,15 @@ export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?
   CARD_STATS.forEach((stat, i) => {
     const x = sx + i * sw;
     ctx.fillStyle = "rgba(255,255,255,0.05)";
-    chamfer(ctx, x + 5, 1020, sw - 10, 86, 12);
+    chamfer(ctx, x + 5, 1030, sw - 10, 86, 12);
     ctx.fill();
     ctx.textAlign = "center";
     ctx.fillStyle = mix(CLANK_PURPLE.light, "#ffffff", 0.15);
     ctx.font = font(22);
-    ctx.fillText(stat.label, x + sw / 2, 1050);
+    ctx.fillText(stat.label, x + sw / 2, 1060);
     ctx.fillStyle = "#ffffff";
     ctx.font = font(42);
-    ctx.fillText(String(Math.round(model.stats[stat.key])), x + sw / 2, 1094);
+    ctx.fillText(String(Math.round(model.stats[stat.key])), x + sw / 2, 1104);
   });
 
   return canvas.toBuffer("image/png");

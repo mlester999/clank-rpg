@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
 import type { Rarity } from "@/domain/character/appearance";
+import { getHeroCardBackground, HERO_ARENA_BACKGROUND_POSITION } from "@/domain/hero/cardBackground";
 import { RARITY_RULES } from "@/domain/hero/rarity";
 import { rarityCssVars, rarityVisual, type BadgeIcon } from "@/domain/hero/rarityVisuals";
 
@@ -110,8 +111,11 @@ export const rarityStyle = (rarity: Rarity): CSSProperties => rarityCssVars(rari
  * `compact` is the thin variant for small avatars in rows and tables (a lighter frame, no corner ornaments); the SHAPE of each frame still
  * differs per tier, so rarity is never colour alone.
  */
-export function RarityFrame({ rarity, children, compact = false, className = "", style }: { rarity: Rarity; children?: ReactNode; compact?: boolean; className?: string; style?: CSSProperties }) {
+export function RarityFrame({ rarity, children, compact = false, arena = false, className = "", style }: { rarity: Rarity; children?: ReactNode; compact?: boolean; arena?: boolean; className?: string; style?: CSSProperties }) {
   const v = rarityVisual(rarity);
+  // `arena`: the rarity's arena image is painted under the hero ("cover": filled and cropped, never stretched). The image is decorative (no alt text). A rarity
+  // without an image — or a file that is missing — leaves the neutral rarity backdrop in place: CSS backgrounds have no broken-image state.
+  const background = arena ? getHeroCardBackground(rarity) : null;
   return (
     <div
       className={`rarity-art ${v.tier === 3 ? "rarity-shimmer" : ""} ${className}`}
@@ -120,9 +124,11 @@ export function RarityFrame({ rarity, children, compact = false, className = "",
       data-tier={v.tier}
       data-rarity={rarity}
       data-compact={compact ? "true" : undefined}
+      data-arena={arena ? (background ? "image" : "fallback") : undefined}
       data-testid="rarity-frame"
     >
       <span className="rarity-pattern" aria-hidden />
+      {background ? <span className="rarity-arena" aria-hidden data-arena-background={background} style={{ backgroundImage: `url(${background})`, backgroundPosition: HERO_ARENA_BACKGROUND_POSITION }} /> : null}
       {children}
       {compact ? null : <FrameCorners rarity={rarity} />}
     </div>

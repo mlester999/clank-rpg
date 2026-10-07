@@ -7,9 +7,9 @@ import { useState } from "react";
 
 import { RARITY_COLOR } from "@/components/hero/colors"; // gear item rarities (they include UNCOMMON) — hero rarity uses the shared RARITY_VISUALS
 import { HeroAvatar } from "@/components/hero/HeroAvatar";
-import { HeroPortrait } from "@/components/hero/HeroPortrait";
+import { HeroArena } from "@/components/hero/HeroArena";
 import { lookFor } from "@/components/hero/look";
-import { PwrValue, RarityBadge, RarityFrame } from "@/components/hero/rarity";
+import { PwrValue, RarityBadge } from "@/components/hero/rarity";
 import type { Rarity } from "@/domain/character/appearance";
 import { RARITY_RULES } from "@/domain/hero/rarity";
 import { EmptyState, SkeletonBlock } from "@/components/ui/bits";
@@ -99,9 +99,7 @@ export function HeroView({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* identity */}
         <section className="plate plate-clank rivets p-5 text-center lg:sticky lg:top-20 lg:self-start">
-          <RarityFrame rarity={hero.appearance.rarity as Rarity} className="mx-auto grid place-items-center" style={{ width: 216, height: 216 }}>
-            <HeroPortrait look={look} size={200} frame="full" animate label={hero.name} className="relative" />
-          </RarityFrame>
+          <HeroArena look={look} animate label={hero.name} className="mx-auto w-full max-w-[280px]" />
           {/* Profile photo (the person) beside the name; the animated hero above is the fighter. No photo → the generated class portrait. */}
           <div className="mt-3 flex items-center justify-center gap-3">
             <HeroAvatar avatarUrl={hero.avatarUrl} look={look} size={64} label={hero.name} className="rounded-xl" />

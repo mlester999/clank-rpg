@@ -1,8 +1,6 @@
 import { Callout, DocH2, DocLink } from "@/components/docs/prose";
-import { GAME_RULES } from "@/domain/gameRules";
 
 export default function HeroProfiles() {
-  const r = GAME_RULES;
   return (
     <>
       <DocH2 id="the-public-page">The public page</DocH2>
@@ -27,13 +25,13 @@ export default function HeroProfiles() {
       <DocH2 id="the-hero-card">The hero card</DocH2>
       <p>The card is the hero in one picture. From top to bottom:</p>
       <ol>
-        <li>the hero&apos;s <strong>art</strong>, in the frame of its rarity,</li>
+        <li>the hero&apos;s <strong>art</strong> — the hero standing in the arena of its rarity,</li>
         <li>its <strong>name</strong>,</li>
         <li>its <strong>rarity and class</strong>,</li>
-        <li>its <strong>PWR</strong>, one of the biggest things on the card, with where it sits inside its rarity&apos;s range ({r.rarity.ladder[0]!.band} for Common up to {r.rarity.ladder[3]!.band} for Legendary),</li>
+        <li>its <strong>PWR</strong>, one of the biggest things on the card,</li>
         <li>and its <strong>seven stats</strong>.</li>
       </ol>
-      <p>A Legendary card is dressed far more richly than a Common one, so you can tell them apart before you read a single number.</p>
+      <p>Each rarity has its own arena — natural stone and foliage for Common, blue runes for Rare, purple crystals for Epic, and the gold-and-purple, most ornate arena for Legendary — so you can tell a Legendary from a Common before you read a single number. The PWR ranges of the rarities are listed on the <DocLink to="/docs/rarity">Rarity &amp; power</DocLink> page.</p>
 
       <DocH2 id="share-and-download">Share and download</DocH2>
       <p>On a hero&apos;s page you can:</p>

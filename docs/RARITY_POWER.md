@@ -100,10 +100,9 @@ One table, [`RARITY_VISUALS`](../src/domain/hero/rarityVisuals.ts), feeds the he
 * **The Arena shows NO rarity text.** Rarity appears as a ground ring, a body glow + outline, rising particles, and on the name plate as a rarity-coloured edge and a small tier *shape* (never a label). Effects are a pure
   function of the clock, drawn after and independently of the simulation (the engine imports none of it), allocate nothing per frame, use no blur filters, and respect `prefers-reduced-motion` (static ring, glow and outline;
   no particles, no pulse). Tests: no `fillText` anywhere in the effects, bounded draw calls (≈ 100 per hero), deterministic, reduced-motion still, knocked-out heroes draw nothing.
-* **PWR emphasis:** `PwrValue` is the largest number on the hero card (up to 72 px), the directory tile, the upcoming-Picks row, the Admin list and the reroll banner. The card hierarchy is art → name → rarity + class → PWR (with a
-  *tier meter*: where the PWR sits inside its band) → stats.
-* **Share card (1200 × 1200 PNG)** is drawn from the same table: tiered frame layers, corner ornaments, patterned backdrop, ground rings, aura and embers, badge with the tier shape, a big glowing PWR with the tier meter.
-  Byte-stable (rendered twice, identical). A Legendary card is 384 KB against a Common's 110 KB.
+* **PWR emphasis:** `PwrValue` is the largest number on the hero card (up to 72 px), the directory tile, the upcoming-Picks row, the Admin list and the reroll banner. The card hierarchy is art (the hero in its arena) → name → rarity + class → PWR → stats; the band is not printed on a card.
+* **Share card (1200 × 1200 PNG)** is drawn from the same table plus the rarity's arena image: tiered frame layers, corner ornaments, the hero small in its arena, badge with the tier shape, a big glowing PWR.
+  Byte-stable (rendered twice, identical).
 
 ## 6. Balance simulation (the real combat engine)
 

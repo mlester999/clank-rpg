@@ -128,7 +128,8 @@ Tests reroll participants after a battle and assert snapshot JSON, events hash, 
 `HeroCardModel` (`src/domain/hero/card.ts`) is the single public-safe data model: public id, name, class, rarity, POWER, the seven effective stats (`HP STR DEF INT AGI CHA LUCK`),
 season rank and the resolved look. It feeds the React `HeroCard` (Admin preview, profile) / `HeroCardCompact` (directory), the **PNG** and the **Open Graph** metadata.
 The card shows the hero's GENERATED stats and its PWR (the power of exactly those stats) — gear and wallet bonuses change how a hero fights, never the card. Rarity dresses the card from the one shared
-`RARITY_VISUALS` table (frame style, corner ornaments, backdrop, glow, badge shape) and PWR is one of its largest elements, with a tier meter (where the PWR sits inside the rarity's band).
+`RARITY_VISUALS` table (frame style, corner ornaments, glow, badge shape); the hero stands in the rarity's **arena image** (§ 8a) and PWR is one of its largest elements. The PWR band
+(130–149 …) is a game rule, not card copy: it is not printed on a card.
 
 * **Download card** → `/api/hero-cards/<publicId>?v=<key>&download=1`: a **1200 × 1200 PNG** of the *current* version, drawn server-side with `@napi-rs/canvas` from the card model, the
   arena's own sprite set (`public/sprites/<set>` through the same compositor) and Next's bundled UI font (Geist). Reproducible byte for byte (the looping aura is pinned to a
@@ -142,6 +143,17 @@ The card shows the hero's GENERATED stats and its PWR (the power of exactly thos
   served `immutable`; any other key gets the current picture with no long-term caching; `ETag` / 304 supported.
 * **Known limitation:** the PNG font covers Latin scripts. Characters outside Latin / punctuation (emoji, CJK, Cyrillic …) are dropped from the *image* name (a name with nothing
   drawable reads "Clank Hero"); the web page always shows the real name.
+
+### 8a. The card's arena (rarity backgrounds)
+
+`public/hero-card-backgrounds/{common,rare,epic,legendary}.webp` are the four uploaded arena images, used **as uploaded** (square, 1254 × 1254, never processed — the files carry
+transparency outside the arena ring, and the card's rarity backdrop sits under them). `src/domain/hero/cardBackground.ts` is the ONE map: `getHeroCardBackground(rarity)` →
+`/hero-card-backgrounds/<file>` (or `null` for a missing / unknown rarity → the neutral rarity backdrop), plus `heroArenaLayout()` — the maths that fits the image with "cover" (filled and
+cropped, never stretched) and puts the hero in it: a small figure (≈ 26% of the arena's width), centred, feet on the floor, well inside the rim. The web card (`HeroArena`, a square frame; the
+canvas is redrawn at the frame's real size so the pixel art stays crisp), the directory tile (hero ×1.4 for the thumbnail), the character page and the server-rendered PNG all use them, so
+the Admin reroll preview (CURRENT and NEW each with their own arena), the rollback preview (the OLD version's rarity, not the current one), the public profile and the downloadable card cannot
+disagree. Mapping: Common → image 1 (natural stone, no magic), Rare → 2 (blue / cyan runes), Epic → 4 (purple crystals, gold trim), Legendary → 3 (the most ornate, gold + purple).
+The server function ships the images (`outputFileTracingIncludes`) and the browser caches them for a day (`next.config.ts`). Tests: `tests/unit/hero-card-arena.test.ts`, `tests/integration/hero-card-png.test.ts`.
 
 ## 9. Two numbers that are easy to confuse
 

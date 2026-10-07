@@ -83,16 +83,18 @@ describe("rarity frame", () => {
 });
 
 describe("hero card — art → name → rarity + class → PWR → stats", () => {
-  it("renders the hierarchy in that order, with a big PWR, the tier meter and all seven stats", () => {
+  it("renders the hierarchy in that order, with a big PWR and all seven stats — and no PWR band / tier line", () => {
     const out = render(createElement(HeroCard, { model: model("LEGENDARY", 208) }));
-    const order = ["hero-card-name", "hero-card-class", "hero-card-power", "hero-card-tier", "hero-card-stats"].map((id) => out.indexOf(`data-testid="${id}"`));
+    const order = ["hero-card-name", "hero-card-class", "hero-card-power", "hero-card-stats"].map((id) => out.indexOf(`data-testid="${id}"`));
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order); // strictly in the documented order
     expect(out.indexOf('data-testid="rarity-frame"')).toBeLessThan(order[0]!); // the art comes first
     expect(out).toContain('data-pwr="208"');
     expect(out).toContain("text-6xl");
     const t = text(out);
-    expect(t).toContain("Legendary tier · 190–209");
+    expect(out).not.toContain("hero-card-tier"); // the tier meter (bar + "Legendary tier · 190–209") is gone
+    expect(t).not.toMatch(/tier\s*·/i);
+    expect(t).not.toMatch(/\b1[3-9]\d\s*[–-]\s*2?\d{2}\b/); // no band such as 130–149 … 190–209 anywhere on the card
     expect(t).toContain("Forge Fay");
     expect(t).toMatch(/Legendary\s+Mage/);
     for (const stat of ["HP", "STR", "DEF", "INT", "AGI", "CHA", "LUCK"]) expect(t).toContain(stat);

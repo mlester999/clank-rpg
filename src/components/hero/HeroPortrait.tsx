@@ -23,6 +23,8 @@ interface Props {
   label?: string;
   /** Sprite set to draw from (defaults to the standard set). */
   setId?: string;
+  /** Draw only the hero (no rarity backdrop): it stands on whatever is behind the canvas — the card's arena image. */
+  transparent?: boolean;
 }
 
 /**
@@ -30,7 +32,7 @@ interface Props {
  * (or if it cannot draw this hero) it falls back to the procedural vector hero, so a portrait is
  * never blank. Static portraits draw once; animated ones loop the idle (or victory) clip.
  */
-export function HeroPortrait({ look, size = 64, frame = "bust", animate = false, victory = false, className = "", label, setId = DEFAULT_SPRITE_SET }: Props) {
+export function HeroPortrait({ look, size = 64, frame = "bust", animate = false, victory = false, className = "", label, setId = DEFAULT_SPRITE_SET, transparent = false }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const lib = useSpriteLibrary(setId);
   const source = lib.source;
@@ -59,6 +61,7 @@ export function HeroPortrait({ look, size = 64, frame = "bust", animate = false,
     const background = () => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
+      if (transparent) return;
       const bg = ctx.createRadialGradient(size / 2, size * 0.35, size * 0.05, size / 2, size / 2, size * 0.75);
       bg.addColorStop(0, mix(rv.surface.from, rv.colors.base, 0.22 + rv.tier * 0.05));
       bg.addColorStop(1, rv.surface.to);
@@ -129,7 +132,7 @@ export function HeroPortrait({ look, size = 64, frame = "bust", animate = false,
       stopped = true;
       cancelAnimationFrame(raf);
     };
-  }, [key, size, frame, animate, victory, source]);
+  }, [key, size, frame, animate, victory, source, transparent]);
 
   return <canvas ref={ref} role="img" aria-label={label ?? "Hero portrait"} style={{ width: size, height: size }} className={`block shrink-0 ${className}`} />;
 }

@@ -198,7 +198,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function CompareCards({ current, next, nextLabel = "New" }: { current: HeroCardModel; next: HeroCardModel; nextLabel?: string }) {
+export function CompareCards({ current, next, nextLabel = "New" }: { current: HeroCardModel; next: HeroCardModel; nextLabel?: string }) {
   return (
     <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="compare">
       <div className="min-w-0">

@@ -4,40 +4,23 @@ import Link from "next/link";
 
 import { CARD_STATS, formatPower, rarityClassLine, type HeroCardModel } from "@/domain/hero/card";
 import { heroPath } from "@/domain/hero/publicId";
-import { bandLabel, positionInBand, RARITY_RULES } from "@/domain/hero/rarity";
 import { rarityVisual } from "@/domain/hero/rarityVisuals";
 
-import { HeroPortrait } from "./HeroPortrait";
-import { PwrValue, RarityBadge, RarityFrame, rarityStyle } from "./rarity";
+import { HeroArena } from "./HeroArena";
+import { PwrValue, RarityBadge, rarityStyle } from "./rarity";
 
 /**
  * THE hero card. One presentation of one public-safe data model (HeroCardModel) — used by the Admin preview, the public profile and the public
  * directory, and mirrored by the downloadable PNG and the social preview image, which are drawn from the very same model.
  *
- * Rarity is a real strength tier: the card dresses itself from the shared RARITY_VISUALS (frame, backdrop, glow, badge shape) and shows the hero's
- * actual PWR — one of the largest things on the card — with where it sits inside its rarity's band.
+ * Rarity is a real strength tier: the card dresses itself from the shared RARITY_VISUALS (frame, glow, badge shape), its hero stands in the rarity's ARENA
+ * image (domain/hero/cardBackground.ts) and it shows the hero's actual PWR — one of the largest things on the card. The PWR band (130–149 …) is a game
+ * rule, not card copy: it is never printed on a card.
  *
- * Hierarchy: ART → NAME → RARITY + CLASS → PWR → STATS.
+ * Hierarchy: ART (hero in its arena) → NAME → RARITY + CLASS → PWR → STATS.
  */
 
-/** The tier meter under PWR: the rarity's name and band, and a bar for where this hero sits inside it (a shape, not just a colour). */
-function TierMeter({ model }: { model: Pick<HeroCardModel, "rarity" | "power"> }) {
-  const rule = RARITY_RULES[model.rarity];
-  const v = rarityVisual(model.rarity);
-  const pos = positionInBand(model.rarity, model.power);
-  return (
-    <div className="mx-auto mt-2 w-full max-w-[260px]" data-testid="hero-card-tier">
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/10" role="presentation">
-        <div className="h-full rounded-full" style={{ width: `${Math.round((pos ?? 0) * 100)}%`, minWidth: pos === null ? 0 : 6, background: `linear-gradient(90deg, ${v.colors.dark}, ${v.colors.base}, ${v.colors.light})` }} />
-      </div>
-      <p className="mt-1 text-center text-[0.68rem] tracking-wide text-steel-300">
-        {rule.label} tier <span className="tnum">· {bandLabel(model.rarity)}</span>
-      </p>
-    </div>
-  );
-}
-
-/** The full card: prominent art, name, rarity + class, a large PWR and the seven stats. */
+/** The full card: the hero standing in its rarity's arena, name, rarity + class, a large PWR and the seven stats. */
 export function HeroCard({ model, animate = false, className = "", heading = "h2" }: { model: HeroCardModel; animate?: boolean; className?: string; heading?: "h1" | "h2" | "h3" }) {
   const v = rarityVisual(model.rarity);
   const Heading = heading;
@@ -61,9 +44,7 @@ export function HeroCard({ model, animate = false, className = "", heading = "h2
           <span className="font-display text-[0.62rem] tracking-[0.18em] text-steel-300 uppercase">Hero card</span>
         </div>
 
-        <RarityFrame rarity={model.rarity} className="mt-3 grid place-items-center" style={{ minHeight: 268 }}>
-          <HeroPortrait look={model.look} size={252} frame="full" animate={animate} label={`${model.name}, ${rarityClassLine(model)}`} className="relative" />
-        </RarityFrame>
+        <HeroArena look={model.look} animate={animate} label={`${model.name}, ${rarityClassLine(model)}`} className="mt-3" />
 
         <Heading className="mt-3 text-center font-display text-xl leading-tight [overflow-wrap:anywhere] text-paper sm:text-2xl" data-testid="hero-card-name">{model.name}</Heading>
         <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1" data-testid="hero-card-class">
@@ -75,7 +56,6 @@ export function HeroCard({ model, animate = false, className = "", heading = "h2
         <div className="mt-3 flex flex-col items-center" data-testid="hero-card-power">
           <PwrValue power={model.power} rarity={model.rarity} size="xl" />
         </div>
-        <TierMeter model={model} />
 
         <dl className="mt-4 grid grid-cols-4 gap-1 min-[400px]:grid-cols-7" data-testid="hero-card-stats">
           {CARD_STATS.map(({ key, label }) => (
@@ -90,7 +70,7 @@ export function HeroCard({ model, animate = false, className = "", heading = "h2
   );
 }
 
-/** A directory tile: framed portrait, name, rarity badge + class, a large PWR — and a link to the hero's public profile. */
+/** A directory tile: the hero in its rarity's arena, name, rarity badge + class, a large PWR — and a link to the hero's public profile. */
 export function HeroCardCompact({ model, href = heroPath(model.publicId) }: { model: Pick<HeroCardModel, "publicId" | "name" | "className" | "rarity" | "power" | "look">; href?: string }) {
   const v = rarityVisual(model.rarity);
   return (
@@ -108,9 +88,7 @@ export function HeroCardCompact({ model, href = heroPath(model.publicId) }: { mo
         data-tier={v.tier}
         aria-label={`${model.name} — ${rarityClassLine(model)}, PWR ${formatPower(model.power)}`}
       >
-        <RarityFrame rarity={model.rarity} className="grid place-items-center" style={{ width: 132, height: 132 }}>
-          <HeroPortrait look={model.look} size={132} frame="full" label="" className="relative" />
-        </RarityFrame>
+        <HeroArena look={model.look} label="" heroScale={1.4} className="w-full max-w-[188px]" />
         <span className="block w-full truncate font-display text-sm text-paper" title={model.name}>{model.name}</span>
         <span className="flex max-w-full items-center justify-center gap-1.5 text-[0.7rem]">
           <RarityBadge rarity={model.rarity} size="xs" />
