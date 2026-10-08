@@ -208,9 +208,10 @@ describe("class combat identities", () => {
   }
 
   it("Ranger keeps its distance while a Warrior closes in", () => {
-    // Ranged units hold a standoff range (and back away when pressed); melee mirrors hug each other. Plant-to-fire makes
-    // every shot cost a moment of standing still, so the margin is real but not enormous (≈ +15 over a melee mirror).
-    expect(avgNearestDistance("ranger", "warrior")).toBeGreaterThan(avgNearestDistance("warrior", "warrior") + 10);
+    // Ranged units hold a standoff range (and back away when pressed); melee mirrors hug each other. From rules 3.1.0 every shot is aimed and
+    // recovered from standing still (≈ 0.4 s planted per shot), which is exactly the window a Warrior uses to close in — so the margin is real but
+    // modest (≈ +9 over a melee mirror; it was ≈ +15 with free shots on the run).
+    expect(avgNearestDistance("ranger", "warrior")).toBeGreaterThan(avgNearestDistance("warrior", "warrior") + 6);
   });
 
   function skillsUsed(classId: string, lineup = classIds): Record<string, number> {

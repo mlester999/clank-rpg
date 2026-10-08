@@ -351,6 +351,61 @@ export const heroArenaSettingsSchema = z.strictObject({
 });
 export type HeroArenaSettings = z.infer<typeof heroArenaSettingsSchema>;
 
+/**
+ * Rules 3.1.0 engagement, as shipped (durations before `pace.time`; see `engagementSchema`). Tuned with `scripts/engagement-sim.ts` against rules 3.0.0
+ * on the same seeded fights (free-for-alls, 1v1 duels and ranged-vs-melee final duels) — numbers and reasoning in docs/COMBAT.md.
+ */
+export const DEFAULT_ENGAGEMENT: EngagementSettings = {
+  // Commitment you can SEE: a ranged shot is aimed for 2 ticks and recovered from for 2 more, planted throughout (≈ 300 ms still before the arrow
+  // leaves, 100 ms after — long enough for the draw → aim → release → recover animation to play on a hero that is standing still); a melee swing
+  // winds up for 2 ticks while stepping in at half speed (a Rogue 1 + 1, a Tank 3 + 2). × pace 1.95, in 100 ms ticks.
+  windupMs: { melee: 60, ranged: 60 },
+  recoveryMs: { melee: 50, ranged: 60 },
+  windupMove: { melee: 0.5, ranged: 0 },
+  recoveryMove: { melee: 1, ranged: 0 },
+  // Spacing discipline: ~5.9 s of retreat stamina refilled over ~2.3 s of not retreating, sliding along the wall. A planted fighter holds its
+  // ground (separation moves whoever walked into it), so an archer is never shoved while it aims.
+  backpedal: 1,
+  retreatMaxMs: 3000,
+  repositionCooldownMs: 1200,
+  wallMargin: 40,
+  skillWindupMs: 100,
+  skillGraceMs: 300,
+  separation: 1.9,
+  surround: 0.6,
+  // Melee counterplay: path prediction, a pursuit step while the target backs away, and no wasted swings at a fleeing archer.
+  leadTicks: 4,
+  fatigueMs: 10_000,
+  safeRange: 0,
+  chaseMult: 1.1,
+  runnerReach: 0.7,
+  // Melee fighters engage from the target's left or right, a second attacker from the other side (readable blows, no stacking).
+  flank: 2,
+  // Matchup fairness (fresh 1 v 1 with realistic heroes — scripts/matchup-sim.ts): a gap-closer (Piston Charge, Shadowstep) fires at an archer /
+  // caster only from inside half its reach, so the ranged fighter always gets its window (Warrior vs Mage 93 → 50 %); an aimed shot is half as
+  // easy to dodge (the Rogue's Evasion blanked a third of a Ranger's arrows: Rogue vs Ranger 93 → ~85 %); healing fades over 20 s of overtime, so
+  // sustain cannot out-wait the damage ramp (Tank vs Cleric 8 → ~20 %).
+  openerReach: 0.5,
+  aimedDodge: 0.5,
+  overtimeHealCut: 0.05,
+  // Per class, tuned on REALISTIC heroes (`scripts/lib/raritySim.ts`, generator 2, equal-rarity fields: every class ≈ 11–14 % against a 12.5 %
+  // fair share) together with the kiting metrics (scripts/engagement-sim.ts) and the fresh 1 v 1 matrix (scripts/matchup-sim.ts). Ranged fighters
+  // stand still for every shot, so their committed shots come faster (Ranger cadence × 0.52 from a longer reach, Mage × 0.8) and they start
+  // backing away a little earlier; the Tank swings heavier but not much less often (× 1.1) and keeps pace with a fleeing archer (pursuit × 1.2,
+  // only while its target backs away); the Cleric's attack is the slowest (× 1.2) — its strength is sustain; Warrior and Rogue × 1.04 / 1.05.
+  classes: {
+    warrior: { intervalMult: 1.04 },
+    rogue: { windupMs: 40, recoveryMs: 40, intervalMult: 1.05 },
+    tank: { windupMs: 110, recoveryMs: 60, intervalMult: 1.1, chaseMult: 1.2 },
+    ranger: { intervalMult: 0.52, preferredRange: 150, dangerRange: 85 },
+    mage: { intervalMult: 0.8, dangerRange: 80 },
+    cleric: { intervalMult: 1.2 },
+  },
+};
+
+/** Rules 3.0.0 overtime, frozen (what every 3.0.0 battle stored). Rules 3.1.0 keeps it unchanged. */
+export const OVERTIME_300 = { startMs: 28_000, damageRampPerSec: 0.16 } as const;
+
 /** Not configured on purpose: see the schema above. */
 export const DEFAULT_HERO_ARENA: HeroArenaSettings = {
   enabled: true,
@@ -386,6 +441,78 @@ const legacyRingSchema = z.strictObject({
   damagePctPerSec: z.number().min(0),
   damageRampPerSec: z.number().min(0),
 });
+
+/** Per-role timing pair: melee (no projectile) and ranged (projectile) fighters. */
+const roleMs = z.strictObject({ melee: z.number().int().min(0).max(2000), ranged: z.number().int().min(0).max(2000) });
+const roleMult = z.strictObject({ melee: z.number().min(0).max(1), ranged: z.number().min(0).max(1) });
+
+/**
+ * ENGAGEMENT (rules 3.1.0+): fighters COMMIT to their actions, and ranged spacing is a discipline, not free damage.
+ *
+ *   · Every basic attack is WINDUP → release → RECOVERY. While winding up or recovering a fighter moves at `windupMove` / `recoveryMove` × its speed
+ *     (0 = planted). Ranged fighters plant for both, so "run + attack" never happens at the same time: move → stop → aim → shoot → recover → move.
+ *     The release-to-release cadence stays the class's attack interval (the windup is taken out of the wait, not added to it).
+ *   · Backing away from a threat is slower than walking toward one (`backpedal`) and spends RETREAT STAMINA: at most `retreatMaxMs` of backing
+ *     away in one go. Stamina refills while the fighter is not retreating (empty → full over `repositionCooldownMs`), and a fighter that ran it
+ *     dry cannot retreat again before it is half full — it must stand and fight. A taunted fighter never retreats. Near the wall (`wallMargin`) a
+ *     retreat slides ALONG the wall instead of into it. This is what gives melee its counterplay and makes endless kiting impossible by construction.
+ *   · Instant skills telegraph for `skillWindupMs` (the caster commits, like a cast), and no skill fires before `skillGraceMs` of the fight.
+ *   · Fighters keep `separation` × unitRadius apart, and melee attackers closing on a crowded target fan out around it (`surround`).
+ *   · `classes` may override the timings / spacing of one class (e.g. a quicker Rogue, a heavier Tank).
+ * All durations are class-scale durations: `pace.time` stretches them like every other one. ABSENT = the rules exactly as before 3.1.0 (every stored
+ * ruleset snapshot without it replays bit for bit).
+ */
+export const engagementSchema = z.strictObject({
+  windupMs: roleMs,
+  recoveryMs: roleMs,
+  windupMove: roleMult,
+  recoveryMove: roleMult,
+  backpedal: z.number().min(0.1).max(1),
+  retreatMaxMs: z.number().int().min(0).max(10_000),
+  repositionCooldownMs: z.number().int().min(0).max(20_000),
+  wallMargin: z.number().min(0).max(200),
+  skillWindupMs: z.number().int().min(0).max(2000),
+  skillGraceMs: z.number().int().min(0).max(10_000),
+  separation: z.number().min(1).max(4),
+  surround: z.number().min(0).max(1),
+  /** Gap-close: a melee chaser aims up to this many ticks AHEAD along its target's last movement (path prediction). 0 = chase where it is. */
+  leadTicks: z.number().int().min(0).max(20),
+  /** Overtime fatigue (wall-clock, not paced): once overtime begins, retreat stamina refills more slowly, reaching its floor (20 %) after this long. 0 = off. */
+  fatigueMs: z.number().int().min(0).max(120_000),
+  /** In OVERTIME, retreat stamina refills only while no enemy CHASING this fighter (targeting it) is within this distance: a late duel cannot be kited out. 0 = off. */
+  safeRange: z.number().min(0).max(400),
+  /** Pursuit: a melee fighter whose target is BACKING AWAY moves at this × its speed while it chases (1 = off). Never applies otherwise. */
+  chaseMult: z.number().min(1).max(2),
+  /** A melee fighter starts a swing at a ranged target that is backing away only inside this × its reach (1 = always): it closes, then strikes when the target plants. */
+  runnerReach: z.number().min(0.3).max(1),
+  /** A melee fighter closing on its target settles on the target's LEFT or RIGHT (this much weight toward the side; 0 = straight in from wherever it is). */
+  flank: z.number().min(0).max(4).default(0),
+  /**
+   * A gap-closing opener (a dash skill whose AI is "opener") aimed at a RANGED fighter fires only within this × the target's attack range — the
+   * dasher must walk into the archer's / caster's reach first instead of leaping over all of it. 0 = off (fires from the skill's own range).
+   */
+  openerReach: z.number().min(0).max(1.5).default(0),
+  /** Dodge chance against an AIMED ranged basic attack is multiplied by this (the shooter stood still to aim it). 1 = unchanged. */
+  aimedDodge: z.number().min(0).max(1).default(1),
+  /** Healing of every kind fades by this fraction per second of OVERTIME (0.05 = gone after 20 s of overtime). 0 = off. */
+  overtimeHealCut: z.number().min(0).max(1).default(0),
+  classes: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_]{1,30}$/),
+      z.strictObject({
+        windupMs: z.number().int().min(0).max(2000).optional(),
+        recoveryMs: z.number().int().min(0).max(2000).optional(),
+        preferredRange: z.number().min(0).max(400).optional(),
+        dangerRange: z.number().min(0).max(300).optional(),
+        /** Basic-attack cadence × this (< 1 = faster): what a class gets back for committing instead of kiting. */
+        intervalMult: z.number().min(0.5).max(2).optional(),
+        /** This class's pursuit multiplier (overrides `chaseMult`). */
+        chaseMult: z.number().min(1).max(2).optional(),
+      }),
+    )
+    .default({}),
+});
+export type EngagementSettings = z.infer<typeof engagementSchema>;
 
 const combatBaseSchema = z.strictObject({
   tickMs: z.number().int().min(20).max(1000),
@@ -426,6 +553,8 @@ const combatBaseSchema = z.strictObject({
    * exactly as before: every ruleset stored before 3.0.0 has no `pace` and replays with this default, bit for bit.
    */
   pace: z.strictObject({ time: z.number().min(0.25).max(4), move: z.number().min(0.25).max(4) }).default({ time: 1, move: 1 }),
+  /** Rules 3.1.0+: attack commitment and ranged spacing discipline (see `engagementSchema`). Absent = the 3.0.0 behaviour exactly. */
+  engagement: engagementSchema.optional(),
   /** @deprecated see `legacyRingSchema`. Optional, ignored by every ruleset newer than 1.0.0. */
   ring: legacyRingSchema.optional(),
   overtime: z.strictObject({ startMs: z.number().int().min(0), damageRampPerSec: z.number().min(0) }),
@@ -626,7 +755,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
     },
     rangedPlantMs: 100,
     pace: { time: 1.95, move: 1.1 },
-    overtime: { startMs: 28_000, damageRampPerSec: 0.16 },
+    engagement: DEFAULT_ENGAGEMENT,
+    overtime: { ...OVERTIME_300 },
     tactics: {
       AGGRESSIVE: { lowHpTargeting: 0.6, retreatHp: 0, defensiveSkillHp: 0.25, engageBonus: 0.3 },
       BALANCED: { lowHpTargeting: 0, retreatHp: 0.12, defensiveSkillHp: 0.5, engageBonus: 0 },
@@ -636,7 +766,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   picks: { rewardGold: 2 },
   arena_picks: DEFAULT_ARENA_PICKS,
   hero_arena: DEFAULT_HERO_ARENA,
-  visuals: { spriteSet: "clank-dev-v1", disabledCosmetics: [] },
+  visuals: { spriteSet: "clank-dev-v2", disabledCosmetics: [] },
 };
 
 export function parseSettings<K extends SettingsKey>(key: K, value: unknown): GameSettings[K] {

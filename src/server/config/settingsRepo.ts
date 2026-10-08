@@ -1,4 +1,4 @@
-import { classDefSchema, skillDefSchema, validateRuleset, hashRuleset, COMBAT_RULES_VERSION, type ClassDef, type Ruleset, type SkillDef } from "@/domain/rules";
+import { classDefSchema, skillDefSchema, validateRuleset, hashRuleset, rulesVersionFor, type ClassDef, type Ruleset, type SkillDef } from "@/domain/rules";
 import { DEFAULT_SETTINGS, parseSettings, settingsSchemas, type GameSettings, type SettingsKey } from "@/domain/settings";
 import { canonicalJson } from "@/domain/util/hash";
 import { json, type Queryable } from "../db/types";
@@ -48,7 +48,8 @@ export async function loadRuleset(q: Queryable, settings?: GameSettings): Promis
   const s = settings ?? (await loadSettings(q));
   const [classes, skills] = await Promise.all([loadClasses(q, false), loadSkills(q)]);
   const ruleset = validateRuleset({
-    rulesVersion: COMBAT_RULES_VERSION,
+    // 3.1.0 only when the stored combat settings carry `engagement` (settings migration 20261007002300); until then new battles are 3.0.0.
+    rulesVersion: rulesVersionFor(s.combat),
     combat: s.combat,
     classes: Object.fromEntries(classes.map((c) => [c.id, c])),
     skills: Object.fromEntries(skills.map((k) => [k.id, k])),

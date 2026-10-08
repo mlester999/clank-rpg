@@ -293,7 +293,7 @@ describe("admin configuration for picks and visuals", () => {
     const cookie = await adminCookie();
     const cfg = await (await run(route.GET, req("/api/admin/config", { method: "GET", cookie }), "config")).json();
     expect(cfg.settings.picks).toEqual({ rewardGold: 2 });
-    expect(cfg.settings.visuals.spriteSet).toBe("clank-dev-v1");
+    expect(cfg.settings.visuals.spriteSet).toBe("clank-dev-v2");
     const put = (key: string, value: unknown, c = cookie) => run(route.PUT, req(`/api/admin/settings/${key}`, { method: "PUT", json: { value }, cookie: c }), "settings", key);
     expect((await put("picks", { rewardGold: 99999 })).status).toBe(422);
     expect((await put("picks", { rewardGold: 4 })).status).toBe(200);

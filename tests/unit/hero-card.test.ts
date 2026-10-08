@@ -68,6 +68,12 @@ describe("card key (cache busting)", () => {
   it("does not depend on the public id (the same look under another id is the same picture)", () => {
     expect(cardKey({ ...base, publicId: "222222222222" })).toBe(cardKey(base));
   });
+  it("changes with the sprite set the art is drawn from — a renderer switch must never serve the old drawing from an immutable cache", () => {
+    const v1 = { ...base, look: { ...base.look, spriteSet: "clank-dev-v1" } };
+    const v2 = { ...base, look: { ...base.look, spriteSet: "clank-dev-v2" } };
+    expect(cardKey(v1)).not.toBe(cardKey(v2));
+    expect(cardKey(v2)).toBe(cardKey({ ...v2, look: { ...v2.look } }));
+  });
 });
 
 describe("SHARE TO X", () => {

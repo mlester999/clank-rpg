@@ -5,7 +5,7 @@ import { rollAppearance } from "@/domain/character/appearance";
 import { validateRpgName } from "@/domain/character/rpgName";
 import { AUTHORED_GENERATOR_VERSION, buildHeroVersionState } from "@/domain/hero/heroVersion";
 import { deriveSpriteConfig } from "@/domain/sprites/config";
-import { classDefSchema, skillDefSchema, validateRuleset, COMBAT_RULES_VERSION } from "@/domain/rules";
+import { classDefSchema, skillDefSchema, validateRuleset, rulesVersionFor } from "@/domain/rules";
 import { settingsSchemas, type SettingsKey } from "@/domain/settings";
 import { createRng } from "@/domain/util/rng";
 import { parseTelegramExport } from "@/domain/telegram/exportParser";
@@ -63,7 +63,7 @@ export async function adminOverview(q: Queryable, allowDemo = false) {
     counts,
     arena: { status: state?.status ?? "NOT_STARTED", paused: state?.status === "PAUSED", lastAdvanceAt: state?.last_advance_at ?? null, cycle: cycle ?? null, season: season ?? null, recent },
     phase: game?.phase ?? "DEVELOPMENT",
-    rulesVersion: COMBAT_RULES_VERSION,
+    rulesVersion: rulesVersionFor((await loadSettings(q)).combat),
   };
 }
 
@@ -254,7 +254,7 @@ export async function putClass(db: Db, id: string, definition: unknown, enabled:
     // Validate the whole ruleset still holds together (e.g. the class's skills exist).
     const [s] = [await loadSettings(tx)];
     validateRuleset({
-      rulesVersion: COMBAT_RULES_VERSION,
+      rulesVersion: rulesVersionFor(s.combat),
       combat: s.combat,
       classes: Object.fromEntries([...classes, def].map((c) => [c.id, c])),
       skills: Object.fromEntries(skills.map((k) => [k.id, k])),

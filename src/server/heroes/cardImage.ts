@@ -54,9 +54,21 @@ function ensureFont(): void {
   }
 }
 
-const sources = new Map<string, Promise<SpriteSource | null>>();
+/** A server-side sprite set: the source the compositor reads, and `load` — the atlases a hero needs, read from disk on demand. */
+interface ServerSprites {
+  src: SpriteSource;
+  load: (keys: readonly string[]) => Promise<void>;
+}
 
-async function loadSpriteSource(setId: string): Promise<SpriteSource | null> {
+const sources = new Map<string, Promise<ServerSprites | null>>();
+
+/**
+ * At most this many skeleton PAGES of a packed set stay decoded in one server process (least recently used first out): a card needs one
+ * skeleton's page, and a long-lived process rendering every class must not hold all eighteen.
+ */
+const SERVER_PAGES = 6;
+
+async function loadSpriteSource(setId: string): Promise<ServerSprites | null> {
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(setId)) return null; // a set id becomes a directory name: never anything else
   let hit = sources.get(setId);
   if (!hit) {
@@ -65,11 +77,33 @@ async function loadSpriteSource(setId: string): Promise<SpriteSource | null> {
         const dir = path.join(process.cwd(), "public", "sprites", setId);
         const manifest = parseManifest(JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8")));
         const images: SpriteSource["images"] = {};
-        for (const [key, file] of Object.entries(manifest.images)) {
-          images[key] = (await loadImage(await readFile(path.join(dir, path.basename(file))))) as unknown as CanvasImageSource;
-        }
+        const read = async (key: string) => (await loadImage(await readFile(path.join(dir, path.basename(manifest.images[key] as string))))) as unknown as CanvasImageSource;
+        // a packed set (one page per skeleton) is read page by page as cards need them; a block-layout set all at once
+        const lazy = (manifest.rigs?.length ?? 0) > 0;
+        const eager = lazy ? [...new Set(Object.values(manifest.layers).flatMap((l) => (l.image !== undefined && !l.cells ? [l.image] : [])))] : Object.keys(manifest.images);
+        for (const key of eager) images[key] = await read(key);
         const factory: CanvasFactory = (w, h) => createCanvas(w, h) as unknown as HTMLCanvasElement;
-        return { manifest, images, factory } satisfies SpriteSource;
+        const src: SpriteSource = { manifest, images, factory };
+        const recent: string[] = [];
+        const failed = new Set<string>();
+        const load = async (keys: readonly string[]) => {
+          for (const key of keys) {
+            if (images[key]) {
+              if (recent.includes(key)) recent.push(...recent.splice(recent.indexOf(key), 1));
+              continue;
+            }
+            if (failed.has(key) || !manifest.images[key]) continue;
+            try {
+              images[key] = await read(key);
+              recent.push(key);
+              while (recent.length > SERVER_PAGES) delete images[recent.shift() as string];
+            } catch {
+              failed.add(key);
+            }
+          }
+        };
+        if (lazy) src.ensure = (keys) => (keys.some((k) => failed.has(k) || !manifest.images[k]) ? "failed" : keys.every((k) => images[k]) ? "ready" : "loading");
+        return { src, load } satisfies ServerSprites;
       } catch (e) {
         console.warn(`[hero-card] sprite set ${setId} could not be loaded — drawing the vector hero instead:`, e instanceof Error ? e.message : e);
         return null;
@@ -307,8 +341,11 @@ function drawArt(ctx: SKRSContext2D, model: HeroCardModel, src: SpriteSource | n
 /** Renders a hero card. Never throws for a valid model: missing art falls back to the vector hero, a missing font to a system one. */
 export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?: string; backgroundDir?: string } = {}): Promise<Buffer> {
   ensureFont();
-  const src = await loadSpriteSource(opts.spriteSet ?? "clank-dev-v1");
+  const sprites = await loadSpriteSource(opts.spriteSet ?? "clank-dev-v2");
   const arena = await loadArenaImage(model.rarity, opts.backgroundDir ?? defaultArenaDir());
+  const src = sprites?.src ?? null;
+  // the hero's own skeleton page — read last, right before the synchronous drawing below (no other card can evict it in between)
+  if (sprites) await sprites.load(getHeroSheet(sprites.src, model.look.sprite, model.look.colors, model.rarity).images);
   const S = CARD_SIZE;
   const canvas = createCanvas(S, S);
   const ctx = canvas.getContext("2d");

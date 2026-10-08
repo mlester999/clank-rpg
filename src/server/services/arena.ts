@@ -521,25 +521,13 @@ async function stepArena(tx: Queryable, ctx: ArenaCtx): Promise<StepResult> {
     return { progressed: true, status: "LIVE", step: "running" };
   }
 
-  // R-1: OUTAGE RECOVERY for a battle that was prepared AHEAD and waited behind a stalled arena. It sits behind an earlier,
-  // still-unsettled battle, yet its ENTIRE slot has already passed: the arena was not advancing (a merely slow settlement can never get here — that takes minutes), so nobody has seen it. Settling
-  // it now would burst through a battle that was never watched. Its whole timeline moves to "now" instead (a prepared battle is
-  // frozen only in its inputs — seed, roster, events; the schedule is not part of the replay), so it is watched from the roster
-  // to the 3·2·1 like any other. The battles prepared behind it keep their place in the chain: they move by the same amount. One
-  // shift, on the server, for every viewer. (Its pick window was already closed by the rule — the predecessor's result was decided
-  // long ago — and a closed window never reopens.)
-  const waiting = simulated[1];
-  if (waiting && nowMs > ms(waiting.slot_ends_at)) {
-    const shiftMs = nowMs + Math.min(Math.round(rttMs * 3), 3000) - ms(waiting.starts_at);
-    await tx.query(
-      `update public.arena_battles
-          set starts_at = starts_at + ($2::bigint * interval '1 millisecond'), combat_starts_at = combat_starts_at + ($2::bigint * interval '1 millisecond'),
-              combat_ends_at = combat_ends_at + ($2::bigint * interval '1 millisecond'), slot_ends_at = slot_ends_at + ($2::bigint * interval '1 millisecond')
-        where status in ('SIMULATED', 'SCHEDULED') and sequence >= $1::bigint`,
-      [waiting.sequence, shiftMs],
-    );
-    return { progressed: true, status: "LIVE", step: `reanchored:${waiting.id}` };
-  }
+  // NO RE-TIMING OF A BATTLE THAT HAS BEEN PUBLIC. A battle's timeline is authoritative and IMMUTABLE once its fight has started: the state
+  // endpoint shows a battle as soon as `starts_at` passes and serves its replay from `combat_starts_at` — reads keep answering while the arena
+  // is not advancing — so any viewer may have watched it. Moving such a battle to "now" (as an earlier outage recovery did for a prepared battle
+  // whose slot had passed behind a stalled predecessor) made everyone who watched it see the SAME battle count down 3 · 2 · 1 again over a fight
+  // that had already happened. After an outage the overdue battles are therefore settled IN ORDER (R1, one per step), and the next battle that is
+  // lined up is anchored to "now" (R3, `staleAnchorMs`) — a fresh, complete opening for everyone. Only a battle that has never been public
+  // (SCHEDULED, see `prepareScheduled`) ever has its start moved. (tests/integration/arena-countdown.test.ts)
 
   // R-0: CLOSE DUE PICK WINDOWS. Picks are made on the UPCOMING battle; its window closes the instant the battle in front of it is
   // decided (or, as the fallback, when it takes the stage itself). That moment is persisted here as a tiny transaction of its own,

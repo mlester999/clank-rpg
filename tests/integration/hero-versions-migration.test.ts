@@ -32,6 +32,8 @@ let specialId = "";
 
 beforeAll(async () => {
   db = await createTestDbUpTo(BEFORE);
+  // the visual setting as live held it when this migration ran (hero renderer v2 came later, with migration 2300)
+  await db.query(`update public.game_settings set value = jsonb_set(value, '{spriteSet}', '"clank-dev-v1"') where key = 'visuals'`);
   // 300 heroes with a spread of classes / rarities / activity, so rounding ties and every class are exercised
   legacy = await seedLegacyHeroes(db, 300, { activity: (i) => (i * 7) % 100 });
   // moderation states must survive untouched

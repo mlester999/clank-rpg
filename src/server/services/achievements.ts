@@ -19,7 +19,11 @@ export interface Metrics {
   bonded_tokens_held: number;
 }
 
-export async function loadMetrics(q: Queryable, characterId: string): Promise<Metrics | null> {
+/**
+ * `atMs`: the instant the metrics are evaluated at — the caller's clock (the holdings sync passes the `now` it measured the streaks with, so the
+ * two can never disagree). Omitted: the database clock, as before.
+ */
+export async function loadMetrics(q: Queryable, characterId: string, atMs?: number): Promise<Metrics | null> {
   const rows = await q.query<{
     battles: number; wins: number; top2: number; eliminations: number;
     qualifying: number | null; active_days: number | null; diamond_days: number | null; bonded: number;
@@ -28,14 +32,14 @@ export async function loadMetrics(q: Queryable, characterId: string): Promise<Me
     // achievement, and a new season starts the counting again. The community / chain metrics are permanent facts and are read as they are.
     `select coalesce(ss.battles, 0) as battles, coalesce(ss.wins, 0) as wins, coalesce(ss.top2, 0) as top2, coalesce(ss.eliminations, 0) as eliminations,
             tu.qualifying_message_count as qualifying, tu.active_days,
-            (select coalesce(max(floor(extract(epoch from (now() - s.started_at)) / 86400))::int, 0)
+            (select coalesce(max(floor(extract(epoch from (coalesce($2::timestamptz, now()) - s.started_at)) / 86400))::int, 0)
                from public.holding_streaks s where s.character_id = c.id and s.ended_at is null) as diamond_days,
             (select count(*)::int from public.token_holdings h join public.eligible_tokens t on t.id = h.token_id
               where h.character_id = c.id and h.balance > 0 and t.status = 'ELIGIBLE') as bonded
        from public.characters c left join public.telegram_users tu on tu.telegram_user_id = c.telegram_user_id
        left join public.season_character_stats ss on ss.character_id = c.id and ss.season_id = (select id from public.seasons where status = 'ACTIVE' limit 1)
       where c.id = $1`,
-    [characterId],
+    [characterId, atMs === undefined ? null : new Date(atMs).toISOString()],
   );
   const r = rows[0];
   if (!r) return null;
@@ -52,8 +56,8 @@ export async function loadMetrics(q: Queryable, characterId: string): Promise<Me
 }
 
 /** Unlocks every metric-based achievement the hero now satisfies. Idempotent. Returns new ids. */
-export async function evaluateAchievements(q: Queryable, characterId: string): Promise<string[]> {
-  const metrics = await loadMetrics(q, characterId);
+export async function evaluateAchievements(q: Queryable, characterId: string, atMs?: number): Promise<string[]> {
+  const metrics = await loadMetrics(q, characterId, atMs);
   if (!metrics) return [];
   const defs = await q.query<AchievementRow>(
     `select id, criteria, reward from public.achievements a

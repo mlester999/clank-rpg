@@ -242,6 +242,25 @@ describe("Diamond Hands lifecycle", () => {
     expect(ids).not.toContain("diamond_7d");
     expect(ids).not.toContain("bonded_collector"); // only 2 coins held
   });
+
+  it("the Diamond Hands streak is measured on the SYNC's clock — the same achievements whatever the real calendar date is", async () => {
+    // Regression: the achievements check used the database clock while the sync measured streaks on its own, so this suite started failing on
+    // the day the real date passed T0 + 7 days. The same two-day streak, years in the past and years in the future, must unlock the same things.
+    const unlockedAt = async (t0: number) => {
+      await resetDb(db);
+      const s = await setup({ tokens: [{ addr: TOKEN_A }] });
+      const reader = new FakeReader();
+      reader.balances.set(TOKEN_A, 10_000_000n * E18);
+      await sync(s.hero, s, reader, t0);
+      await sync(s.hero, s, reader, t0 + 2 * DAY);
+      return (await db.query<{ achievement_id: string }>("select achievement_id from public.character_achievements order by 1")).map((a) => a.achievement_id);
+    };
+    const past = await unlockedAt(Date.UTC(2019, 0, 1));
+    const future = await unlockedAt(Date.UTC(2035, 6, 1));
+    expect(past).toContain("diamond_1d");
+    expect(past).not.toContain("diamond_7d");
+    expect(future).toEqual(past);
+  });
 });
 
 describe("catalog scan + boss drafts", () => {

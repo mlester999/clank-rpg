@@ -38,7 +38,16 @@ export interface HeroCardLook {
   weapon: string;
   headgear: string;
   body: string;
+  /** The sprite set the art is drawn from (`visuals.spriteSet`), when known — part of the card's content key, so a renderer switch re-keys the image. */
+  spriteSet?: string;
 }
+
+/**
+ * Bumped whenever a sprite set's art is redrawn IN PLACE (same set id, new drawings — e.g. hero renderer v2's fourth pass, then its design
+ * library: class skeletons, equipment tiers, stances; then its ARCHETYPES: three skeletons per class, a 96 × 80 frame, palette tones): card
+ * images are served as immutable under their content key, so without this an old drawing would stay cached under the old key forever.
+ */
+export const CARD_ART_REVISION = 4;
 
 export const RARITY_LABEL: Record<Rarity, string> = Object.fromEntries(RARITY_LADDER.map((r) => [r.id, r.label])) as Record<Rarity, string>;
 
@@ -63,9 +72,9 @@ export function cardText(raw: unknown, max: number): string {
 
 export const CARD_NAME_MAX = 40;
 
-/** A short content key for the image / OG URL: it changes exactly when something visible on the card changes (a reroll, a rollback to a different look, a rename, …). */
+/** A short content key for the image / OG URL: it changes exactly when something visible on the card changes (a reroll, a rollback to a different look, a rename, the sprite set or its art revision, …). */
 export function cardKey(m: HeroCardModel): string {
-  return hashObject({ n: cardText(m.name, CARD_NAME_MAX), c: m.classId, r: m.rarity, p: m.power, s: m.stats, l: m.look, k: m.seasonRank }).slice(0, 12);
+  return hashObject({ n: cardText(m.name, CARD_NAME_MAX), c: m.classId, r: m.rarity, p: m.power, s: m.stats, l: m.look, k: m.seasonRank, a: CARD_ART_REVISION }).slice(0, 12);
 }
 
 /** "Legendary Mage" */

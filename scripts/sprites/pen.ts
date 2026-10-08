@@ -22,8 +22,8 @@ export const OL = "#15151a";
 /** Grey ramp for tintable layers (128 = tint colour as-is). */
 export const G = { hi: "#b4b4b4", base: "#808080", lo: "#585858", deep: "#3a3a3a" } as const;
 
-export function newFrame(): { canvas: Canvas; g: Ctx } {
-  const canvas = createCanvas(FRAME_W * SS, FRAME_H * SS);
+export function newFrame(w = FRAME_W, h = FRAME_H): { canvas: Canvas; g: Ctx } {
+  const canvas = createCanvas(w * SS, h * SS);
   const g = canvas.getContext("2d");
   g.scale(SS, SS);
   g.lineJoin = "round";
@@ -140,16 +140,19 @@ export function shadedDisc(g: Ctx, x: number, y: number, r: number, base: string
 
 /**
  * Hard-edged down-sample of the 4× supersample canvas into one 64×64 cell:
+ * (a frame of any size: the supersample's size / SS)
  *  · a pixel is opaque when ≥ 50% of its 16 samples are covered, else fully transparent;
  *  · colour is the coverage-weighted average, posterised to `levels` steps per channel.
  */
 export function pixelate(src: Canvas, levels = 7): Uint8ClampedArray {
   const w = src.width;
+  const fw = Math.round(w / SS);
+  const fh = Math.round(src.height / SS);
   const data = src.getContext("2d").getImageData(0, 0, w, src.height).data;
-  const out = new Uint8ClampedArray(FRAME_W * FRAME_H * 4);
+  const out = new Uint8ClampedArray(fw * fh * 4);
   const q = (v: number) => Math.round((Math.round((v / 255) * (levels - 1)) / (levels - 1)) * 255);
-  for (let y = 0; y < FRAME_H; y++) {
-    for (let x = 0; x < FRAME_W; x++) {
+  for (let y = 0; y < fh; y++) {
+    for (let x = 0; x < fw; x++) {
       let a = 0;
       let r = 0;
       let gg = 0;
@@ -165,7 +168,7 @@ export function pixelate(src: Canvas, levels = 7): Uint8ClampedArray {
         }
       }
       const cover = a / (SS * SS * 255);
-      const o = (y * FRAME_W + x) * 4;
+      const o = (y * fw + x) * 4;
       if (cover >= 0.5 && a > 0) {
         out[o] = q(r / a);
         out[o + 1] = q(gg / a);

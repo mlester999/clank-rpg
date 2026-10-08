@@ -106,6 +106,38 @@ interface Unit {
   moveY: number;
   /** Plant-to-fire: no movement before this tick (ranged fighters, rules 2.0.0+). */
   rootUntil: number;
+  // ---- rules 3.1.0 ENGAGEMENT (untouched — and unread — by every earlier ruleset) ----
+  /** Committed basic attack: 0 none · 1 WINDUP (released at `atkUntil`) · 2 RECOVER (free again at `atkUntil`). */
+  atkPhase: 0 | 1 | 2;
+  atkUntil: number;
+  atkTarget: number;
+  /**
+   * Retreat STAMINA, in ticks of backing away: retreating drains 1 per tick; every other tick refills it (a full refill takes the reposition cooldown).
+   * Empty → locked (stand and fight) until it is half full again. Quick hops stay possible; sustained kiting is not.
+   */
+  retreatBudget: number;
+  retreatLocked: boolean;
+  /** Position before this tick's movement (its last step is what a chaser predicts from). */
+  lastX: number;
+  lastY: number;
+  /** Backing away from a threat THIS tick (frame flag RETREAT). */
+  retreating: boolean;
+  /** `retreating` as it was at the start of this tick (what a pursuer reads). */
+  retreatedLastTick: boolean;
+  /**
+   * Committed and standing still THIS tick (aiming, releasing, recovering, casting, stunned). A planted fighter holds its ground: separation moves
+   * whoever walked into it instead (rules 3.1.0) — an archer is never shoved across the floor while it aims.
+   */
+  planted: boolean;
+  ranged: boolean;
+  windupTicks: number;
+  recoveryTicks: number;
+  preferredRange: number;
+  dangerRange: number;
+  /** Basic-attack cadence multiplier (rules 3.1.0 class override; 1 otherwise). */
+  intervalMult: number;
+  /** Speed multiplier while chasing a target that is backing away (melee, rules 3.1.0). */
+  chaseMult: number;
   // outcome counters
   eliminations: number;
   dealt: number;
@@ -152,6 +184,9 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
   const maxTicks = Math.floor(Math.min(input.maxCombatMs, 120_000) / tickMs);
   /** Ticks a ranged fighter stands still after each basic attack (0 = free kiting). */
   const plantTicks = cs.rangedPlantMs > 0 ? toTicksT(cs.rangedPlantMs) : 0;
+  /** Rules 3.1.0+ only (undefined for every earlier ruleset, which therefore takes exactly the code path it always took). */
+  const eng = cs.engagement;
+  const ticksT0 = (ms: number) => (ms > 0 ? toTicksT(ms) : 0);
 
   // Rules 1.0.0 ONLY: the retired shrinking storm ring (see the header). Null for every current ruleset.
   const legacyRing = ruleset.rulesVersion === LEGACY_RING_RULES_VERSION && cs.ring !== undefined ? cs.ring : null;
@@ -216,6 +251,23 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
       moveX: 0,
       moveY: 0,
       rootUntil: 0,
+      atkPhase: 0,
+      atkUntil: 0,
+      atkTarget: -1,
+      retreatBudget: eng ? Math.max(1, ticksT0(eng.retreatMaxMs)) : 0,
+      retreatLocked: false,
+      lastX: dir[0] * cs.startRadius,
+      lastY: dir[1] * cs.startRadius,
+      retreating: false,
+      planted: false,
+      retreatedLastTick: false,
+      ranged: cls.attack.projectileSpeed > 0,
+      windupTicks: eng ? ticksT0(eng.classes[cls.id]?.windupMs ?? (cls.attack.projectileSpeed > 0 ? eng.windupMs.ranged : eng.windupMs.melee)) : 0,
+      recoveryTicks: eng ? ticksT0(eng.classes[cls.id]?.recoveryMs ?? (cls.attack.projectileSpeed > 0 ? eng.recoveryMs.ranged : eng.recoveryMs.melee)) : 0,
+      preferredRange: eng?.classes[cls.id]?.preferredRange ?? cls.ai.preferredRange,
+      dangerRange: eng?.classes[cls.id]?.dangerRange ?? cls.ai.kiteBelow,
+      intervalMult: eng?.classes[cls.id]?.intervalMult ?? 1,
+      chaseMult: eng ? (eng.classes[cls.id]?.chaseMult ?? eng.chaseMult) : 1,
       eliminations: 0,
       dealt: 0,
       taken: 0,
@@ -225,6 +277,17 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     };
   });
   const U = (i: number): Unit => units[i] as Unit;
+  // Analysis tooling only (see BattleInput.scenario): a measured situation as the starting point. Never set by the Arena.
+  if (input.scenario) {
+    for (const u of units) {
+      const st = input.scenario.start[input.units.indexOf(u.input)];
+      if (!st) continue;
+      u.x = u.lastX = st.x;
+      u.y = u.lastY = st.y;
+      if (st.hpFrac !== undefined) u.hp = Math.max(1, Math.min(u.maxHp, Math.round(u.maxHp * st.hpFrac)));
+      if (st.skillReadyMs) st.skillReadyMs.forEach((ms, s) => { if (s < u.skillCd.length) u.skillCd[s] = Math.max(0, Math.ceil(ms / tickMs)); });
+    }
+  }
 
   const events: EventTuple[] = [];
   const emit = (tick: number, kind: number, a: number, b: number, value = 0, flags = 0) => {
@@ -257,6 +320,9 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
       if (u.st.dodgeUntil > tick || u.st.dmgUntil > tick || u.st.aspdUntil > tick || u.st.moveUntil > tick) flags |= FRAME_FLAG.BUFFED;
       if (u.st.empowerUntil > tick && u.st.empowerMult > 1) flags |= FRAME_FLAG.EMPOWERED;
       if (u.st.tauntUntil > tick) flags |= FRAME_FLAG.TAUNTED;
+      if (u.alive && u.atkPhase === 1) flags |= FRAME_FLAG.WINDUP;
+      if (u.alive && u.atkPhase === 2) flags |= FRAME_FLAG.RECOVER;
+      if (u.alive && u.retreating) flags |= FRAME_FLAG.RETREAT;
       frames.push(Math.round(u.x * 10), Math.round(u.y * 10), Math.max(0, u.hp), flags, u.target + 1);
     }
   };
@@ -270,7 +336,17 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     return 1 + cs.overtime.damageRampPerSec * Math.max(0, (t - cs.overtime.startMs) / 1000);
   };
 
+  /**
+   * Rules 3.1.0: healing (spells, lifesteal, regeneration) fades during OVERTIME — overtime exists to end a fight, and sustain that outlasts the
+   * damage ramp turned a long duel into a foregone conclusion (`overtimeHealCut` per second of overtime, down to nothing). 1 otherwise.
+   */
+  const healMult = (tick: number): number => {
+    if (!eng || eng.overtimeHealCut <= 0) return 1;
+    const otSec = (tick * tickMs - cs.overtime.startMs) / 1000;
+    return otSec <= 0 ? 1 : Math.max(0, 1 - eng.overtimeHealCut * otSec);
+  };
   const heal = (tick: number, healer: Unit, target: Unit, amount: number, flags = 0) => {
+    if (eng) amount *= healMult(tick);
     if (!target.alive || amount <= 0) return;
     const applied = Math.min(Math.round(amount), target.maxHp - target.hp);
     if (applied <= 0) return;
@@ -289,7 +365,9 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
   ): number => {
     if (!vic.alive) return 0;
     if (!opts.aoe) {
-      const dodge = clamp(vic.dodge + (vic.st.dodgeUntil > tick ? vic.st.dodgeBuff : 0), 0, 0.75);
+      let dodge = clamp(vic.dodge + (vic.st.dodgeUntil > tick ? vic.st.dodgeBuff : 0), 0, 0.75);
+      // Rules 3.1.0: a ranged basic attack is AIMED (the shooter stood still for it), and an aimed shot is harder to slip (`aimedDodge` × dodge).
+      if (eng && opts.basic && att.ranged) dodge *= eng.aimedDodge;
       if (rng.next() < dodge) {
         emit(tick, EV.MISS, att.i, vic.i, 0, opts.basic ? EV_FLAG.BASIC : 0);
         return 0;
@@ -496,6 +574,9 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
       case "opener": {
         if (!target) return false;
         const dd = dist(u, target);
+        // Rules 3.1.0: a gap-closer (Piston Charge, Shadowstep) is not a way to skip a ranged fighter's whole reach — it fires only once the
+        // dasher has walked into that reach (`openerReach` × the target's attack range), so the archer / caster always gets its window first.
+        if (eng && eng.openerReach > 0 && target.ranged && dd > target.cls.attack.range * eng.openerReach) return false;
         return dd > u.cls.attack.range * 1.4 && dd <= skill.range;
       }
       case "engage": {
@@ -667,6 +748,272 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     }
   };
 
+  // --- AI, rules 3.1.0+: ENGAGEMENT ---------------------------------------------------------------------------------------------------------------
+  // Fighters COMMIT: a basic attack is WINDUP → release → RECOVERY (ranged fighters plant for both — they never run and shoot at once), instant
+  // skills telegraph, and a ranged fighter's retreat is a short burst with a cooldown, slower than walking forward, that slides along the wall
+  // instead of into it. This whole function is reached only when the ruleset carries `combat.engagement`.
+  const graceTicks = eng ? ticksT0(eng.skillGraceMs) : 0;
+  const skillWindupTicks = eng ? ticksT0(eng.skillWindupMs) : 0;
+  const retreatMaxTicks = eng ? Math.max(1, ticksT0(eng.retreatMaxMs)) : 0;
+  const repositionTicks = eng ? ticksT0(eng.repositionCooldownMs) : 0;
+  /** Stamina refilled per non-retreating tick: a full refill takes the reposition cooldown. */
+  const retreatRefill = repositionTicks > 0 ? retreatMaxTicks / repositionTicks : retreatMaxTicks;
+
+  /** Releases a committed basic attack at its target — or whiffs it if the target died or got clear while it wound up. */
+  const releaseAttack = (u: Unit, tick: number, effects: Effect[], projectiles: Projectile[]): void => {
+    const atk = u.cls.attack;
+    const t = u.atkTarget >= 0 ? U(u.atkTarget) : null;
+    const reach = u.ranged ? atk.range * 1.15 : atk.range * 1.25;
+    if (!t || !t.alive || dist(u, t) > reach) {
+      u.attackCd = tick + 1; // whiffed: ready to commit again straight away
+      return;
+    }
+    const aspd = u.aspdMult * (u.st.aspdUntil > tick ? 1 + u.st.aspdBuff : 1);
+    // Release-to-release cadence = the attack interval: the windup is taken OUT of the wait, never added to it.
+    u.attackCd = tick + Math.max(1, toTicks((atk.intervalMs * T * u.intervalMult) / aspd) - u.windupTicks);
+    if (u.ranged) {
+      const travel = Math.max(1, Math.ceil(dist(u, t) / (atk.projectileSpeed / M) / dt));
+      projectiles.push({ arriveTick: tick + travel, from: u.i, to: t.i });
+      emit(tick, EV.ATTACK, u.i, t.i, travel, EV_FLAG.PROJECTILE | EV_FLAG.BASIC);
+    } else {
+      effects.push({ kind: "basic", from: u.i, to: t.i });
+      emit(tick, EV.ATTACK, u.i, t.i, 0, EV_FLAG.BASIC);
+    }
+  };
+
+  /** A retreat direction near the wall keeps only its component ALONG the wall (no grinding into it); null when cornered. */
+  const slideAlongWall = (u: Unit, dx: number, dy: number, margin: number): [number, number] | null => {
+    const cd = Math.sqrt(u.x * u.x + u.y * u.y);
+    const maxR = cs.arenaRadius - cs.unitRadius;
+    if (cd <= maxR - margin || cd < 1e-6) return [dx, dy];
+    const nx = u.x / cd;
+    const ny = u.y / cd;
+    const out = dx * nx + dy * ny;
+    if (out <= 0) return [dx, dy];
+    const tx = dx - out * nx;
+    const ty = dy - out * ny;
+    const tl = Math.sqrt(tx * tx + ty * ty);
+    return tl < 0.3 ? null : [tx / tl, ty / tl];
+  };
+
+  const decideEngaged = (u: Unit, tick: number, effects: Effect[], projectiles: Projectile[]) => {
+    const e = eng as NonNullable<typeof eng>;
+    u.moveX = 0;
+    u.moveY = 0;
+    u.retreating = false;
+    u.planted = true; // every early return below is a commitment (stunned, casting, winding up, releasing, recovering) — except "no target"
+    if (u.st.stunUntil > tick) {
+      u.atkPhase = 0; // a stun breaks the commitment (the attack never lands)
+      return;
+    }
+    if (u.cast) {
+      if (u.cast.endTick <= tick) {
+        effects.push({ kind: "skill", from: u.i, to: u.cast.target, skillIdx: u.cast.skillIdx });
+        u.cast = null;
+      }
+      return; // casting (or telegraphing an instant skill): committed, no movement
+    }
+
+    // Targeting (as before)
+    const taunter = u.st.tauntUntil > tick && u.st.tauntedBy >= 0 && U(u.st.tauntedBy).alive ? u.st.tauntedBy : -1;
+    if (taunter >= 0) u.target = taunter;
+    else if (u.atkPhase === 1 && u.atkTarget >= 0 && U(u.atkTarget).alive) u.target = u.atkTarget; // a wound-up attack keeps its target (and the hero keeps facing it)
+    else if (u.target < 0 || !U(u.target).alive || (tick + u.i) % cs.retargetTicks === 0) u.target = pickTarget(u);
+    if (u.target < 0) {
+      u.planted = false;
+      return;
+    }
+    const target = U(u.target);
+    const dd = dist(u, target);
+    const role: "melee" | "ranged" = u.ranged ? "ranged" : "melee";
+
+    // A committed basic attack runs to its end.
+    let moveMult = 1;
+    if (u.atkPhase === 1) {
+      if (tick < u.atkUntil) {
+        moveMult = e.windupMove[role];
+        if (moveMult <= 0) return;
+      } else {
+        releaseAttack(u, tick, effects, projectiles);
+        if (u.recoveryTicks > 0) {
+          u.atkPhase = 2;
+          u.atkUntil = tick + u.recoveryTicks;
+          moveMult = e.recoveryMove[role];
+          if (moveMult <= 0) return;
+        } else u.atkPhase = 0;
+      }
+    } else if (u.atkPhase === 2) {
+      if (tick >= u.atkUntil) u.atkPhase = 0;
+      else {
+        moveMult = e.recoveryMove[role];
+        if (moveMult <= 0) return;
+      }
+    }
+
+    if (u.atkPhase === 0) {
+      // Skills — never in the opening moments, and an instant skill telegraphs (the caster commits like a cast).
+      if (tick >= graceTicks) {
+        for (let s = 0; s < u.skills.length; s++) {
+          const skill = u.skills[s] as SkillDef;
+          if (!skillReady(u, s, tick)) continue;
+          if (!skillWantsToFire(u, skill, target)) continue;
+          u.skillCd[s] = tick + toTicks(skill.cooldownMs * T * (1 - u.cdr));
+          emit(tick, EV.SKILL, u.i, target.i, skillIndex(skill.id));
+          const castTicks = skill.castMs > 0 ? toTicksT(skill.castMs) : skillWindupTicks;
+          if (castTicks > 0) u.cast = { skillIdx: s, endTick: tick + castTicks, target: target.i };
+          else effects.push({ kind: "skill", from: u.i, to: target.i, skillIdx: s });
+          return;
+        }
+      }
+      // Basic attack: COMMIT (wind up). Ranged and melee alike stand still to wind up. A melee fighter does not start a swing at a RANGED target
+      // that is backing away unless it is well inside reach (`runnerReach`) — it keeps closing and strikes when the archer / caster plants to shoot.
+      // (Never tighter than the separation distance: fighters cannot get closer than that, so a stricter rule could never be met.)
+      const runnerReachDist = Math.max(u.cls.attack.range * e.runnerReach, cs.unitRadius * e.separation + 2);
+      const swingable = u.ranged || !(target.ranged && target.retreatedLastTick) || dd <= runnerReachDist;
+      if (dd <= u.cls.attack.range && u.attackCd <= tick && swingable) {
+        u.atkTarget = target.i;
+        if (u.windupTicks > 0) {
+          u.atkPhase = 1;
+          u.atkUntil = tick + u.windupTicks;
+          moveMult = e.windupMove[role];
+          if (moveMult <= 0) return;
+        } else {
+          releaseAttack(u, tick, effects, projectiles);
+          if (u.recoveryTicks > 0) {
+            u.atkPhase = 2;
+            u.atkUntil = tick + u.recoveryTicks;
+            moveMult = e.recoveryMove[role];
+            if (moveMult <= 0) return;
+          }
+        }
+      }
+    }
+
+    // Movement.
+    u.planted = false;
+    const tac = tacticOf(u);
+    const toward = (tx: number, ty: number): [number, number] => {
+      const vx = tx - u.x;
+      const vy = ty - u.y;
+      const l = Math.sqrt(vx * vx + vy * vy) || 1;
+      return [vx / l, vy / l];
+    };
+    const away = (from: Unit): [number, number] => {
+      const ax = u.x - from.x;
+      const ay = u.y - from.y;
+      const al = Math.sqrt(ax * ax + ay * ay) || 1;
+      return [ax / al, ay / al];
+    };
+    const hurt = u.hp / u.maxHp < tac.retreatHp;
+    // TAUNTED: the taunter makes this fighter fight on its terms — no backing away while the taunt lasts (the Tank's answer to being kited).
+    const taunted = taunter >= 0;
+    let threat: Unit | null = null;
+    if (taunted) threat = null;
+    else if (hurt) {
+      const threats = enemiesWithin(u, 170);
+      if (threats.length > 0) threat = threats.reduce((a, b) => (dist(u, a) <= dist(u, b) ? a : b));
+    } else if (u.ranged && u.dangerRange > 0 && dd < u.dangerRange) threat = target;
+
+    let dx = 0;
+    let dy = 0;
+    let speedMult = moveMult;
+    let stepCap = Infinity;
+    if (threat && !u.retreatLocked && u.retreatBudget >= 1) {
+      const dir = slideAlongWall(u, ...away(threat), e.wallMargin);
+      if (dir) {
+        [dx, dy] = dir;
+        speedMult *= e.backpedal;
+        u.retreating = true;
+        u.retreatBudget -= 1;
+        if (u.retreatBudget < 1) u.retreatLocked = true;
+      }
+    }
+    // Not backing away — no threat, out of retreat stamina, or cornered: FIGHT. A ranged fighter holds or closes to its range; a melee fighter
+    // closes in (a hurt fighter that cannot get away commits rather than standing still).
+    if (!u.retreating) {
+      if (u.ranged) {
+        const preferred = u.preferredRange * (1 - tac.engageBonus * 0.3);
+        if (dd > preferred) [dx, dy] = toward(target.x, target.y);
+      } else {
+        const stand = Math.max(u.cls.attack.range - 6, cs.unitRadius * 2);
+        if (dd > u.cls.attack.range - 6) {
+          // Gap-close: chase where the target is GOING (its last step, up to `leadTicks` ahead — no further than this chaser can cover), not
+          // where it was: a backpedal or a slide along the wall is cut off instead of trailed forever.
+          const lead = e.leadTicks > 0 ? Math.min(e.leadTicks, dd / Math.max(1e-6, u.moveSpeed * dt)) : 0;
+          const tx = target.x + (target.x - target.lastX) * lead;
+          const ty = target.y + (target.y - target.lastY) * lead;
+          const pd = Math.sqrt((u.x - tx) ** 2 + (u.y - ty) ** 2) || 1;
+          // Close to striking range — fanning out around a crowded target instead of stacking on the same side of it.
+          let ax = (u.x - tx) / pd;
+          let ay = (u.y - ty) / pd;
+          if (e.flank > 0 && !target.retreatedLastTick && dd < stand * 3) {
+            // Engage from a SIDE (left / right of the target, the way the fighters face), not from above or below it: blows read, and two
+            // attackers on one target stand on OPPOSITE sides instead of stacking. Only on the final approach to a target that stands its ground
+            // (a chase after a fleeing target stays a straight line). The side already held by a melee attacker that is closer to the
+            // target than this one is left to it (the closer one never yields, so nobody swaps sides back and forth).
+            let side = ax > 0 ? 1 : ax < 0 ? -1 : u.i % 2 === 0 ? 1 : -1;
+            let held = 0;
+            let free = true;
+            for (const o of units) {
+              if (!o.alive || o.i === u.i || o.i === target.i || o.ranged || o.target !== target.i) continue;
+              const od = Math.sqrt((o.x - target.x) ** 2 + (o.y - target.y) ** 2);
+              if (od > stand * 1.8) continue;
+              if ((o.x - target.x) * side > 0) {
+                if (od < dd) held++;
+              } else free = false;
+            }
+            if (held > 0 && free) side = -side;
+            ax += side * e.flank;
+            const fl = Math.sqrt(ax * ax + ay * ay) || 1;
+            ax /= fl;
+            ay /= fl;
+          }
+          if (e.surround > 0) {
+            for (const o of units) {
+              if (!o.alive || o.i === u.i || o.i === target.i) continue;
+              const od = Math.sqrt((o.x - target.x) ** 2 + (o.y - target.y) ** 2);
+              if (od > stand * 1.8 || od < 1e-6) continue;
+              const ox = (o.x - target.x) / od;
+              const oy = (o.y - target.y) / od;
+              const dot = ax * ox + ay * oy;
+              if (dot <= 0.6) continue;
+              let px = ax - dot * ox;
+              let py = ay - dot * oy;
+              const pl = Math.sqrt(px * px + py * py);
+              if (pl < 1e-3) {
+                px = u.i % 2 === 0 ? -oy : oy; // exactly behind another attacker: a deterministic side
+                py = u.i % 2 === 0 ? ox : -ox;
+              } else {
+                px /= pl;
+                py /= pl;
+              }
+              const k = e.surround * ((dot - 0.6) / 0.4);
+              ax += px * k;
+              ay += py * k;
+              const al = Math.sqrt(ax * ax + ay * ay) || 1;
+              ax /= al;
+              ay /= al;
+            }
+          }
+          const gx = tx + ax * stand;
+          const gy = ty + ay * stand;
+          [dx, dy] = toward(gx, gy);
+          stepCap = Math.sqrt((gx - u.x) ** 2 + (gy - u.y) ** 2);
+          // Pursuit: the target was backing away last tick — close the gap (only while it runs). Read from the start-of-tick snapshot, so slot order
+          // never decides who gets it.
+          if (target.retreatedLastTick) speedMult *= u.chaseMult;
+        }
+      }
+    }
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0 && speedMult > 0) {
+      const speed = u.moveSpeed * speedMult * (u.st.slowUntil > tick ? 1 - u.st.slowAmt : 1) * (u.st.moveUntil > tick ? 1 + u.st.moveBuff : 1) * dt;
+      const step = Math.min(speed, stepCap);
+      u.moveX = (dx / len) * step;
+      u.moveY = (dy / len) * step;
+    }
+  };
+
   // --- main loop ----------------------------------------------------------------------
   let lastRingEmitted = Math.round(cs.arenaRadius); // LEGACY ring event bookkeeping (unused by current rules)
   let endedBy: "LAST_STANDING" | "TIME_LIMIT" = "TIME_LIMIT";
@@ -678,11 +1025,28 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
     const effects: Effect[] = [];
 
     // 1. decisions (read-only w.r.t. positions/hp)
-    for (const u of units) if (u.alive) decide(u, tick, effects, projectiles);
+    if (eng) {
+      for (const u of units) u.retreatedLastTick = u.retreating;
+      for (const u of units) if (u.alive) decideEngaged(u, tick, effects, projectiles);
+      // Retreat stamina refills on every tick a fighter is NOT backing away (planted, casting, stunned, walking, fighting) — more and more slowly
+      // once overtime begins (fatigue), so a late duel cannot be kited out to the clock.
+      const otMs = tick * tickMs - cs.overtime.startMs;
+      const fatigue = eng.fatigueMs > 0 && otMs > 0 ? Math.max(0.2, 1 - otMs / eng.fatigueMs) : 1;
+      for (const u of units) {
+        if (!u.alive || u.retreating) continue;
+        // Late-fight pressure: in overtime, while an enemy that is CHASING this fighter (targeting it) is within reach, the legs do not recover —
+        // a final duel cannot be kited out. (The opening brawl is untouched: escaping to open space still works there.)
+        if (otMs > 0 && eng.safeRange > 0 && units.some((o) => o.alive && o.i !== u.i && o.target === u.i && dist(u, o) <= eng.safeRange)) continue;
+        u.retreatBudget = Math.min(retreatMaxTicks, u.retreatBudget + retreatRefill * fatigue);
+        if (u.retreatLocked && u.retreatBudget >= retreatMaxTicks * 0.5) u.retreatLocked = false;
+      }
+    } else for (const u of units) if (u.alive) decide(u, tick, effects, projectiles);
 
     // 2. movement + separation
     for (const u of units) {
       if (!u.alive) continue;
+      u.lastX = u.x;
+      u.lastY = u.y;
       u.x += u.moveX;
       u.y += u.moveY;
     }
@@ -695,15 +1059,22 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
         const sx = ub.x - ua.x;
         const sy = ub.y - ua.y;
         const sd = Math.sqrt(sx * sx + sy * sy);
-        const minD = cs.unitRadius * 1.9;
+        const minD = cs.unitRadius * (eng ? eng.separation : 1.9);
         if (sd < minD) {
-          const push = (minD - sd) / 2;
           const nx = sd > 0.0001 ? sx / sd : 1;
           const ny = sd > 0.0001 ? sy / sd : 0;
-          ua.x -= nx * push;
-          ua.y -= ny * push;
-          ub.x += nx * push;
-          ub.y += ny * push;
+          // Rules 3.1.0: a PLANTED fighter holds its ground — the one that walked (or dashed) into it takes the whole push. A fighter committed to an
+          // attack (aiming, releasing, recovering) holds firmer than one that is casting or stunned; equals split the push, as before.
+          const holdA = eng === undefined || !ua.planted ? 0 : ua.atkPhase !== 0 ? 2 : 1;
+          const holdB = eng === undefined || !ub.planted ? 0 : ub.atkPhase !== 0 ? 2 : 1;
+          const anchorA = holdA > holdB;
+          const anchorB = holdB > holdA;
+          const pushA = anchorA ? 0 : anchorB ? minD - sd : (minD - sd) / 2;
+          const pushB = anchorB ? 0 : anchorA ? minD - sd : (minD - sd) / 2;
+          ua.x -= nx * pushA;
+          ua.y -= ny * pushA;
+          ub.x += nx * pushB;
+          ub.y += ny * pushB;
         }
       }
     }
@@ -755,7 +1126,7 @@ export function simulateBattle(input: BattleInput): BattleOutcome {
       }
       for (const t of u.cls.traits) {
         if (t.type === "regen_pct" && u.hp > 0) {
-          u.regenAcc += u.maxHp * (t.perSec / T) * dt;
+          u.regenAcc += u.maxHp * (t.perSec / T) * dt * (eng ? healMult(tick) : 1);
           if (u.regenAcc >= 1) {
             const whole = Math.floor(u.regenAcc);
             u.regenAcc -= whole;

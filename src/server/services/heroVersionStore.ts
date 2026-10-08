@@ -52,7 +52,7 @@ export function rowToState(r: HeroVersionRow): HeroVersionState {
     appearanceSeed: r.appearance_seed,
     appearance: r.appearance,
     sprite: r.sprite,
-    render: { spriteSet: r.render?.spriteSet ?? "clank-dev-v1" },
+    render: { spriteSet: r.render?.spriteSet ?? "clank-dev-v1" }, // a row written before render info existed was drawn with v1 (history stays true)
   };
 }
 

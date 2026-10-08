@@ -38,7 +38,11 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next-local/types/**/*.ts",
-    ".next-local/dev/types/**/*.ts"
+    ".next-local/dev/types/**/*.ts",
+    ".next-arena-qa/types/**/*.ts",
+    ".next-arena-qa/dev/types/**/*.ts",
+    ".next-hero-qa/types/**/*.ts",
+    ".next-hero-qa/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

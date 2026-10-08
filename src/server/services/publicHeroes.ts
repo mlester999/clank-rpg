@@ -167,7 +167,8 @@ async function cardOf(q: Queryable, hero: ProfileRow, ctx: { classes: readonly C
   const classDef = fighter ? ctx.classes.find((c) => c.id === fighter.classId) : undefined;
   if (!fighter || !classDef) return null;
   const season = await seasonOf(q, hero.id, ctx.settings);
-  return toHeroCardModel({ publicId: hero.public_id, name: hero.name, fighter, classDef, seasonRank: season?.season.rank ?? null });
+  const card = toHeroCardModel({ publicId: hero.public_id, name: hero.name, fighter, classDef, seasonRank: season?.season.rank ?? null });
+  return { ...card, look: { ...card.look, spriteSet: ctx.settings.visuals.spriteSet } };
 }
 
 export async function getPublicHero(q: Queryable, publicId: string, ctx: { allowDemo: boolean; classes: readonly ClassDef[]; settings: GameSettings }): Promise<PublicHeroProfile | null> {

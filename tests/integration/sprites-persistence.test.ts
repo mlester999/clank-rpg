@@ -176,7 +176,7 @@ describe("settings and flags for the new features", () => {
   it("picks and visuals are new, validated, admin-editable settings with safe defaults", async () => {
     const s = await loadSettings(db);
     expect(s.picks).toEqual({ rewardGold: 2 });
-    expect(s.visuals).toEqual({ spriteSet: "clank-dev-v1", disabledCosmetics: [] });
+    expect(s.visuals).toEqual({ spriteSet: "clank-dev-v2", disabledCosmetics: [] }); // hero renderer v2
     await expect(saveSetting(db, "picks", { rewardGold: 5000 }, "t")).rejects.toThrow(); // out of range
     await expect(saveSetting(db, "picks", { rewardGold: 5, extra: true }, "t")).rejects.toThrow(); // strict
     await expect(saveSetting(db, "visuals", { spriteSet: "../../evil", disabledCosmetics: [] }, "t")).rejects.toThrow(); // path-safe ids only
@@ -194,6 +194,6 @@ describe("settings and flags for the new features", () => {
     await db.exec("delete from public.game_settings where key in ('picks', 'visuals')");
     const s = await loadSettings(db);
     expect(s.picks.rewardGold).toBe(2);
-    expect(s.visuals.spriteSet).toBe("clank-dev-v1");
+    expect(s.visuals.spriteSet).toBe("clank-dev-v2");
   });
 });

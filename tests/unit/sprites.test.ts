@@ -5,7 +5,7 @@ import { rollAppearance, type AppearanceParts } from "@/domain/character/appeara
 import { DEFAULT_CLASSES } from "@/domain/content";
 import { LOOK_BODIES, LOOK_HEADGEAR, LOOK_WEAPONS } from "@/domain/rules";
 import { COSMETIC_ITEMS, CATALOG_VERSION, fitsClass, getCosmetic, isUsable } from "@/domain/sprites/catalog";
-import { applyOverrides, classDefaults, deriveSpriteConfig, resolvePalette, resolveSpriteConfig, sanitizeSpriteConfig, spriteKey, type SpriteConfig } from "@/domain/sprites/config";
+import { applyOverrides, classDefaults, CLOTH_TONES, deriveSpriteConfig, METAL_TONES, resolvePalette, resolveSpriteConfig, sanitizeSpriteConfig, spriteKey, type SpriteConfig } from "@/domain/sprites/config";
 import { frameAt, resolveClip, selectPlayback, type AnimInput } from "@/domain/sprites/animator";
 import { blockSize, cellRect, clipDurationMs, resolveDirection } from "@/domain/sprites/geometry";
 import { planLayers } from "@/domain/sprites/plan";
@@ -194,7 +194,11 @@ describe("resolving, sanitising and customising", () => {
 
   it("palette derives from the class colours + the hero's own picks; rarity tints come from the shared rarity palette", () => {
     const p = resolvePalette(base, warrior.look.colors, "LEGENDARY");
-    expect(Object.keys(p).sort()).toEqual(["accent", "cape", "hair", "primary", "rarity", "secondary", "skin"]);
+    expect(Object.keys(p).sort()).toEqual(["accent", "cape", "cloth", "hair", "metal", "primary", "rarity", "secondary", "skin"]);
+    // the v2 armour metal and second cloth colour are picked from curated lists by the never-rerolled look, deterministically
+    expect(resolvePalette(base, warrior.look.colors, "LEGENDARY")).toEqual(p);
+    expect([...METAL_TONES]).toContain(p.metal);
+    expect([...CLOTH_TONES]).toContain(p.cloth);
     expect(p.rarity).toBe("#ffb020");
     expect(resolvePalette(base, warrior.look.colors, "NOPE").rarity).toBe("#9aa4b2"); // unknown rarity degrades to COMMON grey
   });
@@ -354,8 +358,23 @@ describe("animation selection", () => {
     expect(sel({ sinceAttackMs: 100, sinceSkillMs: 40 }).state).toBe("SKILL");
     expect(sel({ sinceAttackMs: 40, sinceSkillMs: 100 }).state).toBe("ATTACK");
     expect(sel({ sinceAttackMs: 40, sinceHurtMs: 10, moving: true }).state).toBe("ATTACK"); // trading blows does not interrupt a swing
-    expect(sel({ sinceHurtMs: 10, moving: true }).state).toBe("HIT");
+    expect(sel({ sinceHurtMs: 10 }).state).toBe("HIT"); // a hero standing its ground recoils
+    expect(sel({ sinceHurtMs: 10, moving: true }).state).toBe("MOVE"); // …one hit on the run keeps running (the flash + recoil show the hit)
+    expect(sel({ sinceHurtMs: 10, moving: true, stunned: true }).state).toBe("HIT");
     expect(sel({ moving: true, stunned: true }).state).toBe("IDLE"); // stunned heroes do not walk
+  });
+
+  it("no sliding feet: once the blow has landed, a hero that moves again runs (the follow-through is cut); before impact the swing plays", () => {
+    const slash = m.clips.attack_slash!;
+    const impactMs = ((slash.impact! + 1) / slash.fps) * 1000;
+    expect(sel({ sinceAttackMs: impactMs - 5, moving: true }).state).toBe("ATTACK"); // the anticipation and the blow itself always show
+    expect(sel({ sinceAttackMs: impactMs + 5, moving: true }).state).toBe("MOVE");
+    expect(sel({ sinceAttackMs: impactMs + 5 }).state).toBe("ATTACK"); // standing: the full follow-through
+    const withRelease = makeManifest({ clips: { ...m.clips, skill: { ...m.clips.skill!, impact: 3 } } });
+    const skillImpactMs = ((3 + 1) / withRelease.clips.skill!.fps) * 1000;
+    expect(selectPlayback({ ...calm, sinceSkillMs: skillImpactMs + 5, moving: true }, withRelease, "attack_slash").state).toBe("MOVE");
+    expect(selectPlayback({ ...calm, sinceSkillMs: skillImpactMs + 5 }, withRelease, "attack_slash").state).toBe("SKILL");
+    expect(sel({ sinceSkillMs: 300, moving: true }).state).toBe("SKILL"); // a skill clip without a release frame is never cut
   });
 
   it("one-shots finish and hold; loops wrap", () => {

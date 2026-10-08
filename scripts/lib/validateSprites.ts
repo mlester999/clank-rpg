@@ -5,7 +5,7 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 import { COSMETIC_ITEMS } from "../../src/domain/sprites/catalog";
 import { blockSize, directionBlocks } from "../../src/domain/sprites/geometry";
-import { safeParseManifest, type SpriteManifest } from "../../src/domain/sprites/spec";
+import { ATTACK_CLIPS, decodeCells, safeParseManifest, type SpriteManifest } from "../../src/domain/sprites/spec";
 
 /**
  * Acceptance check for a sprite set (the shipped dev set AND any production pack):
@@ -90,18 +90,53 @@ export async function validateSpriteSet(setId: string, opts: { strict?: boolean;
     return { edge, opaque };
   };
   for (const [id, layer] of Object.entries(m.layers)) {
-    const a = atlas[layer.image];
-    if (!a) continue;
-    const w = layer.loop ? layer.loop.frames * fw : bs.w;
-    const h = layer.loop ? fh : bs.h;
-    if (layer.x + w > a.w || layer.y + h > a.h) {
-      errors.push(`layer "${id}" block (${layer.x},${layer.y} ${w}×${h}) does not fit atlas "${layer.image}" (${a.w}×${a.h})`);
+    const mustHaveArt = id === "body.base" || /^outfit\.[a-z]+$/.test(id); // body and every outfit torso must have art in every cell
+    if (layer.cells) {
+      // packed: every row's strip lies inside its atlas, and its trimmed rectangle keeps 1 px clear of the frame edge (the outline needs it)
+      for (const [rig, rows] of Object.entries(layer.cells)) {
+        for (const [clip, def] of Object.entries(m.clips)) {
+          if (!def) continue;
+          const r = rows[def.row];
+          const decoded = r ? decodeCells(r[1]) : [];
+          if (!r || decoded.every((c) => c[2] === 0)) {
+            // a skeleton plays only its own class's attack clip: the other attack rows are legitimately absent
+            if (mustHaveArt && !(ATTACK_CLIPS as readonly string[]).includes(clip)) empty.push(`${id} ${rig} ${clip}`);
+            continue;
+          }
+          const img = r[0];
+          const a = atlas[img];
+          cells += def.frames;
+          if (!a) continue;
+          if (decoded.length !== def.frames) errors.push(`layer "${id}" (${rig} ${clip}) has ${decoded.length} cells for ${def.frames} frames`);
+          decoded.forEach(([x, y, w, h, ox, oy], f) => {
+            if (w === 0) {
+              if (mustHaveArt && !(ATTACK_CLIPS as readonly string[]).includes(clip)) empty.push(`${id} ${rig} ${clip} f${f}`);
+              return;
+            }
+            if (x + w > a.w || y + h > a.h) {
+              errors.push(`layer "${id}" (${rig} ${clip} f${f}) cell does not fit atlas "${img}" (${a.w}×${a.h})`);
+              return;
+            }
+            const edge = `${ox === 0 ? "L" : ""}${ox + w >= fw ? "R" : ""}${oy === 0 ? "T" : ""}${oy + h >= fh ? "B" : ""}`;
+            if (edge) clipped.push(`${id} ${rig} ${clip} f${f} [${edge}]`);
+          });
+        }
+      }
       continue;
     }
-    const mustHaveArt = id === "body.base" || /^outfit\.[a-z]+$/.test(id); // body and every outfit torso must have art in every cell
+    const a = layer.image !== undefined ? atlas[layer.image] : undefined;
+    if (!a || layer.x === undefined || layer.y === undefined) continue;
+    const lx = layer.x;
+    const ly = layer.y;
+    const w = layer.loop ? layer.loop.frames * fw : bs.w;
+    const h = layer.loop ? fh : bs.h;
+    if (lx + w > a.w || ly + h > a.h) {
+      errors.push(`layer "${id}" block (${lx},${ly} ${w}×${h}) does not fit atlas "${layer.image}" (${a.w}×${a.h})`);
+      continue;
+    }
     if (layer.loop) {
       for (let f = 0; f < layer.loop.frames; f++) {
-        const s = cellStats(a, layer.x + f * fw, layer.y);
+        const s = cellStats(a, lx + f * fw, ly);
         cells++;
         if (s.edge) clipped.push(`${id} loop f${f} [${s.edge}]`);
       }
@@ -111,7 +146,7 @@ export async function validateSpriteSet(setId: string, opts: { strict?: boolean;
       for (const [clip, def] of Object.entries(m.clips)) {
         if (!def) continue;
         for (let f = 0; f < def.frames; f++) {
-          const s = cellStats(a, layer.x + f * fw, layer.y + (d * (bs.h / fh / dirs) + def.row) * fh);
+          const s = cellStats(a, lx + f * fw, ly + (d * (bs.h / fh / dirs) + def.row) * fh);
           cells++;
           if (s.edge) clipped.push(`${id} ${clip} f${f}${dirs > 1 ? ` dir${d}` : ""} [${s.edge}]`);
           if (s.opaque === 0 && mustHaveArt) empty.push(`${id} ${clip} f${f}`);

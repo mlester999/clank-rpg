@@ -5,19 +5,36 @@ import type { BattleDto, ClassVisual, FighterDto, ReplayDto } from "@/lib/dto";
 import { drawHero, HERO_HEIGHT, type HeroLook, type HeroPose } from "@/components/hero/drawHero";
 import { lookFor } from "@/components/hero/look";
 import { getHeroSheet, type HeroSheet, type SpriteSource } from "@/components/sprites/compositor";
-import { drawHeroSprite, playbackFor } from "@/components/sprites/draw";
-import type { AnimInput } from "@/domain/sprites/animator";
+import { drawHeroSprite, playbackFor, type SpriteDraw } from "@/components/sprites/draw";
+import { resolveClip, type AnimInput } from "@/domain/sprites/animator";
 
 import { rarityVisual } from "@/domain/hero/rarityVisuals";
 
-import { EventCursor } from "./eventCursor";
-import { drawRarityAura, drawRarityGround, drawRarityMark, drawRarityParticles } from "./rarityFx";
+import { actionTimes, castTicks, impactLeadMs, sinceClipStart, type ActionTimes } from "./actionClock";
+import { ArenaPlayback, isPreFight, type PlaybackFrame, type StageTiming } from "./playback";
+import { updateOffsets } from "./spacing";
+import type { PhaseNow } from "./phase";
+import { drawRarityMark } from "./rarityFx";
 import { TALL, WIDE, drawBackground, project, type Layout } from "./scene";
 
 /**
  * Canvas renderer for the Global Arena. It is a pure PLAYER of server-computed data:
  * positions, HP and every event come from the verified replay; the browser never decides who
  * wins. Fixed camera, all eight fighters always on screen.
+ *
+ * PRESENTATION RULES (hero renderer v2):
+ *   · No generic circles around the bodies. A hero stands on ONE small contact shadow; rarity shows on its gear (the sprite set) and on its name
+ *     plate; a status shows ON the hero (a shield shimmers across the hero's own silhouette, a slow frosts the feet, a buff rises in small
+ *     chevrons, a stun circles stars over the head, a taunt marks it) — never as a ring.
+ *   · A blow lands on screen when the server says it lands: the attack / cast clip is started early enough that its impact frame is shown at the
+ *     event (actionClock.ts). Shots leave from the weapon (the sprite set's muzzle), never from the middle of the body.
+ *   · Skills read by shape: a cleave sweeps, a nova cracks the floor with shards, a taunt shouts, a burst shatters, a heal rises, a dash leaves
+ *     afterimages, a knock-out falls and raises dust.
+ *   · Name plates never cover a hero: each hangs above its own hero's real head (a tall hat included), and in a crowd they step aside or
+ *     shrink to an HP bar instead of overlapping (on a phone-sized stage the fight shows HP bars only). Damage numbers rise from above the
+ *     plate, beside the head — never across a name.
+ *   · No body-sized shapes: a blade leaves a thin trail along its arc (never a filled half-disc), a hit is a short light flash and a few
+ *     sparks, a smite is a short shaft that drops onto the head.
  */
 
 export type ArenaPhase = "IDLE" | "INTRO" | "COUNTDOWN" | "COMBAT" | "VICTORY" | "RESULTS" | "DONE";
@@ -31,6 +48,8 @@ export interface RenderClock {
   combatMs: number;
   winnerSlot: number | null;
 }
+
+type PlateMode = "full" | "compact" | "bar";
 
 interface UnitState {
   slot: number;
@@ -52,14 +71,46 @@ interface UnitState {
   deadAt: number;
   textAt: number;
   facing: 1 | -1;
+  /** The way the hero faced at spawn (toward the centre) — restored whenever the stage resets to the spawn state. */
+  spawnFacing: 1 | -1;
   moving: boolean;
+  /** Horizontal speed (world units / s): a hero moving against the way it faces is backpedalling. */
+  vx: number;
   landed: boolean;
+  /** The side the last blow came from (+1: from the left, the hero recoils to the right). */
+  hurtDir: 1 | -1;
+  /** A dash: where it started and when (afterimages). */
+  dashAt: number;
+  dashFrom: [number, number];
+  /** A shield was just raised (a brighter shimmer). */
+  shieldAt: number;
+  /** How many numbers have popped over this hero (they alternate sides). */
+  numbers: number;
+  /** Presentation-only horizontal nudge (world units) that keeps two sprites in contact from merging into one figure (spacing.ts). */
+  ox: number;
+  /** The run cycle's own clock: it advances with the ground the hero actually covers (a slow step is a walk, a sprint a run — no sliding feet). */
+  moveClock: number;
+  /** Screen y of the top of this hero's name plate as last drawn (NaN: none) — numbers rise from above it, never across the name. */
+  plateTop: number;
+  /** The last label shown at the feet, and its row (labels close together stack instead of overlapping). */
+  feetAt: number;
+  feetRow: number;
+  /** Whom the last blow / shot was aimed at, and until when the hero keeps facing it (its follow-through never turns away from the target). */
+  faceSlot: number;
+  faceUntil: number;
+  /** The last white hit flash (a short pop; a hero hit by several attackers is not kept white). */
+  flashAt: number;
   /** Composed spritesheet hero (null until a sprite set is ready, or when the set cannot draw this hero). */
   sheet: HeroSheet | null;
   sheetSrc: SpriteSource | null;
   /** Live spectator stats, accumulated from the verified event log as playback passes each event. */
   damage: number;
   kills: number;
+  /** Name plate: eased lift (to step aside in a crowd) and density mode, with hysteresis so plates never flicker between modes. */
+  plateLift: number;
+  plateMode: PlateMode;
+  plateWant: PlateMode;
+  plateWantSince: number;
 }
 
 interface Fx {
@@ -85,8 +136,27 @@ export interface ArenaEventOut {
   killer: number | null;
 }
 
+interface PlateRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 const easeOutBack = (t: number) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+/**
+ * How tall a hero is drawn on the stage (hero units; the vector hero is authored 104 tall). Well under the authored height: eight heroes share
+ * one floor, a melee pair in contact must still read as two figures, and the floor must stay visible around them (≈ 2× the sprite's own pixels
+ * on a desktop stage — the class reads from the silhouette, not from size).
+ */
+const STAGE_HERO_HEIGHT = 84;
+const STAGE_K = STAGE_HERO_HEIGHT / HERO_HEIGHT;
+/** Mouth / chest heights in hero units (feet at 0). */
+const MOUTH_Y = 84 * STAGE_K;
+const CHEST_Y = 50 * STAGE_K;
+/** A name plate hangs this far above the top of its hero (hero units). */
+const PLATE_GAP = 8;
 
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -98,16 +168,18 @@ export class ArenaRenderer {
   private units: UnitState[] = [];
   private fx: Fx[] = [];
   private battleId: string | null = null;
+  private battle: BattleDto | null = null;
   private replay: ReplayDto | null = null;
-  private readonly cursor = new EventCursor();
+  /** Per fighter, when its blows and casts happen (ms after the bell) — the sprite clips are timed to them. */
+  private times = new Map<number, ActionTimes>();
+  /** What the stage shows at each instant — the pure, server-derived part (spawn state before the bell, the verified replay after). */
+  private readonly playback = new ArenaPlayback();
   private classes: Record<string, ClassVisual> = {};
   private fontFamily = "sans-serif";
   private displayFont = "sans-serif";
   private R = 300;
   private reducedMotion = false;
   private sprites: SpriteSource | null = null;
-  private statIdx = 0;
-  private lastStatMs = 0;
   onEvent: ((e: ArenaEventOut) => void) | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -125,7 +197,9 @@ export class ArenaRenderer {
     const next = cssW / Math.max(1, cssH) < 1.25 ? TALL : WIDE;
     this.cssW = cssW;
     this.cssH = cssH;
-    this.dpr = Math.min(dpr, 2.5);
+    // Fill-rate, not script, is what a phone pays for (profiled: ~6 % of a throttled frame is our code, ~40 % is the browser filling and
+    // compositing the canvas). A phone-sized stage is capped at 2× — the pixel art stays crisp — instead of 2.5–3×.
+    this.dpr = Math.min(dpr, cssW < 480 ? 2 : 2.5);
     this.canvas.width = Math.round(cssW * this.dpr);
     this.canvas.height = Math.round(cssH * this.dpr);
     this.layout = next;
@@ -143,47 +217,23 @@ export class ArenaRenderer {
   /** Install (or clear) the sprite set. Until one is installed, heroes draw with the vector fallback. */
   setSprites(src: SpriteSource | null): void {
     this.sprites = src;
+    this.requestPages();
   }
 
-  /**
-   * Accumulates damage dealt / eliminations as playback passes each event. Independent of the
-   * visual-effect cursor (which may skip old events when a tab was asleep), so totals stay exact.
-   */
-  private trackStats(clock: RenderClock): void {
-    const r = this.replay;
-    if (!r || (clock.phase !== "COMBAT" && clock.phase !== "VICTORY" && clock.phase !== "RESULTS" && clock.phase !== "DONE")) return;
-    if (clock.combatMs < this.lastStatMs) {
-      this.statIdx = 0;
-      for (const u of this.units) {
-        u.damage = 0;
-        u.kills = 0;
-      }
-    }
-    this.lastStatMs = clock.combatMs;
-    while (this.statIdx < r.events.length) {
-      const ev = r.events[this.statIdx] as [number, number, number, number, number, number];
-      if (ev[0] * r.tickMs > clock.combatMs) break;
-      this.statIdx++;
-      if (ev[1] === EV.HIT) {
-        const a = this.units.find((u) => u.slot === ev[2]);
-        if (a) a.damage += ev[4];
-      } else if (ev[1] === EV.ELIM && ev[3] >= 0) {
-        const k = this.units.find((u) => u.slot === ev[3]);
-        if (k) k.kills++;
-      }
-    }
+  /** Asks a lazily loaded set for the atlas pages of the heroes of this battle as soon as both are known — long before the bell. */
+  private requestPages(): void {
+    for (const u of this.units) this.sheetFor(u)?.atlasStatus();
   }
 
   /** Install (or clear) the battle being shown. Resets animation state when the battle changes. */
   setBattle(battle: BattleDto | null, replay: ReplayDto | null): void {
     const id = battle?.id ?? null;
+    this.battle = battle;
     if (id !== this.battleId) {
       this.battleId = id;
       this.fx = [];
-      this.cursor.reset();
       this.units = [];
-      this.statIdx = 0;
-      this.lastStatMs = 0;
+      this.times = new Map();
       if (battle) {
         this.R = 300;
         this.units = battle.fighters
@@ -193,23 +243,25 @@ export class ArenaRenderer {
             const slot = f.slot ?? i;
             const visual = this.classes[f.classId];
             const sp = f.startPosition ?? [0, 0];
+            const facing = (sp[0] > 0 ? -1 : 1) as 1 | -1;
             return {
               slot, fighter: f, look: lookFor(f.appearance, visual), visual, x: sp[0], y: sp[1],
               hp: f.maxHp ?? 1, maxHp: f.maxHp ?? 1, hpShown: f.maxHp ?? 1, hpTrail: f.maxHp ?? 1,
               alive: true, flags: FRAME_FLAG.ALIVE, target: 0, attackAt: -1e9, castAt: -1e9, hurtAt: -1e9, deadAt: -1, textAt: -1e9,
-              facing: (sp[0] > 0 ? -1 : 1) as 1 | -1, moving: false, landed: false,
-              sheet: null, sheetSrc: null, damage: 0, kills: 0,
-            };
+              facing, spawnFacing: facing, moving: false, vx: 0, landed: false, hurtDir: 1, dashAt: -1e9, dashFrom: [sp[0], sp[1]], shieldAt: -1e9, numbers: 0, ox: 0, moveClock: slot * 137, plateTop: Number.NaN, feetAt: -1e9, feetRow: 0, faceSlot: -1, faceUntil: -1e9, flashAt: -1e9,
+              sheet: null, sheetSrc: null, damage: 0, kills: 0, plateLift: 0, plateMode: "full", plateWant: "full", plateWantSince: 0,
+            } satisfies UnitState;
           });
+        this.requestPages();
       }
     }
     if (replay && replay !== this.replay) {
       this.replay = replay;
       this.R = replay.combat.arenaRadius;
-      this.cursor.reset();
-      this.statIdx = 0;
+      this.times = replay.battleId === id ? actionTimes(replay) : new Map();
     } else if (!replay) {
       this.replay = null;
+      this.times = new Map();
     }
   }
 
@@ -228,61 +280,82 @@ export class ArenaRenderer {
     return c;
   }
 
+  /** A fighter's position at a replay tick (the verified frames), or null when the replay doesn't have it. */
+  private positionAt(slot: number, tick: number): [number, number] | null {
+    const r = this.replay;
+    const n = this.units.length;
+    if (!r || r.battleId !== this.battleId || tick < 0 || n === 0) return null;
+    const o = (tick * n + slot) * r.stride;
+    if (o + 1 >= r.frames.length) return null;
+    return [(r.frames[o] as number) / 10, (r.frames[o + 1] as number) / 10];
+  }
+
   private worldToScreen(wx: number, wy: number) {
     return project(this.layout, wx, wy, this.R);
   }
 
+  /** Where a hero is DRAWN: its server position plus the presentation nudge (spacing.ts). */
+  private unitScreen(u: UnitState) {
+    return project(this.layout, u.x + u.ox, u.y, this.R);
+  }
+
   private pos(slot: number) {
     const u = this.units.find((x) => x.slot === slot);
-    return u ? { u, ...this.worldToScreen(u.x, u.y) } : null;
+    return u ? { u, ...this.unitScreen(u) } : null;
   }
 
   // ---------------------------------------------------------------- simulation playback
-  private frameState(combatMs: number) {
-    const r = this.replay;
-    if (!r) return null;
-    const n = this.units.length;
-    const tf = clamp(combatMs / r.tickMs, 0, r.ticks);
-    const i0 = Math.floor(tf);
-    const i1 = Math.min(i0 + 1, r.ticks);
-    return { r, n, i0, i1, a: tf - i0 };
-  }
-
-  private updateUnits(clock: RenderClock, dtMs: number): void {
-    const fs = this.frameState(clock.combatMs);
-    const playing = fs && (clock.phase === "COMBAT" || clock.phase === "VICTORY" || clock.phase === "RESULTS" || clock.phase === "DONE");
-    for (const u of this.units) {
-      if (fs && playing) {
-        const { r, n, i0, i1, a } = fs;
-        const s = r.stride;
-        const o0 = i0 * n * s + u.slot * s;
-        const o1 = i1 * n * s + u.slot * s;
-        const x0 = (r.frames[o0] as number) / 10;
-        const y0 = (r.frames[o0 + 1] as number) / 10;
-        const x1 = (r.frames[o1] as number) / 10;
-        const y1 = (r.frames[o1 + 1] as number) / 10;
-        const jump = Math.hypot(x1 - x0, y1 - y0) > 60; // dash: do not slide through other fighters
-        const px = u.x;
-        const py = u.y;
-        u.x = jump ? (a < 0.5 ? x0 : x1) : x0 + (x1 - x0) * a;
-        u.y = jump ? (a < 0.5 ? y0 : y1) : y0 + (y1 - y0) * a;
-        const speed = Math.hypot(u.x - px, u.y - py) / Math.max(1, dtMs) * 1000;
-        u.moving = speed > 14 && !jump;
-        u.hp = r.frames[o0 + 2] as number;
-        u.flags = r.frames[o0 + 3] as number;
-        u.target = r.frames[o0 + 4] as number;
-        const wasAlive = u.alive;
-        u.alive = (u.flags & FRAME_FLAG.ALIVE) !== 0;
-        if (wasAlive && !u.alive && u.deadAt < 0) u.deadAt = clock.now;
-        if (!u.alive && u.deadAt < 0) u.deadAt = clock.now - 3000; // joined late: already fallen
-        // facing
-        const tgt = u.target > 0 ? this.units.find((q) => q.slot === u.target - 1) : null;
-        if (tgt && tgt.alive && Math.abs(tgt.x - u.x) > 4) u.facing = tgt.x > u.x ? 1 : -1;
-        else if (Math.abs(u.x - px) > 0.05) u.facing = u.x > px ? 1 : -1;
-      } else {
-        u.moving = false;
-        u.flags = FRAME_FLAG.ALIVE;
+  /**
+   * Applies the stage state of this instant. Before the bell every hero is SNAPPED to its spawn state (start position, full HP, alive, no
+   * status) — no easing toward it, nothing kept from an earlier frame — so the 3 · 2 · 1 can never show a hurt or fallen hero.
+   */
+  private updateUnits(frame: PlaybackFrame, clock: RenderClock, dtMs: number): void {
+    const pre = isPreFight(frame.clock.phase);
+    if (frame.reset) {
+      this.fx = [];
+      for (const u of this.units) {
+        u.attackAt = u.castAt = u.hurtAt = u.textAt = u.dashAt = u.shieldAt = u.flashAt = u.faceUntil = -1e9;
+        u.deadAt = -1;
+        u.facing = u.spawnFacing;
       }
+    }
+    for (const u of this.units) {
+      const f = frame.units.find((x) => x.slot === u.slot);
+      if (!f) continue;
+      const px = u.x;
+      const py = u.y;
+      u.x = f.x;
+      u.y = f.y;
+      u.hp = f.hp;
+      u.flags = pre ? FRAME_FLAG.ALIVE : f.flags;
+      u.target = f.target + 1;
+      const st = frame.stats.get(u.slot);
+      u.damage = st?.damage ?? 0;
+      u.kills = st?.kills ?? 0;
+      if (pre) {
+        u.alive = true;
+        u.deadAt = -1;
+        u.moving = false;
+        u.vx = 0;
+        u.facing = u.spawnFacing;
+        u.hpShown = u.hpTrail = u.hp = u.maxHp;
+        continue;
+      }
+      const speed = (Math.hypot(u.x - px, u.y - py) / Math.max(1, dtMs)) * 1000;
+      u.moving = speed > 14 && !f.jumped;
+      // the run cycle advances with the ground covered: ≈ 62 units/s is the authored cadence; slower reads as a walk (clamped so it never freezes)
+      if (u.moving) u.moveClock += dtMs * clamp(speed / 62, 0.4, 1.6);
+      u.vx = f.jumped ? 0 : ((u.x - px) / Math.max(1, dtMs)) * 1000;
+      const wasAlive = u.alive;
+      u.alive = f.alive;
+      if (wasAlive && !u.alive && u.deadAt < 0) u.deadAt = clock.now;
+      if (!u.alive && u.deadAt < 0) u.deadAt = clock.now - 3000; // joined late: already fallen
+      // Facing: toward the target while it is alive (with a little dead zone, so two heroes stacked vertically don't flip every frame), otherwise
+      // the direction of travel. A hero stepping back from its target therefore keeps facing it — and backpedals.
+      const aimed = clock.now < u.faceUntil ? this.units.find((q) => q.slot === u.faceSlot) : null;
+      const tgt = aimed && aimed.alive ? aimed : u.target > 0 ? this.units.find((q) => q.slot === u.target - 1) : null;
+      if (tgt && tgt.alive && Math.abs(tgt.x - u.x) > (tgt === aimed ? 2 : 8)) u.facing = tgt.x > u.x ? 1 : -1;
+      else if (!(tgt && tgt.alive) && Math.abs(u.x - px) > 0.05) u.facing = u.x > px ? 1 : -1;
       // HP bar easing (+ white damage trail)
       const k = 1 - Math.exp(-dtMs / 70);
       u.hpShown += (u.hp - u.hpShown) * k;
@@ -291,15 +364,17 @@ export class ArenaRenderer {
     }
   }
 
-  private processEvents(clock: RenderClock): void {
+  /** Presentation spacing between sprites in contact (never before the bell). */
+  private updateSpacing(frame: PlaybackFrame, dtMs: number): void {
+    updateOffsets(this.units, frame.reset ? 0 : dtMs, !isPreFight(frame.clock.phase) && !this.reducedMotion);
+  }
+
+  private processEvents(frame: PlaybackFrame, now: number): void {
     const r = this.replay;
-    if (!r || (clock.phase !== "COMBAT" && clock.phase !== "VICTORY")) return;
-    const now = clock.now;
-    // Joined mid-fight or the tab was asleep: the cursor skips visuals for events older than 700 ms. It never rewinds, so a
-    // small backward step of the estimated server clock cannot make an already-shown elimination appear again.
-    for (const ev of this.cursor.take(r.events as Array<[number, number, number, number, number, number]>, r.tickMs, clock.combatMs)) {
-      this.spawnForEvent(ev, now - (clock.combatMs - ev[0] * r.tickMs));
-    }
+    if (!r) return;
+    // Joined mid-fight or the tab was asleep: the cursor skips visuals for events older than 700 ms. It never rewinds, so a small backward
+    // step of the estimated server clock cannot make an already-shown elimination appear again. Never any before the bell.
+    for (const ev of frame.fresh) this.spawnForEvent(ev as [number, number, number, number, number, number], now - (frame.clock.combatMs - ev[0] * r.tickMs));
   }
 
   private spawnForEvent(ev: [number, number, number, number, number, number], at: number): void {
@@ -312,13 +387,20 @@ export class ArenaRenderer {
       case EV.ATTACK: {
         if (!A) return;
         A.attackAt = at;
-        if (flags & EV_FLAG.PROJECTILE && B) this.projectile(A.slot, B.slot, at, Math.max(120, v * (this.replay?.tickMs ?? 100)), style, cA);
+        if (B) {
+          A.faceSlot = B.slot;
+          A.faceUntil = at + 380;
+          if (Math.abs(B.x - A.x) > 2) A.facing = B.x > A.x ? 1 : -1; // the shot / blow leaves toward its target, never sideways or backwards
+        }
+        if (flags & EV_FLAG.PROJECTILE && B) this.projectile(A, B, at, Math.max(120, v * (this.replay?.tickMs ?? 100)), style, cA);
         else if (B) this.slash(A, B, at, cA, A.visual?.body === "heavy", style);
         break;
       }
       case EV.HIT: {
         if (!B) return;
         B.hurtAt = at;
+        if (at - B.flashAt > 260) B.flashAt = at;
+        if (A) B.hurtDir = B.x >= A.x ? 1 : -1;
         const crit = (flags & EV_FLAG.CRIT) !== 0;
         this.damageText(B, `${v}`, crit ? "#ffd04a" : (flags & EV_FLAG.AOE) !== 0 ? "#ffb08a" : "#ffffff", crit ? 1.45 : 1, at);
         this.sparks(B, at, crit ? "#ffd04a" : "#ffe9c4", crit ? 12 : 7);
@@ -331,8 +413,9 @@ export class ArenaRenderer {
         if (!A) return;
         A.castAt = at;
         const info = this.replay?.skillFx[this.replay.skillIds[v] as string];
-        this.castRune(A, at, A.visual?.colors[1] ?? "#8ff7e4");
-        this.skillFx(info?.fx ?? "buff", A, B ?? null, at);
+        // The cast begins now; its effect is shown when it RESOLVES — with the damage it does (the end of the cast, from the replay's frames).
+        const release = this.replay ? castTicks(this.replay, a, ev[0]) * this.replay.tickMs : 0;
+        this.skillFx(info?.fx ?? "buff", A, B ?? null, at + release);
         if (info && this.cssW > 520) this.damageText(A, info.name.toUpperCase(), "#8ff7e4", 0.62, at, 0, "feet");
         break;
       }
@@ -343,7 +426,7 @@ export class ArenaRenderer {
         }
         break;
       case EV.SHIELD:
-        if (A) this.bubbleFlash(A, at);
+        if (A) A.shieldAt = at;
         break;
       case EV.STATUS: {
         const labels: Record<number, [string, string]> = { 1: ["STUNNED", "#ffd04a"], 2: ["SLOWED", "#8fe3ff"], 3: ["TAUNTED", "#ff7a6a"] };
@@ -355,7 +438,11 @@ export class ArenaRenderer {
         break;
       }
       case EV.DASH:
-        if (A) this.dashTrail(A, at);
+        if (A) {
+          A.dashAt = at;
+          A.dashFrom = this.positionAt(A.slot, ev[0] - 1) ?? [A.x, A.y];
+          if (!this.sheetFor(A)) this.dashTrail(A, at);
+        }
         break;
       case EV.ELIM: {
         if (!A) return;
@@ -381,27 +468,25 @@ export class ArenaRenderer {
     this.fx.push(fx);
   }
 
+  /** A weapon trail in front of the attacker: a tapered crescent for swings, two quick streaks for daggers. */
   private slash(A: UnitState, B: UnitState, at: number, color: string, big: boolean, style = "slash"): void {
-    const ang = Math.atan2((B.y - A.y) * 0.55, B.x - A.x);
+    const tilt = clamp((B.y - A.y) / 160, -0.5, 0.5);
     if (style === "stab") {
-      // quick double thrust streak (daggers)
-      const dir = B.x >= A.x ? 1 : -1;
       this.add({
-        t0: at, dur: 170, layer: "air",
+        t0: at, dur: 150, layer: "air",
         draw: (ctx, k) => {
-          const p = this.worldToScreen(A.x, A.y);
+          const p = this.unitScreen(A);
+          const dir = B.x >= A.x ? 1 : -1;
           ctx.save();
-          ctx.translate(p.x, p.y - 44 * p.s);
+          ctx.translate(p.x, p.y - (CHEST_Y - 2) * p.s);
           ctx.globalAlpha = 1 - k;
           ctx.strokeStyle = color;
           ctx.lineCap = "round";
-          ctx.shadowColor = color;
-          ctx.shadowBlur = 8;
           for (const off of [-4, 4]) {
-            ctx.lineWidth = 2.8 * (1 - k * 0.5);
+            ctx.lineWidth = 2.6 * p.s * (1 - k * 0.5);
             ctx.beginPath();
-            ctx.moveTo(dir * (14 + k * 8) * p.s, off * p.s * 0.7);
-            ctx.lineTo(dir * (36 + k * 14) * p.s, off * p.s * 0.2);
+            ctx.moveTo(dir * (16 + k * 8) * p.s, off * p.s * 0.7);
+            ctx.lineTo(dir * (36 + k * 12) * p.s, off * p.s * 0.2);
             ctx.stroke();
           }
           ctx.restore();
@@ -409,67 +494,105 @@ export class ArenaRenderer {
       });
       return;
     }
+    // A THIN blade trail along the weapon's arc (a sliver, thickest in the middle, tapering to points) — never a filled half-disc, which read as
+    // a big translucent circle around the target.
     this.add({
-      t0: at, dur: big ? 260 : 190, layer: "air",
+      t0: at, dur: big ? 200 : 150, layer: "air",
       draw: (ctx, k) => {
-        const p = this.worldToScreen(A.x, A.y);
-        const reach = 44 * p.s;
+        const p = this.unitScreen(A);
+        const dir = B.x >= A.x ? 1 : -1;
+        const r = (big ? 30 : 24) * p.s;
+        const sweep = Math.min(1, k * 2.2); // the trail follows the blade, then fades
+        const a0 = -1.05;
+        const a1 = -1.05 + 1.9 * sweep;
         ctx.save();
-        ctx.translate(p.x + Math.cos(ang) * 10 * p.s, p.y - 50 * p.s + Math.sin(ang) * 6);
-        ctx.rotate(ang);
-        ctx.globalAlpha = 1 - k;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = (big ? 8 : 5) * (1 - k * 0.6);
-        ctx.lineCap = "round";
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 10;
+        ctx.translate(p.x + dir * 10 * p.s, p.y - CHEST_Y * p.s);
+        ctx.scale(dir, 1);
+        ctx.rotate(tilt * dir);
+        ctx.globalAlpha = (1 - k) * 0.8;
+        ctx.fillStyle = "#fffaf0";
         ctx.beginPath();
-        ctx.arc(0, 0, reach, -1.0 + k * 0.5, 0.9 + k * 0.7);
-        ctx.stroke();
+        ctx.arc(0, 0, r, a0, a1);
+        ctx.arc(-0.07 * r, 0, 0.9 * r, a1, a0, true);
+        ctx.closePath();
+        ctx.fill();
+        // the coloured edge, only once the trail is long enough (an arc whose end is before its start would be drawn the long way round —
+        // a full circle)
+        if (a1 > a0 + 0.3) {
+          ctx.globalAlpha = (1 - k) * 0.55;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.2 * p.s;
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 0.6 * p.s, a0 + 0.15, a1);
+          ctx.stroke();
+        }
         ctx.restore();
       },
     });
   }
 
-  private projectile(from: number, to: number, at: number, dur: number, style: string, color: string): void {
+  /**
+   * Where a fighter's shot leaves, in screen space: its weapon's muzzle on the attack's impact frame (sprite sets that declare it — the bow, the
+   * staff crystal, the scepter's sun), otherwise just in front of the chest.
+   */
+  private muzzle(u: UnitState): { x: number; y: number } {
+    const p = this.unitScreen(u);
+    const src = this.sprites;
+    const sheet = this.sheetFor(u);
+    if (src && sheet?.plan.muzzle) {
+      const k = (STAGE_HERO_HEIGHT / src.manifest.nominalHeightPx) * p.s;
+      return { x: p.x + (sheet.plan.muzzle.x - src.manifest.anchor.x) * k * u.facing, y: p.y + (sheet.plan.muzzle.y - src.manifest.anchor.y) * k };
+    }
+    return { x: p.x + 14 * p.s * u.facing, y: p.y - (CHEST_Y + 6) * p.s };
+  }
+
+  private projectile(A: UnitState, B: UnitState, at: number, dur: number, style: string, color: string): void {
+    let from: { x: number; y: number } | null = null; // fixed at release: the shot doesn't follow the shooter afterwards
     this.add({
       t0: at, dur, layer: "air",
       draw: (ctx, k) => {
-        const a = this.pos(from);
-        const b = this.pos(to);
-        if (!a || !b) return;
-        const ax = a.x;
-        const ay = a.y - 52 * a.s;
+        from ??= this.muzzle(A);
+        const b = this.pos(B.slot);
+        if (!b) return;
+        const ax = from.x;
+        const ay = from.y;
         const bx = b.x;
-        const by = b.y - 46 * b.s;
+        const by = b.y - CHEST_Y * b.s;
+        const arc = style === "arrow" ? 14 : 6; // an arrow flies a shallow arc; magic flies almost straight
         const x = ax + (bx - ax) * k;
-        const y = ay + (by - ay) * k - Math.sin(k * Math.PI) * 16;
-        const ang = Math.atan2(by - ay, bx - ax);
+        const y = ay + (by - ay) * k - Math.sin(k * Math.PI) * arc;
+        const ang = Math.atan2(by - ay - Math.PI * arc * Math.cos(k * Math.PI), bx - ax); // along the flight path
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(ang);
         if (style === "arrow") {
           ctx.strokeStyle = "#e9e2d0";
-          ctx.lineWidth = 2.6;
+          ctx.lineWidth = 2.2;
           ctx.beginPath();
-          ctx.moveTo(-16, 0);
+          ctx.moveTo(-15, 0);
           ctx.lineTo(8, 0);
           ctx.stroke();
           ctx.fillStyle = "#dfe6f2";
           ctx.beginPath();
-          ctx.moveTo(8, -4);
-          ctx.lineTo(15, 0);
-          ctx.lineTo(8, 4);
+          ctx.moveTo(8, -3.6);
+          ctx.lineTo(14, 0);
+          ctx.lineTo(8, 3.6);
           ctx.closePath();
           ctx.fill();
+          ctx.strokeStyle = "#c8553d"; // fletching
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(-15, 0);
+          ctx.lineTo(-19, -3);
+          ctx.moveTo(-15, 0);
+          ctx.lineTo(-19, 3);
+          ctx.stroke();
         } else if (style === "bolt") {
-          // holy bolt: a four-point star with a soft golden trail
-          ctx.shadowColor = "#fff0a8";
-          ctx.shadowBlur = 14;
+          // holy bolt: a four-point star with a short golden trail
           ctx.fillStyle = "#fff6c4";
           ctx.beginPath();
           for (let i = 0; i < 8; i++) {
-            const r = i % 2 ? 2.4 : 7.5;
+            const r = i % 2 ? 2.4 : 7;
             const a = (i / 8) * Math.PI * 2;
             ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
           }
@@ -477,17 +600,20 @@ export class ArenaRenderer {
           ctx.fill();
           ctx.globalAlpha = 0.45;
           ctx.fillStyle = "#ffd98a";
-          ctx.fillRect(-26, -2, 22, 4);
+          ctx.fillRect(-22, -1.8, 18, 3.6);
         } else {
           const c = style === "orb" ? "#9d7bff" : color && color !== "#fff" ? color : "#ffe08a";
-          ctx.shadowColor = c;
-          ctx.shadowBlur = 16;
           ctx.fillStyle = c;
           ctx.beginPath();
-          ctx.arc(0, 0, style === "orb" ? 7.5 : 5.5, 0, Math.PI * 2);
+          ctx.arc(0, 0, style === "orb" ? 6.5 : 5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.globalAlpha = 0.5;
-          ctx.fillRect(-20, -2.5, 18, 5);
+          ctx.fillStyle = "rgba(255,255,255,0.75)";
+          ctx.beginPath();
+          ctx.arc(1.2, -1.2, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle = c;
+          ctx.fillRect(-18, -2.2, 14, 4.4);
         }
         ctx.restore();
       },
@@ -495,13 +621,21 @@ export class ArenaRenderer {
   }
 
   private damageText(U: UnitState, text: string, color: string, scale: number, at: number, dy = 0, anchor: "head" | "feet" = "head"): void {
-    const jitter = ((U.slot * 37 + at) % 29) - 14;
+    // Numbers pop BESIDE the head (alternating sides, a little jitter) and rise — never stamped onto the hero's own name plate.
+    const side = (U.numbers++ & 1) === 0 ? 1 : -1;
+    // Labels at the feet (a skill's name, a status) stack downward instead of printing over one another.
+    if (anchor === "feet") {
+      dy = at - U.feetAt < 700 ? U.feetRow + 1 : 0;
+      U.feetRow = dy;
+      U.feetAt = at;
+    }
+    const jitter = anchor === "feet" ? ((U.slot * 37 + at) % 29) - 14 : side * (22 + (((U.slot * 37 + at) % 9) - 4));
     this.add({
       t0: at, dur: 900, layer: "air",
       draw: (ctx, k) => {
-        const p = this.worldToScreen(U.x, U.y);
-        const pop = k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : 1.15 - Math.min(0.15, (k - 0.12) * 0.4);
-        const rise = easeOutBack(Math.min(1, k * 1.6)) * 34 + k * 14;
+        const p = this.unitScreen(U);
+        const pop = this.reducedMotion ? 1 : k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : 1.15 - Math.min(0.15, (k - 0.12) * 0.4);
+        const rise = this.reducedMotion ? 20 : easeOutBack(Math.min(1, k * 1.6)) * 34 + k * 14;
         ctx.save();
         ctx.globalAlpha = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
         ctx.font = `${Math.round(19 * scale * pop * this.textScale())}px ${this.displayFont}, ${this.fontFamily}`;
@@ -509,8 +643,17 @@ export class ArenaRenderer {
         ctx.lineWidth = 4;
         ctx.strokeStyle = "rgba(6,8,12,0.95)";
         ctx.lineJoin = "round";
-        const tx = p.x + jitter * (anchor === "feet" ? 0.3 : 1);
-        const ty = anchor === "feet" ? p.y + 14 * p.s + k * 10 : p.y - 118 * p.s - rise + dy;
+        const tx = p.x + jitter * (anchor === "feet" ? 0.3 : p.s);
+        const fromHead = p.y - (this.headTop(U) - 14) * p.s;
+        const start = Number.isNaN(U.plateTop) ? fromHead : Math.min(fromHead, U.plateTop - 4 * this.textScale());
+        let ty = anchor === "feet" ? p.y + (14 + dy * 11) * p.s + k * 10 : start - rise * 0.75 + dy;
+        if (anchor === "feet") {
+          // labels at the feet of DIFFERENT heroes standing close together: each steps down a row instead of printing over another
+          const w = ctx.measureText(text).width;
+          const h = parseFloat(ctx.font) * 1.05;
+          for (let row = 0; row < 3 && this.feetRects.some((q) => Math.abs(q.x - tx) < (q.w + w) / 2 && Math.abs(q.y - ty) < h); row++) ty += h;
+          this.feetRects.push({ x: tx, y: ty, w, h });
+        }
         ctx.strokeText(text, tx, ty);
         ctx.fillStyle = color;
         ctx.fillText(text, tx, ty);
@@ -519,24 +662,24 @@ export class ArenaRenderer {
     });
   }
 
-  private sparks(U: UnitState, at: number, color: string, n: number): void {
+  private sparks(U: UnitState, at: number, color: string, n: number, y = CHEST_Y + 2): void {
     const seed = U.slot * 13 + Math.floor(at);
     this.add({
-      t0: at, dur: 320, layer: "air",
+      t0: at, dur: 300, layer: "air",
       draw: (ctx, k) => {
-        const p = this.worldToScreen(U.x, U.y);
+        const p = this.unitScreen(U);
         ctx.save();
         ctx.strokeStyle = color;
         ctx.globalAlpha = 1 - k;
-        ctx.lineWidth = 2.4;
+        ctx.lineWidth = 2.2;
         ctx.lineCap = "round";
         for (let i = 0; i < n; i++) {
           const a = ((seed + i * 97) % 360) * (Math.PI / 180);
-          const r0 = 8 + k * 26;
+          const r0 = 8 + k * 24;
           const r1 = r0 + 7 * (1 - k);
           ctx.beginPath();
-          ctx.moveTo(p.x + Math.cos(a) * r0 * p.s, p.y - 52 * p.s + Math.sin(a) * r0 * p.s * 0.8);
-          ctx.lineTo(p.x + Math.cos(a) * r1 * p.s, p.y - 52 * p.s + Math.sin(a) * r1 * p.s * 0.8);
+          ctx.moveTo(p.x + Math.cos(a) * r0 * p.s, p.y - y * p.s + Math.sin(a) * r0 * p.s * 0.8);
+          ctx.lineTo(p.x + Math.cos(a) * r1 * p.s, p.y - y * p.s + Math.sin(a) * r1 * p.s * 0.8);
           ctx.stroke();
         }
         ctx.restore();
@@ -544,35 +687,141 @@ export class ArenaRenderer {
     });
   }
 
-  private ring(wx: () => [number, number], r: number, at: number, dur: number, color: string, fill = true): void {
+  /** Shards that crack up out of the floor and spread to `radius` (an area skill's reach, shown without drawing a ring). */
+  private groundShards(at0: () => [number, number], radius: number, at: number, dur: number, color: string, n = 12): void {
     this.add({
       t0: at, dur, layer: "ground",
       draw: (ctx, k) => {
-        const [x, y] = wx();
-        const p = this.worldToScreen(x, y);
-        const rr = r * (0.2 + 0.8 * Math.min(1, k * 1.25));
-        const rx = (rr / this.R) * this.layout.rx;
-        const ry = (rr / this.R) * this.layout.ry;
+        const [x0, y0] = at0();
         ctx.save();
-        ctx.globalAlpha = (1 - k) * 0.9;
-        if (fill) {
-          const g = ctx.createRadialGradient(p.x, p.y, rx * 0.2, p.x, p.y, rx);
-          g.addColorStop(0, "rgba(255,255,255,0)");
-          g.addColorStop(1, color);
-          ctx.fillStyle = g;
-          ctx.globalAlpha = (1 - k) * 0.5;
+        ctx.fillStyle = color;
+        ctx.strokeStyle = "rgba(12,18,30,0.7)";
+        ctx.lineWidth = 1;
+        const grow = this.reducedMotion ? 1 : Math.min(1, k * 2.4);
+        const rise = k < 0.2 ? k / 0.2 : 1 - (k - 0.2) / 0.8;
+        ctx.globalAlpha = Math.min(1, (1 - k) * 1.8);
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + (i % 2) * 0.22;
+          const d = radius * (0.3 + 0.7 * grow) * (i % 2 ? 0.78 : 1);
+          const p = this.worldToScreen(x0 + Math.cos(a) * d, y0 + Math.sin(a) * d);
+          const h = rise * (i % 3 === 0 ? 15 : 10) * p.s;
+          if (h < 0.6) continue;
+          const w = 3 * p.s;
           ctx.beginPath();
-          ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
+          ctx.moveTo(p.x - w, p.y);
+          ctx.lineTo(p.x + w * 0.25, p.y - h);
+          ctx.lineTo(p.x + w, p.y);
+          ctx.closePath();
           ctx.fill();
-          ctx.globalAlpha = (1 - k) * 0.95;
+          ctx.stroke();
         }
+        ctx.restore();
+      },
+    });
+  }
+
+  /** Frost crystals at a hero's feet (hero units, feet at the origin). */
+  private drawFrost(ctx: CanvasRenderingContext2D, now: number, slot: number, strength = 1): void {
+    const tw = this.reducedMotion ? 0 : now / 280 + slot;
+    ctx.save();
+    ctx.fillStyle = "#c8f2ff";
+    ctx.strokeStyle = "rgba(36,84,124,0.85)";
+    ctx.lineWidth = 1;
+    const spikes: ReadonlyArray<readonly [number, number]> = [[-15, 6], [-9, 10], [-3, 5], [5, 9], [11, 7], [16, 4]];
+    for (const [i, [x, h]] of spikes.entries()) {
+      ctx.globalAlpha = strength * (0.7 + 0.25 * Math.sin(tw + i * 1.7));
+      ctx.beginPath();
+      ctx.moveTo(x - 2.2, 1.5);
+      ctx.lineTo(x + (i % 2 ? 0.8 : -0.8), 1.5 - h);
+      ctx.lineTo(x + 2.2, 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** A snare's frost, held at the target's feet for a moment. */
+  private frostFx(U: UnitState, at: number, dur: number): void {
+    this.add({
+      t0: at, dur, layer: "air",
+      draw: (ctx, k, now) => {
+        const p = this.unitScreen(U);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.scale(p.s, p.s);
+        this.drawFrost(ctx, now, U.slot, k < 0.15 ? k / 0.15 : 1 - Math.max(0, k - 0.7) / 0.3);
+        ctx.restore();
+      },
+    });
+  }
+
+  /** A taunt: three shout lines out of the mouth, toward the way the hero faces. */
+  private shout(U: UnitState, at: number, color: string): void {
+    this.add({
+      t0: at, dur: 520, layer: "air",
+      draw: (ctx, k) => {
+        const p = this.unitScreen(U);
+        const f = U.facing;
+        const cx = p.x + f * 8 * p.s;
+        const cy = p.y - MOUTH_Y * p.s;
+        ctx.save();
         ctx.strokeStyle = color;
-        ctx.lineWidth = 4 * (1 - k * 0.6);
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 12;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.lineCap = "round";
+        for (let i = 0; i < 3; i++) {
+          const kk = clamp(k * 1.5 - i * 0.2, 0, 1);
+          if (kk <= 0 || kk >= 1) continue;
+          const r = (10 + kk * 26) * p.s;
+          ctx.globalAlpha = (1 - kk) * 0.95;
+          ctx.lineWidth = 2.6 * p.s * (1 - kk * 0.5);
+          ctx.beginPath();
+          if (f > 0) ctx.arc(cx, cy, r, -0.55, 0.55);
+          else ctx.arc(cx, cy, r, Math.PI - 0.55, Math.PI + 0.55);
+          ctx.stroke();
+        }
+        ctx.restore();
+      },
+    });
+  }
+
+  /** Soft motes rising from a hero's feet (a heal). */
+  private motes(U: UnitState, at: number, color: string): void {
+    if (this.reducedMotion) return;
+    this.add({
+      t0: at, dur: 760, layer: "air",
+      draw: (ctx, k) => {
+        const p = this.unitScreen(U);
+        ctx.save();
+        ctx.fillStyle = color;
+        for (let i = 0; i < 7; i++) {
+          const kk = clamp(k * 1.3 - (i % 4) * 0.08, 0, 1);
+          ctx.globalAlpha = Math.sin(kk * Math.PI) * 0.85;
+          const x = p.x + (((i * 23) % 36) - 18) * p.s;
+          const y = p.y - (6 + kk * 70 + (i % 3) * 6) * p.s;
+          ctx.fillRect(x - 1.5 * p.s, y - 1.5 * p.s, 3 * p.s, 3 * p.s);
+        }
+        ctx.restore();
+      },
+    });
+  }
+
+  /** Dust kicked up at the feet (a landing, a body hitting the floor). */
+  private dust(wx: number, wy: number, at: number, n: number, spread: number): void {
+    if (this.reducedMotion) return;
+    this.add({
+      t0: at, dur: 540, layer: "air",
+      draw: (ctx, k) => {
+        const p = this.worldToScreen(wx, wy);
+        ctx.save();
+        for (let i = 0; i < n; i++) {
+          const side = i % 2 ? 1 : -1;
+          const d = (8 + ((i * 7) % 13)) * spread * (0.3 + 0.7 * Math.sqrt(k));
+          ctx.globalAlpha = (1 - k) * 0.45;
+          ctx.fillStyle = i % 3 ? "#b9ab98" : "#8f8273";
+          ctx.beginPath();
+          ctx.ellipse(p.x + side * d * p.s, p.y - (2 + (i % 3) * 3 + k * 7) * p.s, (2.5 + k * 4.5) * p.s, (2 + k * 3) * p.s, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
       },
     });
@@ -582,134 +831,100 @@ export class ArenaRenderer {
     const at0 = () => [A.x, A.y] as [number, number];
     switch (fx) {
       case "cleave":
-        this.ring(at0, 64, at, 300, "#ffd98a");
         if (B) this.slash(A, B, at, "#ffe9b8", true);
+        this.dust(A.x, A.y, at + 60, 4, 1.1);
         break;
       case "nova":
-        this.ring(at0, 75, at, 520, "#8fe3ff");
+        this.groundShards(at0, 75, at, 560, "#bfefff", 14);
         break;
       case "taunt":
-        this.ring(at0, 70, at, 500, "#ff7a6a");
-        this.risingMarks(A, at, "#ff7a6a", "!");
+        this.shout(A, at, "#ff7a6a");
+        this.risingMarks(A, at, "#ff7a6a", "!", 2);
         break;
       case "burst":
         if (B) {
-          const bx = B.x;
-          const by = B.y;
-          this.projectile(A.slot, B.slot, at, 280, "orb", "#9d7bff");
-          this.ring(() => [bx, by], 58, at + 280, 420, "#b58bff");
+          this.projectile(A, B, at, 280, "orb", "#9d7bff");
+          this.sparks(B, at + 280, "#c9a6ff", 12);
         }
         break;
       case "volley":
         if (B) {
-          this.projectile(A.slot, B.slot, at, 240, "arrow", "#fff");
-          this.projectile(A.slot, B.slot, at + 60, 260, "arrow", "#fff");
-          this.projectile(A.slot, B.slot, at + 120, 280, "arrow", "#fff");
+          this.projectile(A, B, at, 240, "arrow", "#fff");
+          this.projectile(A, B, at + 60, 260, "arrow", "#fff");
+          this.projectile(A, B, at + 120, 280, "arrow", "#fff");
         }
         break;
       case "snare":
         if (B) {
-          this.projectile(A.slot, B.slot, at, 240, "arrow", "#fff");
-          this.ring(() => [B.x, B.y], 36, at + 240, 520, "#8fe3ff");
+          this.projectile(A, B, at, 240, "arrow", "#fff");
+          this.frostFx(B, at + 240, 720);
         }
         break;
       case "smite":
         if (B) {
+          // A beam of light that comes down onto the target and STOPS at the top of its head — it marks the hero without hiding it.
           this.add({
             t0: at, dur: 380, layer: "air",
             draw: (ctx, k) => {
-              const p = this.worldToScreen(B.x, B.y);
+              const p = this.unitScreen(B);
+              // A short shaft that DROPS onto the head (it does not stand over the stage as a column): it falls in the first quarter, then fades.
+              const bottom = p.y - (this.headTop(B) + 2) * p.s;
+              const len = 70 * p.s;
+              const drop = this.reducedMotion ? 1 : Math.min(1, k * 4);
+              const top = bottom - len * drop;
               ctx.save();
-              ctx.globalAlpha = (1 - k) * 0.9;
-              const g = ctx.createLinearGradient(0, p.y - 260, 0, p.y);
+              ctx.globalAlpha = (1 - k) * 0.8;
+              const g = ctx.createLinearGradient(0, bottom - len, 0, bottom);
               g.addColorStop(0, "rgba(255,244,196,0)");
               g.addColorStop(1, "rgba(255,244,196,0.95)");
               ctx.fillStyle = g;
-              const w = 26 * (1 - k * 0.5) * p.s;
-              ctx.fillRect(p.x - w / 2, p.y - 260, w, 260);
+              const w = 6 * (1 - k * 0.4) * p.s;
+              ctx.fillRect(p.x - w / 2, top, w, bottom - top);
               ctx.restore();
             },
           });
-          this.ring(() => [B.x, B.y], 40, at + 40, 400, "#fff0b0");
+          this.sparks(B, at + 60, "#fff0b0", 9, this.headTop(B) + 2);
         }
         break;
       case "shield":
-        this.bubbleFlash(A, at);
+        A.shieldAt = at;
         break;
       case "heal":
         this.risingMarks(A, at, "#7dffb2", "+");
-        this.ring(at0, 46, at, 480, "#7dffb2");
+        this.motes(A, at, "#9dffc6");
         break;
       case "dash":
-        break;
+        break; // the DASH event leaves the afterimages
       default:
         this.risingMarks(A, at, "#ffe08a", "✦");
         break;
     }
   }
 
-  /** A faint rotating rune ring under the caster: makes "this hero just used an ability" readable at a glance. */
-  private castRune(U: UnitState, at: number, color: string): void {
-    this.add({
-      t0: at, dur: 480, layer: "ground",
-      draw: (ctx, k) => {
-        const p = this.worldToScreen(U.x, U.y);
-        const rx = (24 + k * 12) * p.s;
-        const ry = (7.5 + k * 3.5) * p.s;
-        ctx.save();
-        ctx.globalAlpha = (1 - k) * 0.75;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2 + k * 2.4;
-          ctx.beginPath();
-          ctx.moveTo(p.x + Math.cos(a) * rx * 0.86, p.y + Math.sin(a) * ry * 0.86);
-          ctx.lineTo(p.x + Math.cos(a) * rx * 1.12, p.y + Math.sin(a) * ry * 1.12);
-          ctx.stroke();
-        }
-        ctx.restore();
-      },
-    });
-  }
-
-  private risingMarks(U: UnitState, at: number, color: string, glyph: string): void {
+  private risingMarks(U: UnitState, at: number, color: string, glyph: string, n = 4): void {
     this.add({
       t0: at, dur: 800, layer: "air",
       draw: (ctx, k) => {
-        const p = this.worldToScreen(U.x, U.y);
+        const p = this.unitScreen(U);
         ctx.save();
         ctx.font = `${Math.round(16 * this.textScale())}px ${this.displayFont}`;
         ctx.textAlign = "center";
         ctx.fillStyle = color;
+        ctx.strokeStyle = "rgba(6,8,12,0.8)";
+        ctx.lineWidth = 3;
         ctx.globalAlpha = 1 - k;
-        for (let i = 0; i < 4; i++) {
-          ctx.fillText(glyph, p.x + (i - 1.5) * 16 * p.s, p.y - 30 * p.s - k * 56 - i * 6);
+        for (let i = 0; i < n; i++) {
+          const x = p.x + (i - (n - 1) / 2) * 16 * p.s;
+          const y = p.y - 30 * p.s - k * 56 - i * 6;
+          ctx.strokeText(glyph, x, y);
+          ctx.fillText(glyph, x, y);
         }
         ctx.restore();
       },
     });
   }
 
-  private bubbleFlash(U: UnitState, at: number): void {
-    this.add({
-      t0: at, dur: 420, layer: "air",
-      draw: (ctx, k) => {
-        const p = this.worldToScreen(U.x, U.y);
-        ctx.save();
-        ctx.globalAlpha = (1 - k) * 0.8;
-        ctx.strokeStyle = "#8fe3ff";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.y - 50 * p.s, (30 + k * 18) * p.s, (56 + k * 12) * p.s, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      },
-    });
-  }
-
+  /** Vector-fallback heroes only (a sprite hero leaves afterimages instead). */
   private dashTrail(U: UnitState, at: number): void {
     const x0 = U.x;
     const y0 = U.y;
@@ -717,11 +932,11 @@ export class ArenaRenderer {
       t0: at, dur: 320, layer: "ground",
       draw: (ctx, k) => {
         const a = this.worldToScreen(x0, y0);
-        const b = this.worldToScreen(U.x, U.y);
+        const b = this.unitScreen(U);
         ctx.save();
-        ctx.globalAlpha = (1 - k) * 0.7;
+        ctx.globalAlpha = (1 - k) * 0.6;
         ctx.strokeStyle = "#cfe6ff";
-        ctx.lineWidth = 14 * (1 - k);
+        ctx.lineWidth = 10 * (1 - k);
         ctx.lineCap = "round";
         ctx.beginPath();
         ctx.moveTo(a.x, a.y - 40 * a.s);
@@ -732,32 +947,26 @@ export class ArenaRenderer {
     });
   }
 
+  /** A knock-out: a few sparks and a short "KO" where the hero stood, then dust as the body hits the floor (the KO clip). No ring. */
   private eliminationBurst(U: UnitState, at: number): void {
     const x = U.x;
     const y = U.y;
-    this.ring(() => [x, y], 56, at, 560, "#ff5a4d");
+    this.sparks(U, at, "#ff8a5c", 8);
+    this.dust(x, y, at + 330, 8, 1.4);
     this.add({
       t0: at, dur: 700, layer: "air",
       draw: (ctx, k) => {
         const p = this.worldToScreen(x, y);
         ctx.save();
-        for (let i = 0; i < 14; i++) {
-          const a = (i / 14) * Math.PI * 2 + i;
-          const d = (14 + (i % 3) * 14) * Math.sqrt(k) * 3;
-          ctx.globalAlpha = 1 - k;
-          ctx.fillStyle = i % 2 ? "#ffd98a" : "#ff6a3d";
-          ctx.beginPath();
-          ctx.arc(p.x + Math.cos(a) * d * p.s, p.y - 46 * p.s + Math.sin(a) * d * p.s * 0.8 - k * 10, (4 - k * 3) * p.s, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = Math.max(0, 1 - k * 1.4);
-        ctx.font = `${Math.round(34 * this.textScale())}px ${this.displayFont}`;
+        ctx.globalAlpha = Math.max(0, 1 - k * 1.3);
+        ctx.font = `${Math.round(26 * this.textScale())}px ${this.displayFont}`;
         ctx.textAlign = "center";
         ctx.fillStyle = "#ff5a4d";
         ctx.strokeStyle = "#0c0f15";
         ctx.lineWidth = 5;
-        ctx.strokeText("KO", p.x, p.y - 100 * p.s - k * 26);
-        ctx.fillText("KO", p.x, p.y - 100 * p.s - k * 26);
+        const ty = p.y - (this.headTop(U) + 4) * p.s - (this.reducedMotion ? 0 : k * 22);
+        ctx.strokeText("KO", p.x, ty);
+        ctx.fillText("KO", p.x, ty);
         ctx.restore();
       },
     });
@@ -768,12 +977,28 @@ export class ArenaRenderer {
   }
 
   // ---------------------------------------------------------------- drawing
-  render(clock: RenderClock, dtMs: number): void {
+  /**
+   * Draws one frame at server instant `now` and returns the phase it drew — the HUD reads THAT, so the page and the canvas can never disagree
+   * about whether the fight has started. The 3 · 2 · 1 and FIGHT! are drawn here, in the same frame as the fight itself.
+   */
+  render(now: number, timing: StageTiming, dtMs: number): PhaseNow {
+    const frame = this.playback.frame(this.battle, this.replay, now, timing);
+    const ph: PhaseNow = frame?.clock ?? { phase: "IDLE", countdown: null, sinceStart: 0, combatMs: 0, combatLeftMs: timing.maxCombatMs };
+    const decided = ph.phase === "VICTORY" || ph.phase === "RESULTS" || ph.phase === "DONE";
+    const clock: RenderClock = { now, phase: ph.phase, sinceStart: ph.sinceStart, combatMs: ph.combatMs, winnerSlot: decided && this.replay ? (this.replay.ranking[0] ?? null) : null };
+    if (frame) {
+      this.updateUnits(frame, clock, dtMs);
+      this.updateSpacing(frame, dtMs);
+      this.processEvents(frame, now);
+    }
+    this.draw(clock, dtMs);
+    this.drawStageCall(ph, now, timing);
+    return ph;
+  }
+
+  private draw(clock: RenderClock, dtMs: number): void {
     const ctx = this.ctx;
     const L = this.layout;
-    this.updateUnits(clock, dtMs);
-    this.processEvents(clock);
-    this.trackStats(clock);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -786,17 +1011,85 @@ export class ArenaRenderer {
     ctx.fillRect(0, 0, L.w, L.standsH);
 
     const now = clock.now;
-    // ground fx
     for (const f of this.fx) if (f.layer === "ground") this.drawFx(ctx, f, now);
 
-    // landing dust (intro)
     const order = this.units.slice().sort((a, b) => a.y - b.y);
+    // Every contact shadow first, so a hero in front never darkens the feet of the one behind it.
+    for (const u of order) this.drawShadow(ctx, u, clock);
     for (const u of order) this.drawUnit(ctx, u, clock);
 
+    this.drawPlates(ctx, clock, dtMs);
+    this.feetRects.length = 0;
+    // Numbers, shots and skill effects over the plates: a damage number is never hidden under a name.
     for (const f of this.fx) if (f.layer === "air") this.drawFx(ctx, f, now);
     this.fx = this.fx.filter((f) => now - f.t0 < f.dur + 50);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.warmSheets(clock);
+  }
 
-    for (const u of order) this.drawPlate(ctx, u, clock);
+  /**
+   * The clips a hero will need in the fight, composed AHEAD of it while the eight stand idle (intro, 3 · 2 · 1): one strip per frame, so a
+   * slow phone never composes a hero's first swing, hit or fall in the middle of the fight. Presentation only — what is drawn, and when, is
+   * unchanged; a clip not warmed in time is composed on first use, as before.
+   */
+  private warmSheets(clock: RenderClock): void {
+    if (!isPreFight(clock.phase) || !this.sprites) return;
+    const m = this.sprites.manifest;
+    for (const u of this.units) {
+      const sheet = this.sheetFor(u);
+      if (!sheet) continue;
+      for (const clip of [sheet.plan.idleClip, "move", sheet.plan.attackClip, "skill", "hit", "ko", "victory"] as const) {
+        if (!m.clips[clip] || sheet.isComposed(clip)) continue;
+        sheet.strip(clip);
+        return;
+      }
+    }
+  }
+
+  /**
+   * The 3 · 2 · 1 and FIGHT!, drawn on the canvas in the SAME frame as the fight — so the countdown can never still be on screen while combat
+   * plays (a DOM overlay is committed by React a frame or more later). Each digit pops in and settles; under reduced motion it simply fades.
+   */
+  private drawStageCall(ph: PhaseNow, now: number, timing: StageTiming): void {
+    const b = this.battle;
+    if (!b || b.combatStartsAt === null) return;
+    let text: string | null = null;
+    let k = 0; // 0..1 through the digit / banner
+    if (ph.phase === "COUNTDOWN" && ph.countdown !== null) {
+      const digitMs = Math.max(1, timing.countdownMs / 3);
+      const left = b.combatStartsAt - now; // ms until the bell
+      k = clamp(1 - (left - (ph.countdown - 1) * digitMs) / digitMs, 0, 1);
+      text = String(ph.countdown);
+    } else if (ph.phase === "COMBAT" && ph.combatMs < 850) {
+      k = ph.combatMs / 850;
+      text = "FIGHT!";
+    }
+    if (text === null) return;
+    const ctx = this.ctx;
+    const L = this.layout;
+    ctx.setTransform(this.canvas.width / L.w, 0, 0, this.canvas.height / L.h, 0, 0);
+    const fight = text === "FIGHT!";
+    // Pop in (0 → 18 %), hold, then ease out — FIGHT! lingers a little and leaves upward.
+    const appear = this.reducedMotion ? 1 : clamp(k / 0.18, 0, 1);
+    const scale = this.reducedMotion ? 1 : fight ? 0.85 + 0.25 * Math.min(1, k * 3) : 1.9 - 0.9 * easeOutBack(appear);
+    const alpha = k < 0.18 ? appear : k > (fight ? 0.6 : 0.82) ? clamp(1 - (k - (fight ? 0.6 : 0.82)) / (fight ? 0.4 : 0.18), 0, 1) : 1;
+    const size = (fight ? 0.16 : 0.27) * L.h;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(L.cx, L.h * (fight ? 0.42 : 0.44) - (fight && !this.reducedMotion ? k * 10 : 0));
+    ctx.scale(scale, scale);
+    ctx.font = `${Math.round(size)}px ${this.displayFont}, ${this.fontFamily}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.fillStyle = "#4d2d87"; // the drop face (the same treatment as the page's display type)
+    ctx.fillText(text, 0, size * 0.06);
+    ctx.lineWidth = size * 0.06;
+    ctx.strokeStyle = "rgba(10,8,20,0.9)";
+    ctx.strokeText(text, 0, 0);
+    ctx.fillStyle = fight ? "#e8d5ff" : "#ca94f9";
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
@@ -822,65 +1115,144 @@ export class ArenaRenderer {
       facing: u.facing,
       victory: (clock.phase === "VICTORY" || clock.phase === "RESULTS" || clock.phase === "DONE") && clock.winnerSlot === u.slot && u.alive,
       chill: (u.flags & FRAME_FLAG.SLOWED) !== 0 && u.alive,
+      ground: false,
     };
   }
 
-  private drawUnit(ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock): void {
-    const p = this.worldToScreen(u.x, u.y);
-    let lift = 0;
-    let alpha = 1;
-    if (clock.phase === "INTRO" && !this.reducedMotion) {
-      // Heroes drop into the arena one after another and land in their idle stance.
-      const local = clock.sinceStart - u.slot * 85;
-      const k = clamp(local / 650, 0, 1);
-      lift = (1 - easeOutBack(k)) * 300;
-      alpha = clamp(local / 180, 0, 1);
-      if (k >= 1 && !u.landed) {
-        u.landed = true;
-        this.ring(() => [u.x, u.y], 40, clock.now, 420, "rgba(232,213,255,0.9)", false);
-      }
-    }
-    if (alpha <= 0) return;
-    // RARITY effects (visual only — drawn after, and independently of, the simulation): a ground ring that stays on the floor while the hero drops in,
-    // a glow + outline behind the hero and a few rising particles in front. They fade with the hero when it is knocked out.
-    const rarity = u.fighter.appearance.rarity;
-    const koFade = u.alive || u.deadAt < 0 ? 1 : 1 - clamp((clock.now - u.deadAt) / 450, 0, 1);
-    const fxAlpha = alpha * koFade;
+  /** Intro drop-in for a unit: how high above the floor it still is, and how visible. */
+  private dropIn(u: UnitState, clock: RenderClock): { lift: number; alpha: number } {
+    if (clock.phase !== "INTRO" || this.reducedMotion) return { lift: 0, alpha: 1 };
+    const local = clock.sinceStart - u.slot * 85;
+    const k = clamp(local / 650, 0, 1);
+    return { lift: (1 - easeOutBack(k)) * 300, alpha: clamp(local / 180, 0, 1) };
+  }
+
+  /** How visible a fallen hero still is: the KO clip plays, the body lies for a moment, then fades. */
+  private koFade(u: UnitState, now: number): number {
+    if (u.alive || u.deadAt < 0) return 1;
+    return 1 - clamp((now - u.deadAt - 1000) / 700, 0, 1);
+  }
+
+  /** One small contact shadow on the floor under the feet — it stays on the ground while a hero drops in, and shrinks the higher it is. */
+  private drawShadow(ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock): void {
+    const { lift, alpha } = this.dropIn(u, clock);
+    const a = alpha * this.koFade(u, clock.now);
+    if (a <= 0) return;
+    const p = this.unitScreen(u);
+    const air = clamp(lift / 300, 0, 1);
+    const fallen = !u.alive && u.deadAt >= 0 ? clamp((clock.now - u.deadAt) / 600, 0, 1) : 0;
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.scale(p.s, p.s);
-    drawRarityGround(ctx, rarity, clock.now, u.slot, fxAlpha, this.reducedMotion);
+    ctx.scale(p.s * (1 - air * 0.45), p.s * (1 - air * 0.45));
+    ctx.fillStyle = "#000";
+    ctx.globalAlpha = a * 0.3 * (1 - air * 0.6);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 16 + fallen * 12, 4.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = a * 0.22 * (1 - air);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 9, 2.6, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
+  }
+
+  private drawUnit(ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock): void {
+    const p = this.unitScreen(u);
+    const { lift, alpha } = this.dropIn(u, clock);
+    if (clock.phase === "INTRO" && !this.reducedMotion && lift <= 0.5 && !u.landed && alpha > 0) {
+      u.landed = true;
+      this.dust(u.x, u.y, clock.now, 6, 1);
+    }
+    if (alpha <= 0) return;
+    // A blow knocks the hero back a few units (presentation only — the position itself is the server's).
+    const sinceHurt = clock.now - u.hurtAt;
+    const recoil = !this.reducedMotion && u.alive && sinceHurt >= 0 && sinceHurt < 160 ? u.hurtDir * 3.2 * (1 - sinceHurt / 160) : 0;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(p.x, p.y - lift);
+    ctx.translate(p.x + recoil * p.s, p.y - lift);
     ctx.scale(p.s, p.s);
-    drawRarityAura(ctx, rarity, clock.now, u.slot, fxAlpha, this.reducedMotion);
     const sheet = this.sheetFor(u);
-    if (!(sheet && this.drawSprite(ctx, u, clock, sheet))) drawHero(ctx, u.look, this.poseFor(u, clock));
-    drawRarityParticles(ctx, rarity, clock.now, u.slot, fxAlpha, this.reducedMotion);
-    // status halos from the verified frame flags
-    if (u.alive) {
-      if (u.flags & FRAME_FLAG.SHIELDED) {
-        ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = "#8fe3ff";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.ellipse(0, -52, 33, 58, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      if (u.flags & FRAME_FLAG.STUNNED) {
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "#ffd04a";
-        for (let i = 0; i < 3; i++) {
-          const a = clock.now / 160 + (i * Math.PI * 2) / 3;
-          ctx.beginPath();
-          ctx.arc(Math.cos(a) * 17, -108 + Math.sin(a) * 5, 3.4, 0, Math.PI * 2);
-          ctx.fill();
-        }
+    // its skeleton's atlas page is still on its way (asked for when the battle was set): nothing yet, rather than the vector hero for a moment
+    let drawn = Boolean(sheet?.pending);
+    if (sheet && this.sprites && !drawn) {
+      const sd = this.spriteDraw(u, clock, sheet);
+      if (!sd) drawn = true; // fallen and faded out
+      else {
+        this.drawAfterimages(ctx, u, clock, sheet, sd, p);
+        drawn = drawHeroSprite(ctx, this.sprites, sheet, sd, STAGE_HERO_HEIGHT);
       }
     }
+    if (!drawn) {
+      ctx.save();
+      ctx.scale(STAGE_K, STAGE_K);
+      drawHero(ctx, u.look, this.poseFor(u, clock));
+      ctx.restore();
+    }
+    if (u.alive) this.drawStatus(ctx, u, clock.now);
     ctx.restore();
+  }
+
+  /** The status a hero is under, drawn ON it (hero units, feet at the origin) — from the verified frame flags. */
+  private drawStatus(ctx: CanvasRenderingContext2D, u: UnitState, now: number): void {
+    const f = u.flags;
+    const top = this.headTop(u);
+    if (f & FRAME_FLAG.SLOWED) this.drawFrost(ctx, now, u.slot);
+    if (f & (FRAME_FLAG.BUFFED | FRAME_FLAG.EMPOWERED)) {
+      // small chevrons rising beside the body (gold: buffed, ember: empowered)
+      ctx.save();
+      ctx.strokeStyle = f & FRAME_FLAG.EMPOWERED ? "#ff9a5a" : "#ffd98a";
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let i = 0; i < 3; i++) {
+        const k = this.reducedMotion ? 0.45 + i * 0.12 : (now / 1000 + i / 3 + u.slot * 0.17) % 1;
+        const x = i === 0 ? -20 : i === 1 ? 19 : -7;
+        const y = -12 - k * top * 0.62;
+        ctx.globalAlpha = Math.sin(k * Math.PI) * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(x - 3.6, y + 2.6);
+        ctx.lineTo(x, y - 1);
+        ctx.lineTo(x + 3.6, y + 2.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (f & FRAME_FLAG.STUNNED) {
+      // three small stars circling over the head
+      ctx.save();
+      ctx.fillStyle = "#ffd04a";
+      ctx.strokeStyle = "rgba(40,28,6,0.9)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const a = (this.reducedMotion ? 0.6 : now / 220) + (i * Math.PI * 2) / 3;
+        const cx = Math.cos(a) * 14;
+        const cy = -(top + 6) + Math.sin(a) * 3.5;
+        ctx.globalAlpha = Math.sin(a) < -0.3 ? 0.6 : 1;
+        ctx.beginPath();
+        for (let j = 0; j < 8; j++) {
+          const r = j % 2 ? 1.4 : 3.8;
+          const b = (j / 8) * Math.PI * 2 - Math.PI / 2;
+          ctx.lineTo(cx + Math.cos(b) * r, cy + Math.sin(b) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (f & FRAME_FLAG.TAUNTED) {
+      // a small red mark beside the head: "drawn to the Tank"
+      ctx.save();
+      const bob = this.reducedMotion ? 0 : Math.sin(now / 160 + u.slot) * 1.5;
+      ctx.font = `700 17px ${this.displayFont}, ${this.fontFamily}`;
+      ctx.textAlign = "center";
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "rgba(20,6,6,0.9)";
+      ctx.fillStyle = "#ff6a5a";
+      ctx.strokeText("!", u.facing * -15, -(top - 2) + bob);
+      ctx.fillText("!", u.facing * -15, -(top - 2) + bob);
+      ctx.restore();
+    }
   }
 
   /** The composed sprite for a unit, or null when the vector fallback should draw it. */
@@ -894,48 +1266,103 @@ export class ArenaRenderer {
     return u.sheet && !u.sheet.needsFallback ? u.sheet : null;
   }
 
-  /** Draws a spritesheet hero at the current transform (feet at origin). Returns false to request the fallback. */
-  private drawSprite(ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock, sheet: HeroSheet): boolean {
+  /** The top of a hero's head (a hat or crest included), in hero units above its feet. */
+  private headTop(u: UnitState): number {
     const src = this.sprites;
-    if (!src) return false;
+    const sheet = this.sheetFor(u);
+    if (!src || !sheet) return 112 * STAGE_K;
+    return ((src.manifest.anchor.y - sheet.topPx()) / src.manifest.nominalHeightPx) * STAGE_HERO_HEIGHT;
+  }
+
+  /** ms since the bell, unclamped (after the fight the last clips finish and the heroes return to idle), or -1 before it. */
+  private sinceBell(clock: RenderClock): number {
+    const b = this.battle;
+    if (isPreFight(clock.phase) || !b || b.combatStartsAt === null) return -1;
+    return clock.now - b.combatStartsAt;
+  }
+
+  /** What a sprite hero shows this frame, or null when the fall-and-fade after a knock-out is over. */
+  private spriteDraw(u: UnitState, clock: RenderClock, sheet: HeroSheet): SpriteDraw | null {
+    const src = this.sprites;
+    if (!src) return null;
     const now = clock.now;
+    const m = src.manifest;
     const sinceKo = u.deadAt >= 0 ? now - u.deadAt : null;
-    // KO plays its fall, holds, then fades.
-    const fade = sinceKo === null ? 1 : 1 - clamp((sinceKo - 1000) / 700, 0, 1);
-    if (fade <= 0) return true;
+    const fade = this.koFade(u, now);
+    if (fade <= 0) return null;
+    // The attack / cast clip is timed so its impact frame is on screen at the server's event (actionClock.ts). Only the verified replay of THIS
+    // battle drives it, and nothing before the bell.
+    const t = this.replay?.battleId === this.battle?.id ? this.times.get(u.slot) : undefined;
+    const bell = this.sinceBell(clock);
+    const sinceAttackMs = t && bell >= 0 ? sinceClipStart(t.attacks, bell, impactLeadMs(m.clips[resolveClip(m, sheet.plan.attackClip)])) : Infinity;
+    const sinceSkillMs = t && bell >= 0 ? sinceClipStart(t.skills, bell, impactLeadMs(m.clips.skill)) : Infinity;
+    const backpedal = u.moving && Math.abs(u.vx) > 10 && Math.sign(u.vx) === -u.facing;
     const input: AnimInput = {
       alive: u.alive,
       moving: u.moving && u.alive,
       victory: (clock.phase === "VICTORY" || clock.phase === "RESULTS" || clock.phase === "DONE") && clock.winnerSlot === u.slot && u.alive,
       stunned: (u.flags & FRAME_FLAG.STUNNED) !== 0 && u.alive,
-      sinceAttackMs: now - u.attackAt,
-      sinceSkillMs: now - u.castAt,
+      sinceAttackMs,
+      sinceSkillMs,
       sinceHurtMs: now - u.hurtAt,
       sinceKoMs: sinceKo,
-      loopClockMs: now + u.slot * 137, // de-synchronise idle/walk loops between heroes
+      loopClockMs: now + u.slot * 137, // de-synchronise idle loops between heroes
+      moveClockMs: u.moveClock,
+      backpedal,
     };
-    // soft ground shadow (not baked into the art, so it stays correct for any set)
-    ctx.save();
-    ctx.globalAlpha *= 0.38 * fade;
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.ellipse(0, -1, 25, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    const sinceHurt = now - u.hurtAt;
-    return drawHeroSprite(
-      ctx, src, sheet,
-      {
-        playback: playbackFor(sheet, src, input),
-        direction: u.facing === 1 ? "right" : "left",
-        flash: sinceHurt >= 0 && sinceHurt < 200 ? 1 - sinceHurt / 200 : 0,
-        chill: (u.flags & FRAME_FLAG.SLOWED) !== 0 && u.alive,
-        alpha: fade,
-      },
-      HERO_HEIGHT,
-    );
+    const sinceFlash = now - u.flashAt;
+    const sinceShield = now - u.shieldAt;
+    const shieldFlash = sinceShield >= 0 && sinceShield < 450 ? 1 - sinceShield / 450 : 0;
+    const shield = u.alive ? Math.max((u.flags & FRAME_FLAG.SHIELDED) !== 0 ? 0.7 : 0, shieldFlash) : 0;
+    return {
+      playback: playbackFor(sheet, src, input),
+      direction: u.facing === 1 ? "right" : "left",
+      // A BLINK (≈ 4 frames), not a state: long or strong white made a hit hero — or two caught by one area spell — read as a see-through ghost.
+      flash: sinceFlash >= 0 && sinceFlash < 60 ? 0.6 * (1 - sinceFlash / 60) : 0,
+      chill: (u.flags & FRAME_FLAG.SLOWED) !== 0 && u.alive,
+      shield,
+      shieldPhase: this.reducedMotion ? 0.5 : ((now / 1300 + u.slot * 0.29) % 1),
+      alpha: fade,
+    };
   }
 
+  /**
+   * A dash leaves three fading, cool-tinted afterimages of the hero along its path — BEHIND it, never on top of it (no streak, no ring). A dash
+   * too short to leave the hero's own outline draws none: overlapping copies would only smear the hero.
+   */
+  private drawAfterimages(ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock, sheet: HeroSheet, sd: SpriteDraw, p: { x: number; y: number; s: number }): void {
+    const since = clock.now - u.dashAt;
+    if (this.reducedMotion || !this.sprites || since < 0 || since > 280) return;
+    const from = this.worldToScreen(u.dashFrom[0], u.dashFrom[1]);
+    const dx = (from.x - p.x) / p.s;
+    const dy = (from.y - p.y) / p.s;
+    const len = Math.hypot(dx, dy);
+    if (len < 34) return; // in hero units: about a body width
+    const fade = 1 - since / 280;
+    for (const [t, a] of [[1, 0.1], [0.72, 0.15], [0.44, 0.2]] as const) {
+      if (len * t < 26) continue; // a ghost must sit clear of the hero itself
+      ctx.save();
+      ctx.translate(dx * t, dy * t);
+      drawHeroSprite(ctx, this.sprites, sheet, { ...sd, flash: 0, shield: 0, chill: true, alpha: (sd.alpha ?? 1) * a * fade }, STAGE_HERO_HEIGHT);
+      ctx.restore();
+    }
+  }
+
+  /** Measured text widths by font + text: plates are laid out every frame, and measureText is not free on a phone. */
+  private readonly widths = new Map<string, number>();
+  private textWidth(ctx: CanvasRenderingContext2D, font: string, text: string): number {
+    const key = `${font}|${text}`;
+    let w = this.widths.get(key);
+    if (w === undefined) {
+      if (this.widths.size > 400) this.widths.clear();
+      ctx.font = font;
+      w = ctx.measureText(text).width;
+      this.widths.set(key, w);
+    }
+    return w;
+  }
+  /** Feet labels placed this frame (so labels of neighbouring heroes never overlap). */
+  private readonly feetRects: Array<{ x: number; y: number; w: number; h: number }> = [];
   private readonly tagNames = new Map<string, string>();
   /** Name-tag text, memoised (the label is drawn every frame, and grapheme segmentation is not free). */
   private tagName(name: string, max: number): string {
@@ -949,35 +1376,102 @@ export class ArenaRenderer {
     return out;
   }
 
-  private drawPlate(ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock): void {
-    const dead = u.deadAt >= 0 ? clamp((clock.now - u.deadAt) / 1400, 0, 1) : 0;
-    if (dead >= 1) return;
-    if (clock.phase === "INTRO" && clock.sinceStart - u.slot * 85 < 500) return;
-    const p = this.worldToScreen(u.x, u.y);
+  /**
+   * NAME PLATES. Each hangs just above its own hero's head (a tall hat included). Before and after the fight a plate shows name, class and HP;
+   * during it, name and HP (the class reads from the silhouette); on a phone-sized stage name and HP before the fight and the HP bar alone
+   * during it (the roster under the stage carries the names). In a crowd, plates are placed front to back: one that would overlap a plate
+   * already placed steps up out of the way, and if that is not enough it shrinks to its HP bar — plates never stack on top of each other.
+   * Mode changes wait ~¼ s (no flicker when two heroes brush past each other) and every move is eased.
+   */
+  private drawPlates(ctx: CanvasRenderingContext2D, clock: RenderClock, dtMs: number): void {
     const L = this.layout;
     const cpl = this.cssW / L.w;
-    const pf = clamp(10.2 / (13 * cpl), 0.75, 2.2);
+    // A phone-sized stage (< 480 css px) gets smaller plates: name + HP before the fight (the class reads from the silhouette and the roster
+    // below), and only the HP bar during it (names are in the roster) — eight full plates there covered the heroes they label.
+    const narrow = this.cssW < 480;
+    const pf = clamp((narrow ? 9 : 10.2) / (13 * cpl), 0.75, 2.2);
     const fs = 13 * pf;
-    const small = this.cssW < 520;
-    // Only the DRAWN label is shortened (grapheme-safe: never half an emoji); the hero's stored name is untouched.
-    const name = this.tagName(u.fighter.name, small ? 9 : ARENA_LABEL_MAX);
-    ctx.save();
-    ctx.globalAlpha = 1 - dead;
-    // Plate = name / class / HP. Heroes have no level, so the class (in its accent colour) is the second line.
-    const classLabel = (u.visual?.name ?? "Hero").toUpperCase();
     const subFs = fs * 0.72;
-    ctx.font = `600 ${fs}px ${this.fontFamily}`;
-    const nameW = ctx.measureText(name).width;
-    ctx.font = `700 ${subFs}px ${this.fontFamily}`;
-    const classW = ctx.measureText(classLabel).width;
-    const w = Math.max(76 * pf, nameW + 16 * pf, classW + 16 * pf);
-    const h = fs + subFs + 15 * pf;
-    let x = p.x - w / 2;
-    x = clamp(x, 4, L.w - w - 4);
-    const y = p.y - 118 * p.s - h - 6 * pf - (u.alive ? 0 : dead * 20);
+    const small = this.cssW < 520;
+    const want: PlateMode = clock.phase === "COMBAT" ? (narrow ? "bar" : "compact") : narrow ? "compact" : "full";
+    const items: Array<{ u: UnitState; px: number; base: number; dead: number }> = [];
+    for (const u of this.units) {
+      const dead = u.deadAt >= 0 ? clamp((clock.now - u.deadAt) / 1400, 0, 1) : 0;
+      if (dead >= 1) continue;
+      if (clock.phase === "INTRO" && clock.sinceStart - u.slot * 85 < 500) continue;
+      const p = this.unitScreen(u);
+      items.push({ u, px: p.x, base: p.y - (this.headTop(u) + PLATE_GAP) * p.s - (u.alive ? 0 : dead * 20), dead });
+    }
+    // front-most (lowest on screen) first: it keeps its natural place
+    items.sort((a, b) => b.base - a.base);
+    const placed: PlateRect[] = [];
+    const hits = (r: PlateRect) => placed.find((q) => r.x < q.x + q.w + 2 && r.x + r.w + 2 > q.x && r.y < q.y + q.h + 2 && r.y + r.h + 2 > q.y);
+    const ease = this.reducedMotion ? 1 : 1 - Math.exp(-dtMs / 110);
+    for (const it of items) {
+      const u = it.u;
+      const name = this.tagName(u.fighter.name, small ? 9 : ARENA_LABEL_MAX);
+      // Find the mode this plate can have without overlapping: its natural mode (stepping up by at most ~1½ plates), else just the HP bar.
+      let mode: PlateMode = want;
+      let lift = 0;
+      const geo = this.plateSize(ctx, u, name, want, pf, fs, subFs);
+      let r: PlateRect = { x: clamp(it.px - geo.w / 2, 4, L.w - geo.w - 4), y: it.base - geo.h, w: geo.w, h: geo.h };
+      for (let tries = 0; tries < 3; tries++) {
+        const q = hits(r);
+        if (!q) break;
+        lift = it.base - (q.y - 3);
+        r = { ...r, y: it.base - lift - geo.h };
+      }
+      if (hits(r) || lift > geo.h * 1.6) {
+        mode = "bar";
+        lift = 0;
+      }
+      if (u.alive === false) mode = u.plateMode; // a fading plate keeps its look
+      if (mode !== u.plateMode) {
+        if (u.plateWant !== mode) {
+          u.plateWant = mode;
+          u.plateWantSince = clock.now;
+        } else if (clock.now - u.plateWantSince > 240 || isPreFight(clock.phase) || this.reducedMotion) {
+          u.plateMode = mode;
+        }
+      } else {
+        u.plateWant = mode;
+      }
+      const target = u.plateMode === "bar" ? 0 : lift;
+      u.plateLift += (target - u.plateLift) * ease;
+      const g = u.plateMode === mode ? geo : this.plateSize(ctx, u, name, u.plateMode, pf, fs, subFs);
+      const rect: PlateRect = { x: clamp(it.px - g.w / 2, 4, L.w - g.w - 4), y: it.base - u.plateLift - g.h, w: g.w, h: g.h };
+      placed.push(rect);
+      u.plateTop = rect.y;
+      this.drawPlate(ctx, u, clock, rect, u.plateMode, name, pf, fs, subFs, it.dead);
+    }
+  }
+
+  private plateSize(ctx: CanvasRenderingContext2D, u: UnitState, name: string, mode: PlateMode, pf: number, fs: number, subFs: number): { w: number; h: number } {
+    if (mode === "bar") return { w: 46 * pf, h: 6.4 * pf };
+    const nameW = this.textWidth(ctx, `600 ${mode === "compact" ? fs * 0.92 : fs}px ${this.fontFamily}`, name);
+    if (mode === "compact") return { w: Math.max(62 * pf, nameW + 14 * pf), h: fs * 0.92 + 13 * pf };
+    const classW = this.textWidth(ctx, `700 ${subFs}px ${this.fontFamily}`, (u.visual?.name ?? "Hero").toUpperCase());
+    return { w: Math.max(76 * pf, nameW + 16 * pf, classW + 16 * pf), h: fs + subFs + 15 * pf };
+  }
+
+  private drawPlate(
+    ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock, r: PlateRect, mode: PlateMode, name: string, pf: number, fs: number, subFs: number, dead: number,
+  ): void {
+    const { x, y, w, h } = r;
     const accent = u.visual?.colors[0] ?? "#8b97ab";
     const rv = rarityVisual(u.fighter.appearance.rarity);
-
+    ctx.save();
+    ctx.globalAlpha = 1 - dead;
+    if (mode === "bar") {
+      ctx.fillStyle = "rgba(6,9,14,0.86)";
+      this.rr(ctx, x, y, w, h, 2.5 * pf);
+      ctx.fill();
+      ctx.fillStyle = u.alive ? accent : "#3a4558";
+      ctx.fillRect(x, y, 2.4 * pf, h);
+      this.hpBar(ctx, u, x + 3.4 * pf, y + 1.2 * pf, w - 4.6 * pf, h - 2.4 * pf);
+      ctx.restore();
+      return;
+    }
     // plate
     ctx.fillStyle = "rgba(6,9,14,0.82)";
     this.rr(ctx, x, y, w, h, 5 * pf);
@@ -985,16 +1479,18 @@ export class ArenaRenderer {
     ctx.strokeStyle = u.alive ? (clock.winnerSlot === u.slot && clock.phase !== "COMBAT" ? "#ffd04a" : accent) : "#3a4558";
     ctx.lineWidth = 1.6;
     ctx.stroke();
-    // name
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
-    ctx.font = `600 ${fs}px ${this.fontFamily}`;
+    const nfs = mode === "compact" ? fs * 0.92 : fs;
+    ctx.font = `600 ${nfs}px ${this.fontFamily}`;
     ctx.fillStyle = u.alive ? "#f1f5fb" : "#8b97ab";
-    ctx.fillText(name, x + w / 2, y + 2 * pf + (fs + 3 * pf) / 2 + 0.5);
-    // class
-    ctx.font = `700 ${subFs}px ${this.fontFamily}`;
-    ctx.fillStyle = u.alive ? accent : "#5d6a7d";
-    ctx.fillText(classLabel, x + w / 2, y + 2 * pf + (fs + 3 * pf) + (subFs + 1 * pf) / 2 + 0.5);
+    ctx.fillText(name, x + w / 2, y + 2 * pf + (nfs + 3 * pf) / 2 + 0.5);
+    if (mode === "full") {
+      // Heroes have no level, so the class (in its accent colour) is the second line.
+      ctx.font = `700 ${subFs}px ${this.fontFamily}`;
+      ctx.fillStyle = u.alive ? accent : "#5d6a7d";
+      ctx.fillText((u.visual?.name ?? "Hero").toUpperCase(), x + w / 2, y + 2 * pf + (fs + 3 * pf) + (subFs + 1 * pf) / 2 + 0.5);
+    }
     // The rarity shows on the plate as an EDGE and a small tier SHAPE (dot · diamond · star · crown) — never as text in the stage.
     if (rv.tier > 0 && u.alive) {
       ctx.save();
@@ -1006,11 +1502,11 @@ export class ArenaRenderer {
       ctx.restore();
     }
     drawRarityMark(ctx, u.fighter.appearance.rarity, x + w - 7 * pf, y + 7 * pf, 3.2 * pf);
-    // HP bar
-    const bx = x + 3;
-    const by = y + h - 7.5 * pf;
-    const bw = w - 6;
-    const bh = 4.8 * pf;
+    this.hpBar(ctx, u, x + 3, y + h - 7.5 * pf, w - 6, 4.8 * pf);
+    ctx.restore();
+  }
+
+  private hpBar(ctx: CanvasRenderingContext2D, u: UnitState, bx: number, by: number, bw: number, bh: number): void {
     ctx.fillStyle = "#1a2029";
     this.rr(ctx, bx, by, bw, bh, 2);
     ctx.fill();
@@ -1026,7 +1522,6 @@ export class ArenaRenderer {
       this.rr(ctx, bx, by, Math.max(2, bw * fracNow), bh, 2);
       ctx.fill();
     }
-    ctx.restore();
   }
 
   private rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -1051,7 +1546,7 @@ export class ArenaRenderer {
     this.add({
       t0: now, dur: 2400, layer: "air",
       draw: (ctx, k) => {
-        const p = this.worldToScreen(u.x, u.y);
+        const p = this.unitScreen(u);
         ctx.save();
         for (let i = 0; i < 26; i++) {
           const a = (i / 26) * Math.PI * 2 + i * 0.3;
@@ -1067,4 +1562,3 @@ export class ArenaRenderer {
     });
   }
 }
-

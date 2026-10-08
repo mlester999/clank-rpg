@@ -14,6 +14,7 @@ import { createRng } from "@/domain/util/rng";
 
 import { legacyRingRuleset } from "../support/legacyRing";
 import { rules200Ruleset, rules200Stored } from "../support/rules200";
+import { rules300Ruleset, rules300Stored } from "../support/rules300";
 
 /**
  * Permanent XP and character levels were REMOVED from Clank RPG (a hero's strength must never depend on how
@@ -63,11 +64,21 @@ const GOLDEN_V2: Record<string, string> = {
   "golden-3": "ca66f8c09008728cbe71dd04e625428f99d9527c628abdb80d1d5c9bb10f6574",
 };
 
-/** The same lineups under the CURRENT rules (3.0.0: longer fights, 60 s cap). Pinned so current behaviour cannot drift unnoticed. */
+/**
+ * The same lineups under rules 3.0.0 (longer fights, 60 s cap) AS A 3.0.0 BATTLE STORED THEM — no `engagement` key. Pinned while 3.0.0 was the
+ * current ruleset; they must keep verifying after 3.1.0, because a stored battle replays with the ruleset it carries.
+ */
 const GOLDEN_V3: Record<string, string> = {
   "golden-1": "d45a7097fda00f6decbe2758e50e72291d9cd0361aee608bc6cc0722c5cfb5c7",
   "golden-2": "90e7cbdaa171ce993fb6202638fdda23e5ec470adf9ba2aa5aa0cf3b82fe9811", // runs to the 60 s cap (deterministic time-limit result)
   "golden-3": "ead85aa0499c1bfaa5f58480aa8b3af516cc9ee96dd4a2fd3777c3fd99c6b346",
+};
+
+/** The same lineups under the CURRENT rules (3.1.0: engagement on top of the 3.0.0 pacing). Pinned so current behaviour cannot drift unnoticed. */
+const GOLDEN_V31: Record<string, string> = {
+  "golden-1": "720405ec7f92f4db0da0835914ce2feea69d010d5b3c2af555234a9d0b0cd9ad",
+  "golden-2": "840f69f0e8834896864ffc89c8d5eb9ea351b8243f7faed11f4991ea0d579208",
+  "golden-3": "64927f2362acb932923d20da16283736e2b1c98c61dcff666aa52e2f51456780",
 };
 
 describe("replay determinism is unchanged by the level removal", () => {
@@ -89,15 +100,29 @@ describe("replay determinism is unchanged by the level removal", () => {
     });
   }
   for (const [seed, hash] of Object.entries(GOLDEN_V3)) {
-    it(`${seed} under the current rules (3.0.0) is pinned`, () => {
-      expect(COMBAT_RULES_VERSION).toBe("3.0.0");
-      const out = simulateBattle({ seed, ruleset, units: lineup(seed), maxCombatMs: 60_000 });
+    it(`${seed} (rules 3.0.0, as stored — no engagement key, 60 s cap) still produces its pinned event hash`, () => {
+      const stored = JSON.stringify(rules300Stored(ruleset));
+      expect(stored).not.toContain('"engagement"'); // a 3.0.0 snapshot never had one …
+      const replayed = validateRuleset(JSON.parse(stored)); // … and loads exactly like loadRulesetSnapshot does
+      expect(replayed.combat.engagement).toBeUndefined(); // no engagement → the 3.0.0 code path, untouched
+      const out = simulateBattle({ seed, ruleset: replayed, units: lineup(seed), maxCombatMs: 60_000 });
       expect(out.eventsHash).toBe(hash);
       expect(out.rulesVersion).toBe("3.0.0");
+      expect(simulateBattle({ seed, ruleset: rules300Ruleset(ruleset), units: lineup(seed), maxCombatMs: 60_000 }).eventsHash).toBe(hash);
     });
   }
   it("the 3.0.0 retune produces NEW hashes only: the same seed under 2.0.0 and 3.0.0 differs, and each ruleset keeps its own result", () => {
     for (const seed of Object.keys(GOLDEN_V3)) expect(GOLDEN_V3[seed]).not.toBe(GOLDEN_V2[seed]);
+  });
+  for (const [seed, hash] of Object.entries(GOLDEN_V31)) {
+    it(`${seed} (rules 3.1.0, the current rules) produces its pinned event hash`, () => {
+      const out = simulateBattle({ seed, ruleset, units: lineup(seed), maxCombatMs: 60_000 });
+      expect(out.rulesVersion).toBe(COMBAT_RULES_VERSION);
+      expect(out.eventsHash).toBe(hash);
+    });
+  }
+  it("rules 3.1.0 produces NEW hashes only: the same seed under 3.0.0 and 3.1.0 differs, and each ruleset keeps its own result", () => {
+    for (const seed of Object.keys(GOLDEN_V31)) expect(GOLDEN_V31[seed]).not.toBe(GOLDEN_V3[seed]);
   });
 
   it("a battle stored BEFORE the removal (units carrying `level`, classes carrying `growth`) replays to the same hash", () => {

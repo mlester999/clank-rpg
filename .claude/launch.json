@@ -272,6 +272,67 @@
         "3720"
       ],
       "port": 3720
+    },
+    {
+      "name": "clank-rpg-arena-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgres://postgres@127.0.0.1:5531/arenaqa",
+        "SUPABASE_URL=",
+        "SUPABASE_SERVICE_ROLE_KEY=",
+        "NEXT_PUBLIC_SUPABASE_URL=",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=",
+        "ROBINHOOD_RPC_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "TELEGRAM_WEBHOOK_SECRET=",
+        "CRON_SECRET=qa-arena-cron-secret-0123456789",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "ARENA_VIEWER_ADVANCE=on",
+        "CLANK_ARENA_TIMING_LOG=true",
+        "CLANKRPG_CHAIN_ADAPTER=simulated",
+        "NEXT_PUBLIC_APP_URL=http://localhost:3741",
+        "NEXT_DIST_DIR=.next-arena-qa",
+        "pnpm",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3741"
+      ],
+      "port": 3741
+    },
+    {
+      "name": "clank-rpg-hero-qa",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgres://postgres@127.0.0.1:5561/heroqa",
+        "SUPABASE_URL=",
+        "SUPABASE_SERVICE_ROLE_KEY=",
+        "NEXT_PUBLIC_SUPABASE_URL=",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=",
+        "ROBINHOOD_RPC_URL=",
+        "TELEGRAM_BOT_TOKEN=",
+        "TELEGRAM_WEBHOOK_SECRET=",
+        "CRON_SECRET=qa-hero-cron-secret-0123456789",
+        "SESSION_SECRET=qa-throwaway-session-secret-0123456789abcdef",
+        "CLASS_ROLL_SECRET=qa-throwaway-class-roll-secret-0123456789",
+        "TELEGRAM_HASH_PEPPER=qa-throwaway-pepper-0123456789",
+        "ADMIN_ACCESS_KEY=qa-1c3c833db910bec21863cbb3348eb65f283f",
+        "ARENA_VIEWER_ADVANCE=on",
+        "CLANKRPG_CHAIN_ADAPTER=simulated",
+        "NEXT_PUBLIC_APP_URL=http://localhost:3761",
+        "NEXT_DIST_DIR=.next-hero-qa",
+        "pnpm",
+        "exec",
+        "next",
+        "start",
+        "-p",
+        "3761"
+      ],
+      "port": 3761
     }
   ]
 }

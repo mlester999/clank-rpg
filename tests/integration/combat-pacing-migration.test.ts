@@ -24,6 +24,7 @@ const LIVE_COMBAT = {
   ring: { startMs: 6000, endMs: 18_000, minRadius: 80, damagePctPerSec: 0.06, damageRampPerSec: 0.02 },
 };
 delete (LIVE_COMBAT as { pace?: unknown }).pace;
+delete (LIVE_COMBAT as { engagement?: unknown }).engagement; // rules 3.1.0 came later (migration 2300)
 delete (LIVE_COMBAT as { rangedPlantMs?: unknown }).rangedPlantMs;
 const LIVE_ARENA = { introMs: 2500, groupSize: 8, resultsMs: 5000, countdownMs: 3000, maxCombatMs: 30_000, staleAnchorMs: 20_000, victoryHoldMs: 1200, battleHistoryKeep: 2000 };
 
@@ -64,7 +65,9 @@ describe("migration 1700 — combat rules 3.0.0 pacing (settings only)", () => {
     expect(arena.value.maxCombatMs).toBe(60_000);
 
     const after = await loadSettings(db);
-    expect(after.combat).toEqual(DEFAULT_SETTINGS.combat); // the app now reads EXACTLY the shipped 3.0.0 combat (ring stripped on read)
+    const { engagement: _later, ...combat300 } = DEFAULT_SETTINGS.combat;
+    void _later;
+    expect(after.combat).toEqual(combat300); // the app now reads EXACTLY the shipped 3.0.0 combat (ring stripped on read; 3.1.0's engagement is migration 2300)
     expect(after.arena).toEqual({ ...before.arena, maxCombatMs: 60_000 }); // every other arena timing is untouched
     expect({ ...after, combat: before.combat, arena: before.arena }).toEqual(before); // no other setting moved
     expect(await db.query<{ key: string; version: number }>("select key, version from public.game_settings where key not in ('combat','arena') order by key")).toEqual(otherRowsBefore);

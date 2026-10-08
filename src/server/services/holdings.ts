@@ -192,7 +192,7 @@ export async function syncCharacterHoldings(db: Db, characterId: string, deps: H
       [characterId, json(holdingsBonus), json(loyalty.bonus), json(trading), hold.score],
     );
     await refreshPower(tx, characterId, s, deps.classes);
-    await evaluateAchievements(tx, characterId);
+    await evaluateAchievements(tx, characterId, now.getTime()); // the same clock the streaks were just measured with
     return { status: "OK", eligibleTokens: hold.eligibleTokens, holdingScore: hold.score, loyaltyDays: best?.days ?? 0, tradingScore, holdings: summary } as HoldingsSyncResult;
   });
 }

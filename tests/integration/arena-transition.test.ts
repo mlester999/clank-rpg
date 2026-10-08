@@ -435,27 +435,41 @@ describe("worker restart recovery", () => {
     expect((await battles()).map((b) => b.status)).toEqual(["SETTLED", "SIMULATED", "SIMULATED", "SIMULATED"]); // …and two battles are prepared ahead again
   });
 
-  it("an outage while a battle is on stage does NOT burst through the battle that was waiting: it starts fresh, visibly", async () => {
+  it("an outage while a battle is on stage never re-times a battle that has been public: the overdue ones settle in order and the arena continues on its own clock", async () => {
     await seedHeroes(db, 24);
     const ctx = arenaCtx(clock);
     await advanceArena(db, ctx); // #1 on stage, #2 (upcoming) and #3 prepared ahead, waiting for their slots
     const [b1, b2, b3] = await battles();
     expect(b2!.status).toBe("SIMULATED");
-    clock.ms = ms(b1!.slot_ends_at) + 90_000; // the worker was down for 90 s past the end of the slot
+    clock.ms = ms(b1!.slot_ends_at) + 90_000; // the worker was down for 90 s past the end of the slot (reads kept answering: #2 was on stage)
     await advanceArena(db, ctx);
     const all = await battles();
     expect(all[0]!.status).toBe("SETTLED");
     expect(all[1]!.id).toBe(b2!.id);
-    expect(all[1]!.status).toBe("SIMULATED"); // on stage, NOT settled unseen
-    expect(ms(all[1]!.starts_at)).toBe(clock.ms); // its whole timeline moved to "now" instead of a start 90 s in the past
-    expect(ms(all[1]!.combat_starts_at) - ms(all[1]!.starts_at)).toBe(5500); // the opening is intact: 2.5 s intro + 3·2·1
-    // The battle prepared behind it moved with it: the chain is still gapless, and its roster is untouched.
+    // #2's whole slot passed while it was the battle on stage — its fight was public — so it keeps its timeline and is settled in order,
+    // never shown counting down 3 · 2 · 1 again (tests/integration/arena-countdown.test.ts).
+    expect(all[1]!.status).toBe("SETTLED");
+    expect(ms(all[1]!.starts_at)).toBe(ms(b2!.starts_at));
+    expect(ms(all[1]!.combat_starts_at)).toBe(ms(b2!.combat_starts_at));
+    // #3 keeps its place in the chain too, at the moment its own timeline says; the chain stays gapless.
     expect(all[2]!.id).toBe(b3!.id);
+    expect(ms(all[2]!.starts_at)).toBe(ms(b3!.starts_at));
     expect(ms(all[2]!.starts_at)).toBe(ms(all[1]!.slot_ends_at));
+    // (A battle lined up AFTER the outage may start fresh at "now" instead — R3's stale-anchor rule — when #3's slot is already long over.)
+    // On stage is whichever battle has started by now (#3 mid-fight, or the next one if the fights were short) — at its stored time.
     const s = await stateAt(clock.ms);
-    expect(s.current!.id).toBe(b2!.id);
-    expect(phaseNow(s.current!, clock.ms, 3000, 30_000).phase).toBe("INTRO");
-    expect(s.current!.results).toBeNull();
+    const onStage = all.filter((b) => ms(b.starts_at) <= clock.ms).at(-1)!;
+    expect(s.current!.id).toBe(onStage.id);
+    expect(s.current!.combatStartsAt).toBe(ms(onStage.combat_starts_at));
+    // A longer outage: every overdue battle settles, and the next battle is anchored to "now" — a fresh, complete opening for everyone.
+    clock.ms += 10 * 60_000;
+    await advanceArena(db, ctx);
+    await advanceArena(db, ctx);
+    const later = await battles();
+    for (const b of later.filter((x) => ms(x.slot_ends_at) < clock.ms)) expect(b.status, `battle ${b.id}`).toBe("SETTLED");
+    const fresh = later.find((b) => b.status === "SIMULATED" && ms(b.starts_at) >= clock.ms - 5);
+    expect(fresh).toBeDefined();
+    expect(ms(fresh!.combat_starts_at) - ms(fresh!.starts_at)).toBe(5500); // the opening is intact: 2.5 s intro + 3·2·1
   });
 
   it("reports when the next transition falls due, so a worker sleeps until then instead of ticking blindly", async () => {

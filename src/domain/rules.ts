@@ -12,8 +12,16 @@ import { STAT_KEYS, type StatKey } from "./stats";
  *   2.0.0  static arena, 30 s cap, no `combat.pace` (a stored 2.0.0 ruleset has none and replays with the 1 / 1 default, bit for bit)
  *   3.0.0  longer fights: global `combat.pace` (time × 1.95, movement × 1.1) + modest survivability / damage / overtime retune,
  *          60 s hard cap — measured median ≈ 37 s (see docs/COMBAT.md). Classes and skills are unchanged.
+ *   3.1.0  ENGAGEMENT (`combat.engagement`): committed attacks (windup → release → recovery; ranged fighters plant for both and hold
+ *          their ground; a wound-up attack keeps its target), ranged spacing discipline (retreat stamina with a reposition cooldown, sliding
+ *          along the wall), melee pursuit and engaging from the target's side, telegraphed instant skills. Classes and skills are unchanged.
  */
-export const COMBAT_RULES_VERSION = "3.0.0";
+export const COMBAT_RULES_VERSION = "3.1.0";
+/** The rules a combat block describes: 3.1.0 only when it carries `engagement` (a database whose settings predate it keeps fighting — and labelling — 3.0.0). */
+export const PRE_ENGAGEMENT_RULES_VERSION = "3.0.0";
+export function rulesVersionFor(combat: CombatSettings): string {
+  return combat.engagement ? COMBAT_RULES_VERSION : PRE_ENGAGEMENT_RULES_VERSION;
+}
 /**
  * Rules 1.0.0 had a shrinking storm ring (zone damage + forced movement toward the centre). 2.0.0 removed it for good: the
  * Arena has a STATIC boundary. Battles stored under 1.0.0 are replayed by the engine's isolated legacy path so their

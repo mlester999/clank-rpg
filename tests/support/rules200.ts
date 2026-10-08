@@ -13,10 +13,11 @@ export const RULES_200_COMBAT_NUMBERS = {
   overtime: { startMs: 10_000, damageRampPerSec: 0.08 },
 } as const;
 
-/** The raw JSON a 2.0.0 battle stored: NO `pace` key at all (it did not exist), the 2.0.0 numbers, version "2.0.0". */
+/** The raw JSON a 2.0.0 battle stored: NO `pace` (or 3.1.0 `engagement`) key at all (neither existed), the 2.0.0 numbers, version "2.0.0". */
 export function rules200Stored(r: Ruleset): Record<string, unknown> {
-  const { pace: _pace, ...combat } = r.combat;
+  const { pace: _pace, engagement: _engagement, ...combat } = r.combat;
   void _pace;
+  void _engagement;
   return JSON.parse(
     JSON.stringify({
       ...r,

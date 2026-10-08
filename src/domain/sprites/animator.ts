@@ -20,6 +20,10 @@ export interface AnimInput {
   sinceKoMs: number | null;
   /** Free-running clock for looping clips, already de-synchronised per hero. */
   loopClockMs: number;
+  /** Moving AWAY from the way the hero faces (a ranged hero stepping back from a threat): the run cycle plays backwards — no moonwalking. */
+  backpedal?: boolean;
+  /** The run cycle's clock when it is driven by the ground covered (stride-locked: a slow step plays as a walk). Default: `loopClockMs`. */
+  moveClockMs?: number;
 }
 
 export interface Playback {
@@ -40,6 +44,7 @@ export function resolveClip(m: SpriteManifest, wanted: ClipKey): ClipKey {
     attack_shoot: ["attack_shoot", "attack_thrust", "attack_slash"],
     attack_thrust: ["attack_thrust", "attack_slash"],
     victory: ["victory", "idle"],
+    idle2: ["idle2", "idle"],
   };
   for (const k of chain[wanted] ?? [wanted]) if (m.clips[k]) return k;
   return "idle";
@@ -61,27 +66,42 @@ const within = (m: SpriteManifest, key: ClipKey, since: number): boolean => {
   return !!clip && since >= 0 && since < clipDurationMs(clip);
 };
 
+/** True once a clip has shown its impact frame (the blow has landed / the shot has left). A clip without one: never. */
+const pastImpact = (m: SpriteManifest, key: ClipKey, since: number): boolean => {
+  const clip = m.clips[key];
+  return !!clip && clip.impact !== undefined && since >= ((clip.impact + 1) / clip.fps) * 1000;
+};
+
 /**
- * Priority: KO  >  VICTORY  >  the most recent of SKILL/ATTACK still playing  >  HIT  >  MOVE  >  IDLE.
+ * Priority: KO  >  VICTORY  >  the most recent of SKILL/ATTACK still playing  >  HIT  >  MOVE  >  IDLE (in the hero's own stance, `idleClip`).
  * HIT sits below attacks so trading blows doesn't constantly interrupt swings; the arena adds a
  * brief damage flash on top regardless of the clip.
+ *
+ * No sliding feet: once the blow has landed (the clip is past its impact frame) a hero that is MOVING again runs — the follow-through is cut
+ * short instead of gliding across the floor in a pose with planted feet. A hit taken on the run shows as the flash and recoil on the run cycle
+ * (the HIT clip is for a hero standing its ground).
  */
-export function selectPlayback(input: AnimInput, m: SpriteManifest, attackClip: ClipKey): Playback {
-  const make = (state: AnimState, key: ClipKey, elapsed: number): Playback => {
+export function selectPlayback(input: AnimInput, m: SpriteManifest, attackClip: ClipKey, idleClip: ClipKey = "idle"): Playback {
+  const make = (state: AnimState, key: ClipKey, elapsed: number, reverse = false): Playback => {
     const clipKey = resolveClip(m, key);
     const clip = m.clips[clipKey] as ClipDef;
-    return { state, clip: clipKey, frame: frameAt(clip, elapsed), progress: clip.loop ? ((elapsed / clipDurationMs(clip)) % 1 + 1) % 1 : oneShotProgress(clip, elapsed) };
+    const frame = frameAt(clip, elapsed);
+    return {
+      state, clip: clipKey, frame: reverse && clip.loop ? clip.frames - 1 - frame : frame,
+      progress: clip.loop ? ((elapsed / clipDurationMs(clip)) % 1 + 1) % 1 : oneShotProgress(clip, elapsed),
+    };
   };
 
   if (!input.alive) return make("KO", "ko", input.sinceKoMs ?? 0);
   if (input.victory) return make("VICTORY", "victory", input.loopClockMs);
 
   const atk = resolveClip(m, attackClip);
-  const attackLive = within(m, atk, input.sinceAttackMs);
-  const skillLive = within(m, "skill", input.sinceSkillMs);
+  const running = input.moving && !input.stunned;
+  const attackLive = within(m, atk, input.sinceAttackMs) && !(running && pastImpact(m, atk, input.sinceAttackMs));
+  const skillLive = within(m, "skill", input.sinceSkillMs) && !(running && pastImpact(m, "skill", input.sinceSkillMs));
   if (skillLive && (!attackLive || input.sinceSkillMs <= input.sinceAttackMs)) return make("SKILL", "skill", input.sinceSkillMs);
   if (attackLive) return make("ATTACK", atk, input.sinceAttackMs);
-  if (within(m, "hit", input.sinceHurtMs)) return make("HIT", "hit", input.sinceHurtMs);
-  if (input.moving && !input.stunned) return make("MOVE", "move", input.loopClockMs);
-  return make("IDLE", "idle", input.loopClockMs);
+  if (within(m, "hit", input.sinceHurtMs) && !running) return make("HIT", "hit", input.sinceHurtMs);
+  if (input.moving && !input.stunned) return make("MOVE", "move", input.moveClockMs ?? input.loopClockMs, input.backpedal === true);
+  return make("IDLE", idleClip, input.loopClockMs);
 }

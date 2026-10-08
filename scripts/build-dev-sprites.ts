@@ -1,119 +1,68 @@
 /**
- * Builds the DEV PLACEHOLDER sprite set into public/sprites/clank-dev-v1/.
+ * Builds the DEV sprite sets into public/sprites/<set-id>/.
  *
- *   pnpm sprites:build
+ *   pnpm sprites:build                 both sets
+ *   pnpm sprites:build -- --set v2     only clank-dev-v2 (hero renderer v2)
  *
- * This is generated stand-in art so the spritesheet engine can be built, tested and demoed
- * before professional art exists. It is NOT production art. Replacing it means shipping a new
- * set that satisfies docs/SPRITES.md (same manifest contract, any frame size) — nothing in the
- * renderer is tied to these pictures.
+ *   clank-dev-v1   the original placeholder set. KEPT AS IT WAS: an admin can still select it, and nothing about it changes.
+ *   clank-dev-v2   HERO RENDERER v2 — the same layer ids (a hero's stored look is drawn exactly as chosen), better proportions, class silhouettes,
+ *                  anticipation in every action, rarity shown by gear (no rings), a silhouette outline. Same frame and size as v1 (same memory).
+ *
+ * This is generated stand-in art so the spritesheet engine can be built, tested and demoed; replacing it means shipping a new set that satisfies
+ * docs/SPRITES.md (same manifest contract, any frame size) — nothing in the renderer is tied to these pictures.
  */
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
-import { createCanvas } from "@napi-rs/canvas";
-
-import { parseManifest, SPRITE_SPEC_VERSION, type SpriteManifest } from "../src/domain/sprites/spec";
-
-import { AURAS, LAYERS, type LayerSpec } from "./sprites/parts";
+import { AURAS, LAYERS } from "./sprites/parts";
 import { RARITY_LAYERS } from "./sprites/rarityParts";
-import { FRAME_H, FRAME_W, imageDataOf, newFrame, pixelate } from "./sprites/pen";
-import { CLIP_ORDER, CLIPS, poseFor, joints, type ClipName } from "./sprites/rig";
+import { CLIP_ORDER, CLIPS, joints, poseFor } from "./sprites/rig";
+import { buildSet, type SetLayer } from "./sprites/buildSet";
+import { buildPackedSet, type PackedLayer } from "./sprites/buildPacked";
+import { ANCHOR_X, CLIP_ORDER as CLIP_ORDER_V2, CLIPS as CLIPS_V2, FEET_Y, FRAME, joints as joints2, poseFor as poseFor2, RIG_ATTACK, RIG_IDS, type ClipName } from "./sprites/v2/rig";
+import { AURAS as AURAS_V2, setLayers } from "./sprites/v2/set";
 
-const SET_ID = "clank-dev-v1";
-const OUT = path.join(process.cwd(), "public", "sprites", SET_ID);
-
-const COLS = Math.max(...Object.values(CLIPS).map((c) => c.frames));
-const ROWS = 1 + Math.max(...Object.values(CLIPS).map((c) => c.row));
-const BLOCK_W = COLS * FRAME_W;
-const BLOCK_H = ROWS * FRAME_H;
-const AURA_FRAMES = 8;
-
-/** Rarity layers split into one atlas per kind (trim / shoulder / crest / weaponfx) so no single image gets taller than a phone browser decodes comfortably. */
-const fileOf = (l: LayerSpec): string => (l.family === "rarity" ? `rarity-${l.id.split(".")[0]}` : FAMILY_FILE[l.family]);
-
-const FAMILY_FILE: Record<LayerSpec["family"], string> = {
-  body: "body", outfits: "outfits", face: "face", hair: "hair", headgear: "headgear", extras: "extras", weapons: "weapons", rarity: "rarity",
-};
-
-type Cell = Uint8ClampedArray;
-
-function renderLayer(layer: LayerSpec): Map<string, Cell> {
-  const cells = new Map<string, Cell>();
-  for (const clip of CLIP_ORDER) {
-    for (let f = 0; f < CLIPS[clip].frames; f++) {
-      const { canvas, g } = newFrame();
-      const pose = poseFor(clip, f);
-      layer.draw(g, pose, joints(pose));
-      cells.set(`${clip}:${f}`, pixelate(canvas, layer.tint === null ? 9 : 7));
-    }
-  }
-  return cells;
-}
+const arg = (name: string): string | null => (process.argv.includes(`--${name}`) ? (process.argv[process.argv.indexOf(`--${name}`) + 1] ?? null) : null);
+const only = arg("set");
+/** v2 only: build a subset of the class skeletons (a quick preview while iterating on one class) and/or into another set id. */
+const onlyRigs = arg("rigs")?.split(",");
+const v2Id = arg("id") ?? "clank-dev-v2";
 
 async function main(): Promise<void> {
-  await mkdir(OUT, { recursive: true });
-
-  // 1. group layers by atlas file, stacking one block per layer
-  const byFile = new Map<string, LayerSpec[]>();
-  for (const l of [...LAYERS, ...RARITY_LAYERS]) byFile.set(fileOf(l), [...(byFile.get(fileOf(l)) ?? []), l]);
-
-  const images: Record<string, string> = {};
-  const layers: SpriteManifest["layers"] = {};
-  let cellCount = 0;
-
-  for (const [file, group] of byFile) {
-    const atlas = createCanvas(BLOCK_W, BLOCK_H * group.length);
-    const ctx = atlas.getContext("2d");
-    for (const [i, layer] of group.entries()) {
-      const y0 = i * BLOCK_H;
-      for (const [key, pixels] of renderLayer(layer)) {
-        const [clip, frame] = key.split(":") as [ClipName, string];
-        ctx.putImageData(imageDataOf(pixels), Number(frame) * FRAME_W, y0 + CLIPS[clip].row * FRAME_H);
-        cellCount++;
-      }
-      layers[layer.id] = {
-        image: file, x: 0, y: y0, z: layer.z, tint: layer.tint,
-        ...(layer.of ? { of: layer.of } : {}),
-        ...(layer.attack ? { attack: layer.attack } : {}),
-      };
-    }
-    images[file] = `${file}.png`;
-    await writeFile(path.join(OUT, `${file}.png`), atlas.toBuffer("image/png"));
+  if (!only || only === "v1") {
+    await buildSet({
+      id: "clank-dev-v1",
+      name: "Clank Dev Placeholder Set",
+      credits: "Generated procedurally by scripts/build-dev-sprites.ts. DEV PLACEHOLDER — not production art.",
+      anchor: { x: 34, y: 58 },
+      nominalHeightPx: 46,
+      clips: CLIPS,
+      clipOrder: CLIP_ORDER,
+      poseFor,
+      joints: joints as never,
+      layers: [...LAYERS, ...RARITY_LAYERS] as unknown as SetLayer[],
+      auras: AURAS,
+    });
   }
-
-  // 2. auras: one row of looping frames per aura, stacked in one atlas
-  const auraAtlas = createCanvas(AURA_FRAMES * FRAME_W, FRAME_H * AURAS.length);
-  const actx = auraAtlas.getContext("2d");
-  for (const [i, aura] of AURAS.entries()) {
-    for (let f = 0; f < AURA_FRAMES; f++) {
-      const { canvas, g } = newFrame();
-      aura.draw(g, f, AURA_FRAMES);
-      actx.putImageData(imageDataOf(pixelate(canvas, 7)), f * FRAME_W, i * FRAME_H);
-      cellCount++;
-    }
-    layers[aura.id] = { image: "auras", x: 0, y: i * FRAME_H, z: -5, tint: "rarity", loop: { frames: AURA_FRAMES, fps: 10 } };
+  if (!only || only === "v2") {
+    await buildPackedSet<ClipName>({
+      id: v2Id,
+      name: "Clank Hero Renderer v2",
+      credits: "Generated procedurally by scripts/build-dev-sprites.ts (scripts/sprites/v2). Hero renderer v2 — DEV PLACEHOLDER art, not licensed production art.",
+      outline: "#0b0a12",
+      innerOutline: "#3c3c3c",
+      paletteTones: true,
+      // 96 × 80: room for a Legendary's crest or wings, a brute's greatsword raised overhead, a warden's longbow and a lunging duelist; the feet
+      // stand at (40, 76)
+      frame: { w: FRAME.w, h: FRAME.h },
+      anchor: { x: ANCHOR_X, y: FEET_Y },
+      floor: FEET_Y + 1.5,
+      nominalHeightPx: 46,
+      clips: CLIPS_V2,
+      clipOrder: CLIP_ORDER_V2,
+      rigs: RIG_IDS.map((id) => ({ id, attack: RIG_ATTACK[id], poseFor: (c: ClipName, f: number) => poseFor2(c, f, id), joints: (p: never) => joints2(p, id) })),
+      layers: setLayers().map((l) => ({ ...l, family: "v2" }) as unknown as PackedLayer),
+      auras: AURAS_V2,
+      ...(onlyRigs ? { onlyRigs } : {}),
+    });
   }
-  images.auras = "auras.png";
-  await writeFile(path.join(OUT, "auras.png"), auraAtlas.toBuffer("image/png"));
-
-  // 3. manifest (validated with the same schema the game uses at runtime)
-  const manifest = parseManifest({
-    spec: SPRITE_SPEC_VERSION,
-    id: SET_ID,
-    name: "Clank Dev Placeholder Set",
-    status: "dev-placeholder",
-    credits: "Generated procedurally by scripts/build-dev-sprites.ts. DEV PLACEHOLDER — not production art.",
-    frame: { w: FRAME_W, h: FRAME_H },
-    anchor: { x: 34, y: 58 },
-    nominalHeightPx: 46,
-    images,
-    clips: Object.fromEntries(CLIP_ORDER.map((c) => [c, { row: CLIPS[c].row, frames: CLIPS[c].frames, fps: CLIPS[c].fps, loop: CLIPS[c].loop, ...(CLIPS[c].impact !== undefined ? { impact: CLIPS[c].impact } : {}) }])),
-    directions: { right: { index: 0 }, left: { mirror: "right" } },
-    layers,
-  });
-  await writeFile(path.join(OUT, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`built ${SET_ID}: ${Object.keys(manifest.layers).length} layers, ${Object.keys(images).length} atlases, ${cellCount} cells → ${path.relative(process.cwd(), OUT)}`);
 }
 
 void main().catch((e) => {

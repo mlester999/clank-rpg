@@ -27,8 +27,8 @@ const radial = (p: [number, number]) => Math.hypot(p[0], p[1]);
 const sturdy = (u: CombatUnitInput): CombatUnitInput => ({ ...u, stats: { ...u.stats, hp: u.stats.hp * 400, def: u.stats.def * 40 } });
 
 describe("rules 2.0.0+: a static arena", () => {
-  it("is the current rules version (3.0.0 keeps the static arena), and the legacy ring is a different, older one", () => {
-    expect(COMBAT_RULES_VERSION).toBe("3.0.0");
+  it("is the current rules version (3.0.0 and 3.1.0 keep the static arena), and the legacy ring is a different, older one", () => {
+    expect(COMBAT_RULES_VERSION).toBe("3.1.0");
     expect(LEGACY_RING_RULES_VERSION).toBe("1.0.0");
     expect(ruleset.combat).not.toHaveProperty("ring");
     expect(DEFAULT_SETTINGS.combat).not.toHaveProperty("ring");
@@ -97,21 +97,29 @@ describe("rules 2.0.0+: a static arena", () => {
 describe("combat still works without the ring", () => {
   const duel = (a: string, b: string, seed: string, over: Partial<Ruleset> = {}) => simulateBattle({ seed, ruleset: { ...ruleset, ...over }, units: [makeUnit("a", a), makeUnit("b", b)], maxCombatMs: CAP, recordFrames: true });
 
-  it("ranged attacks still land from a distance (against an opponent that cannot simply run them down)", () => {
+  it("ranged attacks are still shot from a distance, and land (against an opponent that cannot simply run them down)", () => {
+    // Measured where the shot is RELEASED: since rules 3.1.0 a shooter aims for a moment before each release, so against a charging Tank the
+    // projectile lands a little closer than it was fired from — the shot itself is still taken from well outside melee reach.
     for (const [ranged, min] of [["ranger", 10], ["mage", 5]] as const) {
-      let longRangeHits = 0;
+      let longRangeShots = 0;
+      let landed = 0;
       for (let i = 0; i < 12; i++) {
         const out = duel(ranged, "tank", `ranged-${ranged}-${i}`);
         const shooter = out.slotOf.a!;
         const victim = out.slotOf.b!;
         for (const [tick, kind, a, b, , flags] of out.events) {
-          if (kind !== EV.HIT || a !== shooter || !(flags & EV_FLAG.BASIC)) continue;
-          expect(b).toBe(victim);
+          if (a !== shooter) continue;
+          if (kind === EV.HIT && flags & EV_FLAG.BASIC) {
+            expect(b).toBe(victim);
+            landed++;
+          }
+          if (kind !== EV.ATTACK || !(flags & EV_FLAG.PROJECTILE)) continue;
           const d = Math.hypot(posOf(out, tick, shooter)[0] - posOf(out, tick, victim)[0], posOf(out, tick, shooter)[1] - posOf(out, tick, victim)[1]);
-          if (d > 90) longRangeHits++; // well outside any melee reach
+          if (d > 90) longRangeShots++; // well outside any melee reach
         }
       }
-      expect(longRangeHits, `${ranged} hits from beyond 90 units`).toBeGreaterThan(min);
+      expect(longRangeShots, `${ranged} shots released from beyond 90 units`).toBeGreaterThan(min);
+      expect(landed, `${ranged} basic hits`).toBeGreaterThan(50);
     }
   });
 
@@ -164,8 +172,8 @@ describe("combat still works without the ring", () => {
     const b = simulateBattle({ seed: "static-det", ruleset, units: makeLineup("d"), maxCombatMs: CAP });
     expect(b.eventsHash).toBe(a.eventsHash);
     expect(b.events).toEqual(a.events);
-    expect(a.rulesVersion).toBe("3.0.0");
-    expect(simulateBattle({ seed: "static-det", ruleset: { ...ruleset, rulesVersion: "3.0.1" }, units: makeLineup("d"), maxCombatMs: CAP }).eventsHash).not.toBe(a.eventsHash);
+    expect(a.rulesVersion).toBe("3.1.0");
+    expect(simulateBattle({ seed: "static-det", ruleset: { ...ruleset, rulesVersion: "3.1.1" }, units: makeLineup("d"), maxCombatMs: CAP }).eventsHash).not.toBe(a.eventsHash);
   });
 
   it("the hard maximum is the shipped 60 s cap (rules 3.0.0)", () => {

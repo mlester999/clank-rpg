@@ -57,6 +57,8 @@ export function HeroPortrait({ look, size = 64, frame = "bust", animate = false,
     const rv = rarityVisual(l.rarity);
     const sheet = source ? getHeroSheet(source, l.sprite, l.colors, l.rarity) : null;
     const useSprite = Boolean(source && sheet && !sheet.needsFallback);
+    // its skeleton's atlas page is loading: the backdrop only (the portrait redraws when the page arrives — `rev`), never the vector hero for a moment
+    const waiting = Boolean(useSprite && sheet?.pending);
 
     const background = () => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -88,10 +90,10 @@ export function HeroPortrait({ look, size = 64, frame = "bust", animate = false,
     const paintSprite = (tSec: number) => {
       if (!source || !sheet) return;
       const m = source.manifest;
-      const clip = victory && m.clips.victory ? "victory" : "idle";
+      const clip = victory && m.clips.victory ? "victory" : sheet.plan.idleClip;
       const def = m.clips[clip]!;
       const strip = sheet.strip(clip, 0);
-      if (!strip) return paintVector(tSec);
+      if (!strip) return waiting ? background() : paintVector(tSec);
       const f = def.loop ? Math.floor(tSec * def.fps) % def.frames : 0;
       // Source crop in sprite pixels, derived from the manifest (so any frame size / proportion works).
       const n = m.nominalHeightPx;
@@ -132,7 +134,7 @@ export function HeroPortrait({ look, size = 64, frame = "bust", animate = false,
       stopped = true;
       cancelAnimationFrame(raf);
     };
-  }, [key, size, frame, animate, victory, source, transparent]);
+  }, [key, size, frame, animate, victory, source, transparent, lib.rev]);
 
   return <canvas ref={ref} role="img" aria-label={label ?? "Hero portrait"} style={{ width: size, height: size }} className={`block shrink-0 ${className}`} />;
 }

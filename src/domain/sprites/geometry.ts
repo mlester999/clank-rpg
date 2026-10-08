@@ -1,4 +1,4 @@
-import type { ClipDef, ClipKey, Direction, LayerDef, SpriteManifest } from "./spec";
+import { decodeCells, type ClipDef, type ClipKey, type Direction, type LayerDef, type PackedCell, type SpriteManifest } from "./spec";
 
 /**
  * Where every cell of every layer lives. Layer block layout (identical for ALL layers, which is
@@ -69,8 +69,8 @@ export function clipDurationMs(clip: ClipDef): number {
 export function cellRect(m: SpriteManifest, layer: LayerDef, clip: ClipDef, frame: number, dirIndex: number): Rect {
   const f = Math.min(Math.max(0, Math.floor(frame)), clip.frames - 1);
   return {
-    sx: layer.x + f * m.frame.w,
-    sy: layer.y + (dirIndex * gridRows(m) + clip.row) * m.frame.h,
+    sx: (layer.x ?? 0) + f * m.frame.w,
+    sy: (layer.y ?? 0) + (dirIndex * gridRows(m) + clip.row) * m.frame.h,
     sw: m.frame.w,
     sh: m.frame.h,
   };
@@ -80,5 +80,26 @@ export function cellRect(m: SpriteManifest, layer: LayerDef, clip: ClipDef, fram
 export function loopCellRect(m: SpriteManifest, layer: LayerDef, frame: number): Rect {
   const frames = layer.loop?.frames ?? 1;
   const f = ((Math.floor(frame) % frames) + frames) % frames;
-  return { sx: layer.x + f * m.frame.w, sy: layer.y, sw: m.frame.w, sh: m.frame.h };
+  return { sx: (layer.x ?? 0) + f * m.frame.w, sy: layer.y ?? 0, sw: m.frame.w, sh: m.frame.h };
+}
+
+const decoded = new WeakMap<readonly unknown[], PackedCell[]>();
+
+/**
+ * A packed layer's row for one clip on one skeleton: its atlas image and one decoded cell per frame (null: draws nothing there). Decoded once
+ * per row and cached. Block-layout layers have no packed rows.
+ */
+export function packedRow(layer: LayerDef, rig: string | null, clip: ClipDef): { image: string; cells: PackedCell[] } | null {
+  if (!layer.cells || !rig) return null;
+  const row = layer.cells[rig]?.[clip.row];
+  if (!row) return null;
+  let cells = decoded.get(row);
+  if (!cells) decoded.set(row, (cells = decodeCells(row[1])));
+  return { image: row[0], cells };
+}
+
+/** Can this layer be drawn on this skeleton? (Block-layout layers: on any.) */
+export function drawsOn(layer: LayerDef, rig: string | null): boolean {
+  if (!layer.cells) return true;
+  return rig !== null && layer.cells[rig] !== undefined;
 }

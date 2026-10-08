@@ -43,6 +43,8 @@ export interface HeroPose {
   victory: boolean;
   /** extra tint used for slows etc. */
   chill?: boolean;
+  /** false: the caller draws the ground itself (the arena: one small contact shadow, rarity shown by the plate / gear) — no shadow, no aura ring. */
+  ground?: boolean;
 }
 
 export const IDLE_POSE: HeroPose = { t: 0, moving: false, attack: -1, cast: -1, hurt: 0, dead: 0, facing: 1, victory: false };
@@ -520,14 +522,17 @@ export function drawHero(ctx: CanvasRenderingContext2D, look: HeroLook, pose: He
 
   // Shadow + aura sit on the ground and never rotate with the body.
   const parentAlpha = ctx.globalAlpha;
-  ctx.save();
-  ctx.globalAlpha = parentAlpha * (1 - dead) * 0.38;
-  ctx.fillStyle = "#000";
-  ctx.beginPath();
-  ctx.ellipse(0, -1, 25, 7, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  if (dead < 0.6) {
+  const ground = pose.ground !== false;
+  if (ground) {
+    ctx.save();
+    ctx.globalAlpha = parentAlpha * (1 - dead) * 0.38;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(0, -1, 25, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (ground && dead < 0.6) {
     ctx.save();
     BASE_ALPHA = parentAlpha * (1 - dead / 0.6);
     drawAura(ctx, look, t);

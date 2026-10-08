@@ -126,7 +126,8 @@ measurement after a ~96 s host suspension. Fixed as part of this change.)
 * **The flip is a pure clock read.** `getArenaState(now)` is a function of the clock and persisted rows; at the
   instant the slot ends the prepared battle simply becomes `current`. No simulation, no scheduling, no write.
 * **Outage recovery.** A `SCHEDULED` battle whose planned start is more than `arena.staleAnchorMs` in the past is
-  re-anchored to "now" before it is simulated, so it is watchable instead of being settled unseen.
+  re-anchored to "now" before it is simulated, so it is watchable instead of being settled unseen. **Only a battle that
+  has never been public is ever re-timed** — see "The 3 · 2 · 1 is a real pre-fight state" below.
 * **No stale snapshots** (`src/domain/arena/boundary.ts`, `/api/arena/state`). A cached snapshot is never served —
   or kept — across a phase boundary that has passed; the advance step is never re-used across a transition that has
   fallen due (`dueAtMs`).
@@ -186,6 +187,48 @@ viewer's ordinary poll sat for 3–4 s inside `advanceForRead` waiting for the a
   2.9 s against 1.4 s, a 2× margin that a busy test machine could erase). No assertion bound was loosened.
 * With the fix, the original tight configuration improved but cannot be made to pass at 22–30 ms purely by runtime
   changes (22 ms: p50 10 ms, max 973 ms; 30 ms: p50 1,386 ms) — the remainder is PGlite's lock, shown above.
+
+## The 3 · 2 · 1 is a real pre-fight state (rules 3.1.0 pass)
+
+**Reported:** the countdown sometimes showed fighters already moving, attacking and losing HP, or ran 3 · 2 · 1 over a
+fight that had already happened.
+
+**Root cause (server).** The outage recovery had a second branch ("R-1") that re-anchored a *prepared* battle to "now"
+when its slot had passed behind a stalled predecessor. But the state endpoint shows a battle as soon as `starts_at`
+passes and serves its replay from `combat_starts_at`, and reads keep answering while the arena is not advancing — so that
+battle could already have been watched. Moving it made every viewer see the **same battle** count down again over a fight
+they had already seen. R-1 is removed: a battle's timeline is immutable once it has been public; after an outage the
+overdue battles are settled in order (R1) and the next battle lined up is anchored to now (R3, `staleAnchorMs`) — a fresh,
+complete opening for everyone. Regression test: `tests/integration/arena-countdown.test.ts` (failed before the fix).
+
+**Root cause (client).** The production renderer's pre-fight branch only cleared `moving` and the status flags: it never reset HP, the
+knock-out state or positions. So whenever a viewer's stage went back to before the bell for the SAME battle — the R-1 re-timing above, or the
+synced clock estimate stepping back across the bell after a tab woke up — the 3 · 2 · 1 was drawn over the heroes exactly as the fight had
+left them: hurt, knocked out, mid-arena. The countdown itself was a DOM overlay updated at most every 90 ms plus a React commit, so the "1"
+could also still be on screen for a few frames after the canvas had started the fight. (The engine itself never produced an event before
+tick 1 — verified across 300 battles of every class — the fight was never *simulated* early, only *shown* wrongly.)
+
+**Client, robust by construction** (`src/components/arena/playback.ts`). What the stage shows is a pure function of
+(battle, replay, server clock): before `combat_starts_at` (IDLE · INTRO · COUNTDOWN) every hero is snapped to its
+authoritative spawn state — start position, full HP, alive, no status — and **no event is presented**, even if the replay
+arrived early. From the bell the verified replay plays (tick 0 is the spawn state; the first event is at tick ≥ 1). The
+renderer drops everything it has drawn when the battle's timeline key (`id@combatStartsAt`) changes or the clock steps back
+across the bell, and the 3 · 2 · 1 and FIGHT! are drawn **on the canvas, in the same frame as the fight** — a DOM overlay is
+committed a frame or more later and could overlap combat (the DOM keeps a screen-reader-only live region). The sprite
+attack / cast clips are timed from the replay too, and never start before the bell.
+
+**Found during QA: the start positions shown during the 3 · 2 · 1.** The state endpoint computed each fighter's start position from the
+*current* `arena.groupSize` setting instead of the battle's own size. An admin changing the group size while a battle was on stage therefore
+made `/api/arena/state` fail (503 `ARENA_UNAVAILABLE` until that battle left the stage) — and, had it not crashed, would have drawn the eight
+standing at positions that differ from the replay's tick 0 (a jump at the bell). It now uses the battle's own participant count
+(`loadFighters`, `src/server/services/views.ts`); `tests/integration/arena-state.test.ts` pins that the positions equal the replay's start
+positions, also after the group size changes mid-battle (verified to fail before the fix).
+
+**Tests:** `tests/unit/arena-countdown.test.ts` — 300 battles of every class / tactic (no event before tick 1, tick 0 =
+spawn at full HP); every countdown instant (3 · 2 · 1, just before FIGHT) shows the spawn state with 0 events even with the
+replay present; 60 fps and 30 fps viewers; a moved timeline and a backward clock step reset the stage; reconnect during
+the countdown; two clients on different clocks agree. Measured in a headless browser (desktop, 6× CPU-throttled mobile,
+reloads mid-countdown): 0 combat draws during any countdown.
 
 ## Production requirement — is `pnpm arena:worker` needed?
 

@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 import { HAIR_COLORS, HAIR_STYLE_COUNT, EYE_STYLE_COUNT, MOUTH_STYLE_COUNT, SKIN_TONES, ACCESSORIES, type AppearanceParts, type Rarity } from "../character/appearance";
-import { darken, RARITY_COLOR, shiftHue } from "../util/color";
+import { darken, lighten, RARITY_COLOR, shiftHue } from "../util/color";
 
 import { CATALOG_VERSION, getCosmetic, isUsable, type ClassLook } from "./catalog";
+import { lookKey, stableHash } from "./hash";
 import { SLOT_IDS, type SlotId, type TintRole } from "./spec";
 
 /**
@@ -164,17 +165,38 @@ export function resolveSpriteConfig(input: {
 
 export type HeroPalette = Record<TintRole, string>;
 
+/**
+ * Armour metals for layers tinted `metal` (hero renderer v2): steel, iron, bronze, blackened iron, silver. Each hero wears ONE, picked from its
+ * never-rerolled look (skin, hair colour, hue) — so a squad of Warriors is not one suit of armour in different shirts. Sets without `metal`
+ * layers (v1) are unaffected.
+ */
+export const METAL_TONES = ["#a9b2c0", "#80868f", "#b5844d", "#585e6a", "#cbd0da"] as const;
+/** A second cloth colour (`cloth`): ivory, charcoal, leather, slate, oxblood, forest, ochre — tabards, cloaks, sashes, plumes. */
+export const CLOTH_TONES = ["#e4ddca", "#3a3843", "#7a5536", "#5b6c82", "#7b3131", "#3f6249", "#be9645"] as const;
+
+/**
+ * Class-colour TONES (sets that declare `paletteTones`, hero renderer v2): each hero wears its class colours one of five shades deeper or paler,
+ * picked from the never-rerolled look — a squad of Warriors is crimson, brick, red, coral and rose, all still unmistakably the Warrior red.
+ * Negative = mixed toward black, positive = toward white.
+ */
+export const PALETTE_TONES = [-0.26, -0.13, 0, 0.12, 0.22] as const;
+
+const toned = (hex: string, t: number): string => (t < 0 ? darken(hex, -t) : t > 0 ? lighten(hex, t) : hex);
+
 /** Resolves every tint role for one hero. Colours derive from the class (so a class re-tune propagates) plus the hero's own picks. */
-export function resolvePalette(config: SpriteConfig, colors: readonly [string, string, string], rarity: string): HeroPalette {
+export function resolvePalette(config: SpriteConfig, colors: readonly [string, string, string], rarity: string, opts: { tones?: boolean } = {}): HeroPalette {
   const rarityColor = RARITY_COLOR[rarity] ?? (RARITY_COLOR.COMMON as string);
+  const tone = opts.tones ? (PALETTE_TONES[stableHash(`tone|${lookKey(config)}`) % PALETTE_TONES.length] as number) : 0;
   return {
     skin: SKIN_TONES[config.skin % SKIN_TONES.length] as string,
     hair: HAIR_COLORS[config.hairColor % HAIR_COLORS.length] as string,
-    primary: shiftHue(colors[0], config.hue),
+    primary: toned(shiftHue(colors[0], config.hue), tone),
     secondary: shiftHue(colors[1], config.hue),
-    accent: shiftHue(colors[2], config.hue),
+    accent: toned(shiftHue(colors[2], config.hue), tone * 0.5),
     rarity: rarityColor,
     cape: darken(rarityColor, 0.35),
+    metal: METAL_TONES[stableHash(`metal|${lookKey(config)}`) % METAL_TONES.length] as string,
+    cloth: CLOTH_TONES[stableHash(`cloth|${lookKey(config)}`) % CLOTH_TONES.length] as string,
   };
 }
 

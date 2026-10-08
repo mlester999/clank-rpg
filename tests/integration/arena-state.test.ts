@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { phaseNow } from "@/components/arena/phase";
-import { loadClasses, loadSettings } from "@/server/config/settingsRepo";
+import { loadClasses, loadSettings, saveSetting } from "@/server/config/settingsRepo";
 import type { Db } from "@/server/db/types";
 import { advanceArena } from "@/server/services/arena";
-import { getArenaState } from "@/server/services/views";
+import { getArenaState, getReplayDto } from "@/server/services/views";
 
 import { arenaCtx, count, createTestDb, FakeClock, resetDb, seedHeroes } from "../support/db";
 
@@ -53,6 +53,21 @@ describe("arena state — the on-stage battle", () => {
     expect(s.groupSize).toBe(8);
   });
 
+  it("the start positions are the battle's own (its replay's tick 0) — even after an admin changes the group size while it is on stage", async () => {
+    await seedHeroes(db, 16);
+    await advanceArena(db, arenaCtx(clock));
+    const before = await stateNow();
+    const cur = before.current!;
+    // the 3 · 2 · 1 shows the fighters where the fight starts: exactly the replay's start positions
+    const replay = await getReplayDto(db, cur.id, cur.combatStartsAt! + 10);
+    for (const f of cur.fighters) expect(f.startPosition, `slot ${f.slot}`).toEqual(replay!.startPositions[f.slot!]);
+    // an admin moves to 2-hero battles mid-battle: the state endpoint keeps answering, and the on-stage battle keeps ITS positions
+    await saveSetting(db, "arena", { ...(await loadSettings(db)).arena, groupSize: 2 }, "admin:test");
+    const after = await stateNow();
+    expect(after.current!.id).toBe(cur.id);
+    expect(after.current!.fighters.map((f) => f.startPosition)).toEqual(cur.fighters.map((f) => f.startPosition));
+  });
+
   it("each fighter carries what the new Current Round panel shows: power, class look, and a resolved sprite config", async () => {
     await seedHeroes(db, 16);
     await advanceArena(db, arenaCtx(clock));
@@ -62,7 +77,7 @@ describe("arena state — the on-stage battle", () => {
       expect(f.appearance.sprite).toMatchObject({ v: 1 });
       expect(s.classes[f.classId]).toMatchObject({ weapon: expect.any(String), body: expect.any(String), colors: expect.any(Array) });
     }
-    expect(s.visuals).toEqual({ spriteSet: "clank-dev-v1", disabledCosmetics: [] });
+    expect(s.visuals).toEqual({ spriteSet: "clank-dev-v2", disabledCosmetics: [] }); // hero renderer v2
   });
 
   it("keeps the timing contract: intro → 3·2·1 → ≤60 s combat → victory beat → 5 s results", async () => {

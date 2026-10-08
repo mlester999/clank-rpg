@@ -25,14 +25,15 @@ export function SurvivorsHud({ alive, total }: { alive: number; total: number })
   );
 }
 
-/** The big 3 · 2 · 1 before every fight. */
+/**
+ * The 3 · 2 · 1 before every fight, for ASSISTIVE TECHNOLOGY. The big digits you see are drawn by the arena canvas in the same frame as the fight
+ * (ArenaRenderer.drawStageCall), so they can never linger over combat while React catches up; this live region announces the same numbers.
+ */
 export function CountdownOverlay({ phase, countdown }: { phase: ArenaPhase; countdown: number | null }) {
   if (phase !== "COUNTDOWN" || countdown === null) return null;
   return (
-    <div className="pointer-events-none absolute inset-0 grid place-items-center" data-testid="countdown">
-      <span key={countdown} className="countdown-pop font-display text-[clamp(5rem,18vw,10rem)] leading-none text-clank-300 [text-shadow:0_6px_0_#4d2d87,0_0_40px_rgba(202,148,249,.65)]">
-        {countdown}
-      </span>
+    <div className="sr-only" data-testid="countdown" role="timer" aria-live="assertive">
+      <span key={countdown}>{countdown}</span>
     </div>
   );
 }
@@ -47,12 +48,12 @@ export function StageHint({ phase, children }: { phase: ArenaPhase; children?: R
   );
 }
 
-/** FIGHT! as the bell rings (≈ 0.9 s) and Victory! once the last hero falls. */
+/** FIGHT! as the bell rings (≈ 0.9 s — drawn by the canvas; announced here) and Victory! once the last hero falls. */
 export function PhaseBanner({ phase, sinceCombatStartMs }: { phase: ArenaPhase; sinceCombatStartMs: number }) {
   if (phase === "COMBAT" && sinceCombatStartMs < 900) {
     return (
-      <div className="pointer-events-none absolute inset-0 grid place-items-center">
-        <span className="fight-flash font-display text-[clamp(3rem,12vw,7rem)] text-clank-200 [text-shadow:0_5px_0_#4d2d87,0_0_40px_rgba(202,148,249,.75)]">FIGHT!</span>
+      <div className="sr-only" aria-live="assertive">
+        <span>FIGHT!</span>
       </div>
     );
   }

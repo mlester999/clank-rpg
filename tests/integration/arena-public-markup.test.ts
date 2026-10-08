@@ -87,7 +87,7 @@ describe("public Arena page markup", () => {
     const replay = await getReplayDto(db, s.current!.id, s.current!.combatStartsAt! + 10);
     expect(replay).not.toBeNull();
     expect(Object.keys(replay!.combat).sort()).toEqual(["arenaRadius", "startRadius", "unitRadius"]);
-    expect(replay!.rulesVersion).toBe("3.0.0");
+    expect(replay!.rulesVersion).toBe("3.1.0");
     expect(JSON.stringify(replay)).not.toMatch(/ring|storm|zone/i);
   });
 });

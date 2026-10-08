@@ -214,7 +214,7 @@ interface PartRow {
 const BATTLE_COLS = "id, sequence, season_sequence, status, starts_at, combat_starts_at, combat_ends_at, slot_ends_at, duration_ms, ended_by, snapshot, events_hash, rules_version, winner_id, runner_up_id, picks_locked_at, picks_lock_reason";
 const t = (d: Date | null): number | null => (d ? new Date(d).getTime() : null);
 
-async function loadFighters(q: Queryable, battle: BattleRowFull, startRadius: number, groupSize: number): Promise<{ fighters: FighterDto[]; parts: PartRow[] }> {
+async function loadFighters(q: Queryable, battle: BattleRowFull, startRadius: number): Promise<{ fighters: FighterDto[]; parts: PartRow[] }> {
   const parts = await q.query<PartRow>(
     `select p.character_id, c.public_id, p.slot, p.placement, p.eliminations, p.damage_dealt, p.survived_ms, p.max_hp, p.final_hp, p.gold_awarded,
             coalesce(c.name_override, c.name) as name, c.class_id, c.title, c.is_demo, (cl.character_id is not null) as claimed, ca.rarity, ca.parts, ca.sprite, ca.cosmetic_overrides,
@@ -247,7 +247,9 @@ async function loadFighters(q: Queryable, battle: BattleRowFull, startRadius: nu
       // Like the name, the photo is presentation only: the CURRENT one shows, the battle snapshot never holds it.
       avatarUrl: avatarUrlOrNull(p.character_id, p.avatar_version),
       maxHp: p.max_hp,
-      startPosition: p.slot === null ? null : startPositionFor(p.slot, groupSize, startRadius),
+      // The battle's OWN size (what the engine placed it with — tick 0 of its replay), never today's `arena.groupSize`: an admin may change the
+      // group size while a battle is on stage, and the 3 · 2 · 1 must show the fighters exactly where the fight will start.
+      startPosition: p.slot === null ? null : startPositionFor(p.slot, parts.length, startRadius),
     };
   });
   return { fighters, parts };
@@ -325,8 +327,8 @@ export async function getArenaState(q: Queryable, nowMs: number, settings: GameS
   const picksEnabled = Boolean(opts.picksEnabled);
   const upcomingRow = nxt && nxt.status === "SIMULATED" ? nxt : null;
   const [loaded, loadedUpcoming] = await Promise.all([
-    cur ? loadFighters(q, cur, settings.combat.startRadius, settings.arena.groupSize) : Promise.resolve(null),
-    upcomingRow ? loadFighters(q, upcomingRow, settings.combat.startRadius, settings.arena.groupSize) : Promise.resolve(null),
+    cur ? loadFighters(q, cur, settings.combat.startRadius) : Promise.resolve(null),
+    upcomingRow ? loadFighters(q, upcomingRow, settings.combat.startRadius) : Promise.resolve(null),
   ]);
 
   let current: BattleDto | null = null;

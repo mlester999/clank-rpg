@@ -37,10 +37,10 @@ const WED = utc(2026, 10, 7, 18);
 const settings = { ...DEFAULT_SETTINGS, hero_arena: { ...DEFAULT_SETTINGS.hero_arena, dailyPrizePool: "100000", weeklyPrizePool: "500000" } };
 
 describe("the file", () => {
-  it("is the newest migration, after the development-economy migration, and nothing at or below 2100 was edited", async () => {
+  it("comes right after the development-economy migration, and nothing at or below 2100 was edited", async () => {
     const all = (await readMigrations()).map((m) => m.version);
-    expect(all.at(-1)).toBe(NEW);
     expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
+    expect(all.filter((v) => v > NEW)).toEqual(["20261007002300"]); // only combat 3.1.0 + hero renderer v2 (settings rows) follows it
   });
 
   it("is additive: it deletes nothing, rewrites no row, never touches a hero, the Arena Picks tables, combat or a season", () => {
@@ -76,7 +76,7 @@ describe("applied to a database that already paid Arena Picks prizes", () => {
     const before = await dump();
     expect(JSON.parse(before).ledger.length).toBeGreaterThan(0);
 
-    expect((await migrate(db)).applied).toEqual([NEW]);
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([NEW]);
 
     expect(await dump()).toBe(before);
     const labels = await db.query<{ kind: string; reward_source: string }>("select distinct kind, reward_source from public.arena_reward_ledger order by 1");
@@ -84,7 +84,7 @@ describe("applied to a database that already paid Arena Picks prizes", () => {
       { kind: "DAILY_LEADERBOARD_BASE_REWARD", reward_source: "ARENA_PICKS_DAILY" },
       { kind: "WEEKLY_LEADERBOARD_BASE_REWARD", reward_source: "ARENA_PICKS_WEEKLY" },
     ]);
-    expect((await migrate(db)).applied).toEqual([]); // idempotent
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]); // idempotent (later migrations are not this file's business)
     expect(await db.query("select * from public.audit_hero_arena()")).toEqual([]);
   });
 });

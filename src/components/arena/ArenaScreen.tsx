@@ -22,7 +22,6 @@ import { ArenaPicks } from "./ArenaPicks";
 import { RecentWinners } from "./RecentWinners";
 import { RosterStore } from "./rosterStore";
 import { SpectatorStrip } from "./SpectatorStrip";
-import { phaseNow } from "./phase";
 import { ArenaHeader, CountdownOverlay, PhaseBanner, StageHint, SurvivorsHud } from "./StageHud";
 import { StageStatusCard } from "./StageStatusCard";
 import { headerStatus, stageMode } from "./stageMode";
@@ -122,10 +121,10 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
       if (s) renderer.setClasses(s.classes);
       renderer.setBattle(cur, replayRef.current);
       const timing = s?.timing ?? { countdownMs: 3000, maxCombatMs: 30000, introMs: 2500, victoryHoldMs: 1200, resultsMs: 5000, tickMs: 100 };
-      const ph = phaseNow(cur, serverNow, timing.countdownMs, timing.maxCombatMs);
+      // The renderer decides the phase ONCE per frame and draws the 3 · 2 · 1 itself; the HUD below reads the very same value.
+      const ph = renderer.render(serverNow, { countdownMs: timing.countdownMs, maxCombatMs: timing.maxCombatMs }, dt);
       const rep = replayRef.current;
       const winnerSlot = rep && (ph.phase === "VICTORY" || ph.phase === "RESULTS" || ph.phase === "DONE") ? (rep.ranking[0] ?? null) : null;
-      renderer.render({ now: serverNow, phase: ph.phase, sinceStart: ph.sinceStart, combatMs: ph.combatMs, winnerSlot }, dt);
       if (cur && winnerSlot !== null && celebratedFor !== cur.id && ph.phase !== "DONE") {
         celebratedFor = cur.id;
         renderer.celebrate(winnerSlot, serverNow);

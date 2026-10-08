@@ -2,29 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import { simulateBattle } from "@/domain/combat/engine";
 import { EV, type CombatUnitInput } from "@/domain/combat/types";
-import { COMBAT_RULES_VERSION, hashRuleset, validateRuleset } from "@/domain/rules";
-import { combatSettingsSchema, DEFAULT_SETTINGS } from "@/domain/settings";
+import { COMBAT_RULES_VERSION, hashRuleset, rulesVersionFor, validateRuleset } from "@/domain/rules";
+import { combatSettingsSchema, DEFAULT_ENGAGEMENT, DEFAULT_SETTINGS, OVERTIME_300 } from "@/domain/settings";
 
 import { runBalanceSim } from "../../scripts/lib/balanceSim";
 import { makeLineup, makeUnit, ruleset } from "../support/fixtures";
 import { rules200Ruleset } from "../support/rules200";
+import { rules300Ruleset } from "../support/rules300";
 
 /**
  * Rules 3.0.0: LONGER FIGHTS. Median 35–45 s, hard cap 60 s — reached by a global `combat.pace` plus a modest retune, NOT by
- * changing 30 → 60. These tests pin the outcome (duration distribution, timeouts, class balance), the exactness of the no-op
- * default that keeps every older ruleset replaying bit for bit, and the hard cap.
+ * changing 30 → 60. Rules 3.1.0 keeps that pacing and adds ENGAGEMENT (committed attacks, ranged spacing discipline) on top.
+ * These tests pin the outcome of both (duration distribution, timeouts, class balance — 3.0.0 on the stored 3.0.0 rules, 3.1.0 on
+ * the shipped defaults), the exactness of the no-op default that keeps every older ruleset replaying bit for bit, and the hard cap.
  */
 const CAP = DEFAULT_SETTINGS.arena.maxCombatMs;
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] as number;
 /** Near-unkillable copy of a fighter: lets two of them run the clock to the cap. */
 const sturdy = (u: CombatUnitInput): CombatUnitInput => ({ ...u, stats: { ...u.stats, hp: u.stats.hp * 400, def: u.stats.def * 40 } });
 
-describe("rules 3.0.0 defaults", () => {
-  it("ship the longer-fight tuning: version 3.0.0, 60 s hard cap, pace, no shrinking ring", () => {
-    expect(COMBAT_RULES_VERSION).toBe("3.0.0");
-    expect(ruleset.rulesVersion).toBe("3.0.0");
+describe("rules 3.1.0 defaults", () => {
+  it("ship the engagement rules ON TOP of the 3.0.0 longer-fight tuning: version 3.1.0, 60 s hard cap, the same pace and overtime, no shrinking ring", () => {
+    expect(COMBAT_RULES_VERSION).toBe("3.1.0");
+    expect(ruleset.rulesVersion).toBe("3.1.0");
     expect(CAP).toBe(60_000);
     expect(DEFAULT_SETTINGS.combat.pace).toEqual({ time: 1.95, move: 1.1 });
+    expect(DEFAULT_SETTINGS.combat.overtime).toEqual(OVERTIME_300);
+    expect(DEFAULT_SETTINGS.combat.engagement).toEqual(DEFAULT_ENGAGEMENT);
+    expect(rulesVersionFor({ ...DEFAULT_SETTINGS.combat, engagement: undefined })).toBe("3.0.0"); // without it: exactly the 3.0.0 rules
     expect(DEFAULT_SETTINGS.combat).not.toHaveProperty("ring");
   });
 
@@ -68,8 +73,8 @@ describe("pace is an exact no-op at 1 / 1 and a real slow-motion above it", () =
   });
 });
 
-describe("the 3.0.0 fight-length distribution (1,000 seeded battles, random lineups, the shipped defaults)", () => {
-  const sim = runBalanceSim({ battles: 1000, maxCombatMs: CAP, ruleset });
+describe("the 3.0.0 fight-length distribution (1,000 seeded battles, random lineups, the stored 3.0.0 rules)", () => {
+  const sim = runBalanceSim({ battles: 1000, maxCombatMs: CAP, ruleset: rules300Ruleset(ruleset) });
 
   it("median 35–45 s, p95 under the cap, nothing longer than 60 s, and no 10-second fights any more", () => {
     expect(sim.rulesVersion).toBe("3.0.0");
@@ -101,6 +106,44 @@ describe("the 3.0.0 fight-length distribution (1,000 seeded battles, random line
     expect(sim.pacing.hitsPerSecondMedian).toBeGreaterThanOrEqual(2.5); // measured 3.0 (2.0.0: 5.1)
     expect(sim.pacing.longestQuietMedianS).toBeLessThanOrEqual(3); // measured 1.9
     expect(sim.pacing.longestQuietP95S).toBeLessThanOrEqual(12); // measured 8.9
+  });
+});
+
+describe("the 3.1.0 fight-length distribution (1,000 seeded battles, random lineups, the shipped defaults)", () => {
+  const sim = runBalanceSim({ battles: 1000, maxCombatMs: CAP, ruleset });
+  const before = runBalanceSim({ battles: 1000, maxCombatMs: CAP, ruleset: rules300Ruleset(ruleset) });
+
+  it("keeps the 3.0.0 pacing: median 35–42 s, p95 under the cap, nothing longer than 60 s, no 10-second fights", () => {
+    expect(sim.rulesVersion).toBe("3.1.0");
+    expect(sim.duration.median).toBeGreaterThanOrEqual(35);
+    expect(sim.duration.median).toBeLessThanOrEqual(42);
+    expect(Math.abs(sim.duration.median - before.duration.median)).toBeLessThanOrEqual(3);
+    expect(sim.duration.p95).toBeLessThan(58);
+    expect(sim.duration.max).toBeLessThanOrEqual(60);
+    expect(sim.duration.p10).toBeGreaterThanOrEqual(22);
+  });
+
+  it("committed fights reach the cap LESS often than 3.0.0, and nearly always end with one survivor", () => {
+    const inWindow = sim.histogram["25-35s"]! + sim.histogram["35-45s"]! + sim.histogram["45-55s"]!;
+    expect(inWindow).toBeGreaterThanOrEqual(85);
+    expect(sim.timeoutPct).toBeLessThanOrEqual(2.5);
+    expect(sim.timeoutPct).toBeLessThanOrEqual(before.timeoutPct);
+    expect(sim.singleSurvivorPct).toBeGreaterThanOrEqual(96);
+  });
+
+  it("no class dominates and none is erased (6 classes, 8 per fight)", () => {
+    // This synthetic population (class baselines + a creation roll, no rarity / PWR calibration) is not what live heroes are: measured 3.1.0
+    // Warrior 18.9 · Mage 14.5 · Rogue 10.9 · Ranger 13.4 · Tank 6.8 · Cleric 10.6 (3.0.0: 17.5 · 16.9 · 9.5 · 12.5 · 8.3 · 10.3). Class balance on
+    // REALISTIC heroes (generator 2, every rarity) is pinned in tests/unit/rarity-balance.test.ts — every class within its fair-share band.
+    const wins = Object.values(sim.classes).map((c) => c.winPct);
+    expect(Math.min(...wins)).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...wins)).toBeLessThanOrEqual(21);
+  });
+
+  it("fights are not dead air: damage lands every few seconds and no fight goes quiet for long", () => {
+    expect(sim.pacing.hitsPerSecondMedian).toBeGreaterThanOrEqual(2.5);
+    expect(sim.pacing.longestQuietMedianS).toBeLessThanOrEqual(3);
+    expect(sim.pacing.longestQuietP95S).toBeLessThanOrEqual(12);
   });
 });
 
