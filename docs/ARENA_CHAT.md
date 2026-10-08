@@ -4,8 +4,9 @@
 > `src/app/api/arena/chat/messages/route.ts` (public API), `src/app/api/admin/[...path]/route.ts` (`chat/*` moderation), `src/components/arena/chat/*` (the section),
 > `src/components/admin/ChatModeration.tsx`, `supabase/migrations/20261008002400_arena_chat.sql`, `scripts/dev-realtime.ts` + `tests/support/fakeRealtime.ts` (local stand-in).
 > Tests: `tests/unit/arena-chat-{domain,signing,controller,ui}.test.ts`, `tests/integration/arena-chat{,-migration,-realtime,-postgres}.test.ts`, `tests/security/arena-chat-http.test.ts`.
-> **Status: built and verified on scratch infrastructure only. Nothing has been applied to, deployed to, or sent through the live project** — see
-> [Launch order](#the-eventual-launch-order-not-done-by-this-change) and [what is NOT verified](#what-is-not-verified).
+> **Status (2026-10-08): migrations 2200 / 2300 / 2400 are applied to the live database and the code is deployed.** Everything below was developed and verified on scratch infrastructure; the two
+> things checked on the live project afterwards are a read-only comparison of the live schema with the migration file (identical) and ONE listen-only join of the private channel (see
+> [live verification](#live-verification-after-the-deploy)). No message has been sent on the live site by the developer tooling.
 
 ## What it is
 
@@ -170,15 +171,21 @@ Nothing below was executed. The live ledger (read-only check on 2026-10-08) ends
 | Load (this application's side; the Realtime stand-in is not Supabase) | 10 / 50 / 100 real client controllers + 40 signed-in senders posting ≈ 5.5 messages/s for 50 s, with every socket dropped mid-run: **0 duplicate deliveries, 0 messages missing after back-fill, 0 refused sends**; propagation (POST start → viewer's room) p50 10–13 ms, p95 19–24 ms, p99 46–52 ms, max 55–97 ms; all viewers live again ≈ 1.0 s after the drop; database ≈ 1.7 transactions per message above the Arena's own baseline (one cookie check + one send transaction), never more than the app's one pooled connection; server memory flat |
 | Client cost | the Realtime client is a lazy chunk (≈ 57 KB, 17 KB gzip) fetched only when the chat joins |
 
+## Live verification after the deploy
+
+* **Schema:** a read-only comparison of the live database with `20261008002400_arena_chat.sql` — tables, constraints, all four indexes, RLS on with **no** policies on the chat tables, no `anon` / `authenticated` privileges, and the
+  listen-only `arena chat: everyone may listen` policy on `realtime.messages` — matched exactly. The `arena.chat` flag is on.
+* **Private-channel join with the new-style publishable key** (`sb_publishable_…`, not a JWT) — the one thing that could not be tried on scratch infrastructure: ONE listen-only join from a script, exactly as the browser does it
+  (`private: true`, key as access token, nothing published). Result: the first join reported `CHANNEL_ERROR MissingPartition: Realtime was unable to find the expected messages partition` (Realtime creates the day's `realtime.messages`
+  partition on demand the first time a private channel is used) and **~1 s later `SUBSCRIBED`**. So the private channel works with the publishable key on this project. The client counts that first error as one of its six allowed
+  failures and resets on `SUBSCRIBED`; nothing needs doing. If it ever reappears after a long quiet spell it heals the same way.
+* **Not done on live, by design:** sending a message (no test messages in the real room) and the dashboard's "Allow public access" switch (a dashboard-only step; the signature layer protects the room regardless).
+
 ## What is NOT verified
 
 * **No hosted Supabase project was touched.** The Realtime behaviour was exercised against a stand-in that speaks the same wire protocol (Phoenix v2 over WebSocket, the REST broadcast endpoint) to the **real**
   `@supabase/realtime-js` client in real Chrome — it proves our client and server behave correctly against that protocol, **not** that a given hosted project is configured correctly. The listen-only policy was verified
   against real Postgres with a stand-in `realtime` schema shaped like Supabase's (`realtime.messages` with RLS, `realtime.topic()` reading the channel setting).
-* **The one thing most worth testing first on the real project: joining the PRIVATE channel with the publishable key.** The production `.env` holds a new-style publishable key (`sb_publishable_…`, not a JWT). Supabase documents that a publishable
-  key resolves to the `anon` Postgres role (which the policy grants) and that publishable-key Realtime connections last at most 24 h (the client reconnects by itself), but it does not spell out a private-channel join with a non-JWT access token, and this
-  could not be tried without touching the live project. If the join is refused, the chat does **not** break: after six refused joins the connection rests five minutes and the room runs on its ~20 s catch-up ("Updating" chip). The smoke test in the
-  launch order (step 7) is how to find out; the dashboard's Realtime logs show the refusal reason. (Fallback if it is refused: mint a short-lived anon-role JWT server-side and pass it as the access token — needs the project's JWT secret; not built because it was not shown to be needed.)
 * Browsers other than Chrome were not driven (WebCrypto Ed25519 needs Chrome 137+ / Firefox 129+ / Safari 17+; older browsers fall back to "hint → fetch", never to showing unverified content).
 * There is **no online-viewer count**: the app has no trustworthy presence system and none was invented.
 * The Realtime stand-in is not a load test of Supabase; its numbers measure this application's side (route, database, signature checks, client merge).
