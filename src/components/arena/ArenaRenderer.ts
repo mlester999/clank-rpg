@@ -1,3 +1,4 @@
+import { cuesForEvents, type CueContext, type SoundCue } from "@/domain/audio/cues";
 import { ARENA_LABEL_MAX, truncateDisplayName } from "@/domain/character/displayName";
 import { EV, EV_FLAG, FRAME_FLAG } from "@/domain/combat/types";
 import type { BattleDto, ClassVisual, FighterDto, ReplayDto } from "@/lib/dto";
@@ -181,6 +182,10 @@ export class ArenaRenderer {
   private reducedMotion = false;
   private sprites: SpriteSource | null = null;
   onEvent: ((e: ArenaEventOut) => void) | null = null;
+  /** Every sound the replay's events call for, as it becomes due — the Arena's audio engine listens. Presentation only; it decides nothing. */
+  onCue: ((cue: SoundCue) => void) | null = null;
+  /** For each elimination of the replay on stage: how many fighters were still standing after it (built once per replay). */
+  private eliminations: { replay: ReplayDto; after: Map<string, number> } | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -375,6 +380,41 @@ export class ArenaRenderer {
     // Joined mid-fight or the tab was asleep: the cursor skips visuals for events older than 700 ms. It never rewinds, so a small backward
     // step of the estimated server clock cannot make an already-shown elimination appear again. Never any before the bell.
     for (const ev of frame.fresh) this.spawnForEvent(ev as [number, number, number, number, number, number], now - (frame.clock.combatMs - ev[0] * r.tickMs));
+    if (this.onCue && frame.fresh.length > 0 && this.battle) {
+      const ctx = this.cueContext(r, this.battle.id, frame.clock.combatMs);
+      for (const cue of cuesForEvents(frame.fresh, ctx)) this.onCue(cue);
+    }
+  }
+
+  /** What the cue mapper needs from the stage: who stands where, which skill is which, how long a cast takes, how many are left after a KO. */
+  private cueContext(r: ReplayDto, battleId: string, combatMs: number): CueContext {
+    if (this.eliminations?.replay !== r) {
+      const after = new Map<string, number>();
+      let left = this.units.length;
+      for (const e of r.events) if (e[1] === EV.ELIM) after.set(`${e[0]}:${e[2]}`, --left);
+      this.eliminations = { replay: r, after };
+    }
+    const elim = this.eliminations.after;
+    const start = this.units.length;
+    return {
+      battleId,
+      tickMs: r.tickMs,
+      combatMs,
+      radius: this.R,
+      unit: (slot) => {
+        const u = this.units.find((x) => x.slot === slot);
+        return u ? { classId: u.fighter.classId, weapon: u.visual?.weapon ?? "", body: u.visual?.body ?? "", style: u.visual?.attackStyle ?? "slash", x: u.x } : undefined;
+      },
+      skill: (index) => {
+        const id = r.skillIds[index];
+        return id === undefined ? undefined : { id, fx: r.skillFx[id]?.fx ?? "buff" };
+      },
+      releaseMs: (slot, tick) => castTicks(r, slot, tick) * r.tickMs,
+      aliveAfter: (tick, victim) => {
+        const alive = elim.get(`${tick}:${victim}`);
+        return alive === undefined ? undefined : { alive, start };
+      },
+    };
   }
 
   private spawnForEvent(ev: [number, number, number, number, number, number], at: number): void {

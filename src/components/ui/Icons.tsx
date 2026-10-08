@@ -208,3 +208,32 @@ export const CLASS_ICONS = { warrior: SwordIcon, mage: StaffIcon, rogue: DaggerI
 export const classIcon = (classId: string) => (Object.hasOwn(CLASS_ICONS, classId) ? CLASS_ICONS[classId as keyof typeof CLASS_ICONS] : SwordsIcon);
 /** A class's glyph by class id (see `classIcon` for the fallback). Built with createElement so the icon type is looked up, not created, while rendering. */
 export const ClassIcon = ({ classId, ...p }: P & { classId: string }) => createElement(classIcon(classId), p);
+
+// Speaker icons — after Lucide's "volume-2" / "volume-x" (ISC licence): a cone with two sound waves, and the same cone with a cross.
+export const SpeakerIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+  </svg>
+);
+export const SpeakerOffIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+    <path d="m22 9-6 6" />
+    <path d="m16 9 6 6" />
+  </svg>
+);
+/** A speech bubble (Lucide "message-square"). */
+export const ChatIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+/** A paper plane (Lucide "send"). */
+export const SendIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+    <path d="m21.854 2.147-10.94 10.939" />
+  </svg>
+);

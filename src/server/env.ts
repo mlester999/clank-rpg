@@ -34,6 +34,13 @@ const schema = z.object({
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20).optional(),
   SUPABASE_AVATAR_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9_-]{2,62}$/).default("hero-avatars"),
+  // Arena Chat live delivery (Supabase Realtime Broadcast, docs/ARENA_CHAT.md). The browser needs the project URL and the PUBLISHABLE key (both public by
+  // design); the server broadcasts with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY above. Without them the chat still works (history, sending, a slow
+  // catch-up) — messages just are not pushed. CHAT_REALTIME_URL overrides the Realtime base URL for both sides: a local stand-in for development, unset in production.
+  // (plain optional strings on purpose: a mistyped value must switch live delivery off — server/chat/runtime.ts validates them — never stop the whole app)
+  NEXT_PUBLIC_SUPABASE_URL: z.string().optional(),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
+  CHAT_REALTIME_URL: z.string().optional(),
   CLANK_AVATAR_DIR: z.string().min(1).optional(),
   // $CLANKRPG: the ONE official token (public contract address) used for holder verification, for verifying manual payouts and for the
   // BUY $CLANKRPG link. Unset until the token launches — nothing depends on it: the Arena, picks, leaderboards, finalization and reward

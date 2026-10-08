@@ -42,8 +42,9 @@ export function CountdownOverlay({ phase, countdown }: { phase: ArenaPhase; coun
 export function StageHint({ phase, children }: { phase: ArenaPhase; children?: ReactNode }) {
   if (phase !== "INTRO" && phase !== "COUNTDOWN") return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 grid place-items-center">
-      <span className="chip bg-ink-950/85 text-clank-300">{children}</span>
+    // px-14: the guidance keeps clear of the speaker button (bottom-right) and balances it on the left
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 grid place-items-center px-14">
+      <span className="chip bg-ink-950/85 text-center text-clank-300">{children}</span>
     </div>
   );
 }

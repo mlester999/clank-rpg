@@ -8,6 +8,7 @@ import { RarityFrame } from "@/components/hero/rarity";
 import type { Rarity } from "@/domain/character/appearance";
 import { lookFor } from "@/components/hero/look";
 import { DEFAULT_SPRITE_SET } from "@/components/sprites/library";
+import { PhaseCueTracker } from "@/domain/audio/cues";
 import { useSpriteLibrary } from "@/components/sprites/useSprites";
 import { CheckIcon, TrophyIcon } from "@/components/ui/Icons";
 import { ARENA_LABEL_MAX, truncateDisplayName } from "@/domain/character/displayName";
@@ -15,6 +16,9 @@ import { DEFAULT_SETTINGS } from "@/domain/settings";
 import type { ArenaStateDto, FighterDto, ResultRowDto } from "@/lib/dto";
 
 
+import { SoundToggle } from "./audio/SoundToggle";
+import { ArenaChat } from "./chat/ArenaChat";
+import { useArenaAudio } from "./audio/useArenaAudio";
 import { ComingSoon, HowItWorks } from "./ArenaInfo";
 import { HeroEligibilityCard } from "./HeroEligibility";
 import { ArenaRenderer, type ArenaPhase } from "./ArenaRenderer";
@@ -56,6 +60,7 @@ const EMPTY_HUD: Hud = { phase: "IDLE", countdown: null, alive: 0 };
 export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
   const { state, replay, online, connection, loaded, getNow } = useArena(initial);
   const lib = useSpriteLibrary(state?.visuals.spriteSet ?? DEFAULT_SPRITE_SET);
+  const { audio, snapshot: sound } = useArenaAudio();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ArenaRenderer | null>(null);
@@ -95,6 +100,9 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     const eliminations = new EliminationLog();
+    // sound: the replay's events become cues in the renderer; the clock's own cues (3 · 2 · 1, the bell, the winner) come from the tracker below
+    renderer.onCue = (cue) => audio.play(cue);
+    const phaseCues = new PhaseCueTracker();
     renderer.onEvent = (e) => {
       const id = eliminations.first(stateRef.current?.current?.id ?? "-", e.victim);
       if (id === null) return;
@@ -125,6 +133,11 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
       const ph = renderer.render(serverNow, { countdownMs: timing.countdownMs, maxCombatMs: timing.maxCombatMs }, dt);
       const rep = replayRef.current;
       const winnerSlot = rep && (ph.phase === "VICTORY" || ph.phase === "RESULTS" || ph.phase === "DONE") ? (rep.ranking[0] ?? null) : null;
+      audio.setStage(cur?.id ?? null, ph.phase);
+      for (const cue of phaseCues.update({
+        battleId: cur?.id ?? null, phase: ph.phase, countdown: ph.countdown, now: serverNow, startsAt: cur?.startsAt ?? null, combatStartsAt: cur?.combatStartsAt ?? null,
+        combatEndsAt: cur?.combatEndsAt ?? null, resultsStartAt: cur?.resultsStartAt ?? null, countdownMs: timing.countdownMs, winnerKnown: winnerSlot !== null,
+      })) audio.play(cue);
       if (cur && winnerSlot !== null && celebratedFor !== cur.id && ph.phase !== "DONE") {
         celebratedFor = cur.id;
         renderer.celebrate(winnerSlot, serverNow);
@@ -151,9 +164,11 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      renderer.onCue = null;
+      audio.stopAll();
       rendererRef.current = null;
     };
-  }, [getNow, roster]);
+  }, [getNow, roster, audio]);
 
   // --- spritesheets: installed into the renderer as soon as the set is ready (vector heroes until then)
   const spriteSource = lib.source;
@@ -337,18 +352,23 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
                 <span className="chip bg-ink-950/80">Opening the arena…</span>
               </div>
             )}
+
+            {/* the speaker: bottom-right of the live arena */}
+            <SoundToggle audio={audio} snapshot={sound} />
           </div>
         </div>
 
-        {/* Arena Picks: the NEXT fight's eight (right rail on desktop; directly under the arena on small screens) */}
+        {/* Directly under the stage: the live spectator status, then the Arena Chat (its own island — see chat/ArenaChat.tsx). On small screens this is
+            what follows the arena; Arena Picks (below) follow the chat there. */}
+        <div className="flex min-w-0 flex-col gap-3 xl:col-start-1 xl:row-start-3">
+          <SpectatorStrip state={state} fighters={fighters} phase={phase} winnerCharacterId={decided ? winnerId : null} roster={roster} />
+          <ArenaChat />
+        </div>
+
+        {/* Arena Picks: the NEXT fight's eight (right rail on desktop, beside the arena and its chat; under them on small screens) */}
         <aside className="flex min-w-0 flex-col gap-3 xl:col-start-2 xl:row-span-3 xl:row-start-1">
           <ArenaPicks state={state} upcoming={upcoming} now={now} picks={picks} onStage={onStage} loaded={loaded} mode={mode} />
         </aside>
-
-        {/* live spectator status */}
-        <div className="xl:col-start-1 xl:row-start-3">
-          <SpectatorStrip state={state} fighters={fighters} phase={phase} winnerCharacterId={decided ? winnerId : null} roster={roster} />
-        </div>
       </div>
 
       <div className="mt-8 space-y-6">

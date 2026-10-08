@@ -16,6 +16,8 @@ import { DENIAL_REASON_CODES, type DenialReason } from "@/domain/rewards/claims"
 import { payoutCsv } from "@/domain/rewards/payout";
 import { finalizeDueBoards } from "@/server/rewards/leaderboard";
 import { isPeriodKind, isPeriodStart } from "@/domain/rewards/time";
+import { chatBroadcaster, chatSigner } from "@/server/chat/runtime";
+import * as chat from "@/server/chat/service";
 import * as admin from "@/server/services/admin";
 import * as lifecycle from "@/server/services/lifecycle";
 import { AdminError } from "@/server/services/admin";
@@ -337,6 +339,51 @@ route("PUT", "achievements", async (c) => {
   await admin.putAchievement(c.db, body.data, ACTOR);
   return ok({});
 });
+
+// --- Arena Chat moderation -----------------------------------------------------------------------------------------------------
+// ADMIN ONLY (the dispatcher requires the admin session and a same-origin request for every non-GET). A hide or a restore is broadcast to the open rooms
+// as a SIGNED event, exactly like a message; a mute only stops that member WRITING. Reasons are private: they live in the mute row and the audit log.
+const chatId = (c: Ctx): number | null => (/^[1-9]\d{0,15}$/.test(c.seg[2] ?? "") ? Number(c.seg[2]) : null);
+
+route("GET", "chat/messages", async (c) => {
+  const before = Number(c.url.searchParams.get("before"));
+  return ok(await chat.adminMessages(c.db, { ...(Number.isSafeInteger(before) && before > 0 ? { before } : {}), limit: Number(c.url.searchParams.get("limit") ?? 50) || 50 }));
+});
+route("POST", "chat/messages/:id/hide", async (c) => {
+  const id = chatId(c);
+  if (id === null) return fail("NOT_FOUND", 404);
+  const body = await json(c, z.strictObject({ reason: z.string().max(300).nullish() }), 1_000);
+  if (!body.ok) return body.response;
+  const r = await chat.hideMessage(c.db, id, ACTOR, body.data.reason ?? null);
+  if (!r.ok) return fail(r.error, 404);
+  if (r.changed) await chatBroadcaster().publish(chatSigner().seal({ t: "hide", id, rev: r.rev }));
+  return ok({ id, rev: r.rev, changed: r.changed });
+});
+route("POST", "chat/messages/:id/restore", async (c) => {
+  const id = chatId(c);
+  if (id === null) return fail("NOT_FOUND", 404);
+  const body = await json(c, z.strictObject({}), 200);
+  if (!body.ok) return body.response;
+  const signer = chatSigner();
+  const r = await chat.restoreMessage(c.db, id, ACTOR, signer);
+  if (!r.ok) return fail(r.error, 404);
+  if (r.changed) await chatBroadcaster().publish(signer.seal({ t: "msg", m: r.message }));
+  return ok({ id, rev: r.message.rev, changed: r.changed });
+});
+route("GET", "chat/mutes", async (c) => ok({ mutes: await chat.activeMutes(c.db) }));
+route("POST", "chat/mutes", async (c) => {
+  const body = await json(c, z.strictObject({ memberId: z.number().int().safe(), minutes: z.number().int().min(1).max(60 * 24 * 365).optional(), permanent: z.boolean().optional(), reason: z.string().max(300).nullish() }), 1_000);
+  if (!body.ok) return body.response;
+  if ((body.data.minutes === undefined) === (body.data.permanent !== true)) return fail("INVALID_INPUT", 422, "Choose either a number of minutes or a permanent mute.");
+  const r = await chat.muteMember(c.db, { memberId: body.data.memberId, ...(body.data.minutes !== undefined ? { minutes: body.data.minutes } : {}), ...(body.data.permanent ? { permanent: true } : {}), reason: body.data.reason ?? null }, ACTOR);
+  return r.ok ? ok({ mute: r.mute }) : fail(r.error === "NO_MEMBER" ? "NOT_FOUND" : "INVALID_INPUT", r.error === "NO_MEMBER" ? 404 : 422);
+});
+route("DELETE", "chat/mutes/:id", async (c) => {
+  const id = chatId(c);
+  if (id === null) return fail("NOT_FOUND", 404);
+  return ok(await chat.unmuteMember(c.db, id, ACTOR));
+});
+route("GET", "chat/log", async (c) => ok({ log: await chat.moderationLog(c.db, Number(c.url.searchParams.get("limit") ?? 50) || 50) }));
 
 route("GET", "flags", async (c) => ok({ flags: await admin.listFlags(c.db) }));
 route("PUT", "flags/:key", async (c) => {

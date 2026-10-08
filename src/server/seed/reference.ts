@@ -10,6 +10,7 @@ export const DEFAULT_FLAGS: Array<{ key: string; enabled: boolean; description: 
   { key: "wallet.link", enabled: true, description: "Allow signed-message wallet linking." },
   { key: "holdings.bonuses", enabled: true, description: "Apply bonded-coin holding bonuses." },
   { key: "arena.picks", enabled: true, description: "Arena Picks: eligible members make ONE free pick on the NEXT fight while the current one is on stage; picks lock when the current fight's winner is decided. Correct scored picks earn Clank Points toward the Daily and Weekly leaderboards. No token is paid per battle. No stake, no deposit, no wager." },
+  { key: "arena.chat", enabled: true, description: "Arena Chat: the one global chat room under the Live Arena. Everybody can read it; only members signed in with Telegram can write. Off = the room shows as closed (no reads, no sends)." },
   { key: "feature.bosses", enabled: false, description: "Coin bosses (coming soon)." },
   { key: "feature.expeditions", enabled: false, description: "Expeditions (coming soon)." },
   { key: "feature.pvp", enabled: false, description: "Ranked PvP and direct challenges (coming soon)." },
