@@ -28,7 +28,7 @@ const DAY = "2026-10-07";
 const CLOSE = utc(2026, 10, 8, 0, 0, 5); // the Daily ended 5 s ago; this is when the sweep runs
 const healthy = async () => {
   expect(await auditRewardAccounts(db)).toEqual([]);
-  expect(await reconcileRewards(db, { now: new Date() })).toEqual([]);
+  expect(await reconcileRewards(db, { now: new Date(CLOSE) })).toEqual([]); // the fixture's own clock — the real one drifts past every window
 };
 /** #1 (9001), #2 (9002) and #3 (9003) on the Daily of Oct 7 — scores are fixed by merit alone. */
 const podium = () => seedScores(db, [{ user: 9001, day: DAY, picks: 20, correct: 20 }, { user: 9002, day: DAY, picks: 20, correct: 15 }, { user: 9003, day: DAY, picks: 20, correct: 10 }]);
