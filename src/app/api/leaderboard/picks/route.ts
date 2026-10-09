@@ -1,6 +1,6 @@
 import { isPeriodStart, periodWindow, type PeriodKind } from "@/domain/rewards/time";
 import { fail, getViewer, ok, guarded } from "@/server/http/guards";
-import { findFinalizingPeriod, getFinalBoard, getLiveBoard, listFinalizedPeriods, type BoardDto, type BoardMeDto, type BoardPayload } from "@/server/rewards/leaderboard";
+import { boardRules, findFinalizingPeriod, getFinalBoard, getLiveBoard, listFinalizedPeriods, type BoardDto, type BoardMeDto, type BoardPayload } from "@/server/rewards/leaderboard";
 import { rewardsReady } from "@/server/rewards/pool";
 import { getReadyDb, getSettings } from "@/server/runtime";
 import { getPicksSeasonPayload, listLeaderboardSeasons, pickSeason } from "@/server/services/heroBoards";
@@ -74,7 +74,7 @@ async function handleGET(req: Request) {
   }
   const periods = await listFinalizedPeriods(db, kind, 30);
   const season = pickSeason(await listLeaderboardSeasons(db), null);
-  const payload: BoardPayload = { board, me, periods, current: { kind, start: current.start, startsAt: current.startsAt, endsAt: current.endsAt }, finalizing, serverNow: nowMs, season: season ? { label: season.label, kind: season.kind } : null };
+  const payload: BoardPayload = { board, me, periods, current: { kind, start: current.start, startsAt: current.startsAt, endsAt: current.endsAt }, finalizing, serverNow: nowMs, season: season ? { label: season.label, kind: season.kind } : null, programme: { daily: boardRules(settings, "DAILY"), weekly: boardRules(settings, "WEEKLY") } };
   return ok(payload, { cache: "no-store" });
 }
 

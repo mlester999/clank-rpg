@@ -93,16 +93,16 @@ describe("Arena Picks panel — picks OPEN while the current fight is on", () =>
     expect(t).toMatch(/Arena Picks/);
     expect(t).toMatch(/Pick the next winner/);
     expect(t).toMatch(/Picks open · \d+s/);
-    expect(t).toContain("Pick the winner. Earn +10 Points for every correct Pick.");
+    expect(t).toContain("Correct Pick = +10 Points");
     expect(t).not.toMatch(/Every valid Pick counts|first 20|per day|each day count|scored Picks/i); // the per-day cap is gone from the panel's words
-    expect(t).toContain("Free to play · No wallet required");
-    // the prizes are two plaques now, not a line of text: the TOTAL pools, the token, the Top 10
+    expect(t).toContain("Free to play");
+    expect(t).not.toMatch(/No wallet required|Pick the winner\. Earn/); // the longer sentences are gone: the Arena is a quick summary
+    // the prizes are two compact tiles: the TOTAL pools and the token — and nothing else (no Top 10 banner, no countdown, no fine print)
     expect(html).toContain('data-testid="prize-daily"');
     expect(html).toContain('data-testid="prize-weekly"');
-    expect(t).toContain("Daily Prize pool");
-    expect(t).toContain("Weekly Prize pool");
-    expect(t).toMatch(/100,000 \$CLANKRPG Top 10 winners/);
-    expect(t).toMatch(/500,000 \$CLANKRPG Top 10 winners/);
+    expect(t).toContain("Daily pool 100,000 $CLANKRPG");
+    expect(t).toContain("Weekly pool 500,000 $CLANKRPG");
+    expect(t).not.toMatch(/Top 10 winners|Resets in|Prize pool/);
     expect(t).not.toContain("Daily 100,000 · Weekly 500,000"); // the old plain line is gone
     for (const f of state.upcoming!.fighters) {
       expect(t).toContain(f.name);
@@ -168,19 +168,19 @@ describe("Arena Picks panel — picks OPEN while the current fight is on", () =>
     expect(t).toMatch(/Correct Picks earn Clank Points/);
     expect(t).not.toMatch(/Daily [\d,]+ ·/);
     expect(html).not.toContain('data-testid="prize-pools"'); // nothing is promised while the programme is off
-    expect(t).not.toMatch(/Prize pool|Top 10 winners|100,000|500,000/);
+    expect(t).not.toMatch(/Daily pool|Weekly pool|Top 10 winners|100,000|500,000/);
     expect(t).toMatch(/Picks open/);
   });
 });
 
-describe("Arena Picks panel — the premium prize presentation (hierarchy, states, launch note)", () => {
+describe("Arena Picks panel — the compact prize presentation (hierarchy, states)", () => {
   const order = (html: string, ...needles: string[]) => needles.map((n) => html.indexOf(n));
   const ascending = (xs: number[]) => xs.every((x, i) => x > -1 && (i === 0 || x > (xs[i - 1] as number)));
 
   it("reads top to bottom: Arena Picks / next fight → the two prize pools → how it works (+10, free) → the sign-in step → the fighters", async () => {
     const state = await arena();
     const html = panel(state, basePicks({ signedIn: false, eligibility: null }));
-    expect(ascending(order(html, 'id="arena-picks"', "Pick the next winner", 'data-testid="prize-pools"', 'data-testid="prize-daily"', 'data-testid="prize-weekly"', 'data-testid="prize-fineprint"', 'data-testid="picks-copy"', 'data-testid="picks-signin"', "<ol "))).toBe(true);
+    expect(ascending(order(html, 'id="arena-picks"', "Pick the next winner", 'data-testid="prize-pools"', 'data-testid="prize-daily"', 'data-testid="prize-weekly"', 'data-testid="prize-rules-link"', 'data-testid="picks-copy"', 'data-testid="picks-signin"', "<ol "))).toBe(true);
   });
 
   it("signed OUT: the Telegram step is a designed strip below the prizes and copy — the same link to the same sign-in page, never above the prizes", async () => {
@@ -220,26 +220,22 @@ describe("Arena Picks panel — the premium prize presentation (hierarchy, state
     }
   });
 
-  it("the two sentences of the explanation are separated by a REAL space — not merely an element boundary (the bug was 'winner.Earn')", async () => {
+  it("the explanation is two short lines — 'Correct Pick = +10 Points' and 'Free to play' — each a whole line of text", async () => {
     const state = await arena();
     const html = panel(state, basePicks());
-    // the raw markup has a space text node between the two spans …
-    expect(html).toMatch(/Pick the winner\.<\/span> <span class="inline-block">Earn \+10 Points for every correct Pick\.<\/span>/);
-    // … so the visible text, with tags removed WITHOUT turning them into spaces, still reads correctly (the shared `text()` helper turns tags into spaces and would hide this)
-    const flat = html.replace(/<[^>]+>/g, "").replace(/&#x27;|&apos;/g, "'");
-    expect(flat).toContain("Pick the winner. Earn +10 Points for every correct Pick.");
-    expect(flat).not.toContain("winner.Earn");
+    expect(html).toMatch(/data-testid="picks-lead"[^>]*>Correct Pick = \+10 Points<\/p>/);
+    expect(html).toMatch(/data-testid="picks-free"[^>]*>Free to play<\/p>/);
+    expect(html).not.toContain("inline-block"); // the old sentence-splitting hack is gone with the long sentence
   });
 
-  it("the plaques follow the state's reward configuration, and the countdowns are measured from the state's own server time", async () => {
+  it("the tiles follow the state's reward configuration, and the Arena carries no countdown for them (the Leaderboards page does)", async () => {
     const state = await arena({ ...REWARD, daily: { ...REWARD.daily, prizePool: "75,000" }, weekly: { ...REWARD.weekly, prizePool: "300,000" } });
     const html = panel(state, basePicks());
     expect(html).toMatch(/data-testid="prize-daily-amount"[^>]*>75,000</);
     expect(html).toMatch(/data-testid="prize-weekly-amount"[^>]*>300,000</);
     expect(text(html)).not.toMatch(/100,000|500,000/);
-    const secondsLeft = Math.ceil((REWARD.daily.endsAt - state.serverTime) / 1000);
-    const hh = String(Math.floor(secondsLeft / 3600)).padStart(2, "0");
-    expect(html).toContain(`<b class="tnum">${hh}:`);
+    expect(html).not.toContain('<b class="tnum">');
+    expect(html).not.toContain("prize-reset");
   });
 });
 

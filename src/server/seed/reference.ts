@@ -11,6 +11,7 @@ export const DEFAULT_FLAGS: Array<{ key: string; enabled: boolean; description: 
   { key: "holdings.bonuses", enabled: true, description: "Apply bonded-coin holding bonuses." },
   { key: "arena.picks", enabled: true, description: "Arena Picks: eligible members make ONE free pick on the NEXT fight while the current one is on stage; picks lock when the current fight's winner is decided. Correct scored picks earn Clank Points toward the Daily and Weekly leaderboards. No token is paid per battle. No stake, no deposit, no wager." },
   { key: "arena.chat", enabled: true, description: "Arena Chat: the one global chat room under the Live Arena. Everybody can read it; only members signed in with Telegram can write. Off = the room shows as closed (no reads, no sends)." },
+  { key: "hero.free_reroll", enabled: false, description: "Free daily hero reroll: each claimed member may reroll their own hero once per UTC day (a new random roll from the normal hero generator; the old state stays in the version history). OFF until the owner approves it — see docs/HERO_FREE_REROLL.md." },
   { key: "feature.bosses", enabled: false, description: "Coin bosses (coming soon)." },
   { key: "feature.expeditions", enabled: false, description: "Expeditions (coming soon)." },
   { key: "feature.pvp", enabled: false, description: "Ranked PvP and direct challenges (coming soon)." },

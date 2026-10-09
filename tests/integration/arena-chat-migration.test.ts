@@ -32,25 +32,24 @@ const counts = async () => {
 };
 
 describe("migration 2400 — Arena Chat (ONE focused migration)", () => {
-  it("is the highest migration, directly after 2300, and the only new file for the chat", async () => {
+  it("sits directly after 2300, and is the only file the chat added (later migrations may follow it)", async () => {
     const all = (await readMigrations()).map((m) => m.version);
-    expect(all.at(-1)).toBe(NEW);
-    expect(all.at(-2)).toBe(PREVIOUS);
-    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW]);
+    expect(all[all.indexOf(NEW) - 1]).toBe(PREVIOUS);
+    expect(all.filter((v) => v > PREVIOUS && v <= NEW)).toEqual([NEW]);
     expect((await readFile(path.join(MIGRATIONS_DIR, `${NEW}_arena_chat.sql`), "utf8")).trimEnd().endsWith("select public.clank_harden_schema();")).toBe(true);
   });
 
   it("adds the chat on top of a database that has the earlier migrations, and changes nothing that already exists", async () => {
     await db.query("insert into public.telegram_users (telegram_user_id, display_name) values (4242, 'Existing member')");
     const before = await counts();
-    const result = await migrate(db);
+    const result = await migrate(db, undefined, { upTo: NEW });
     expect(result.applied).toEqual([NEW]);
     expect(await counts()).toEqual(before); // no existing table gained or lost a row
     expect((await db.query("select 1 from public.telegram_users where telegram_user_id = 4242")).length).toBe(1);
     const created = (await db.query<{ tablename: string }>("select tablename from pg_tables where schemaname = 'public' and tablename like 'arena_chat_%' order by 1")).map((t) => t.tablename);
     expect(created).toEqual(["arena_chat_messages", "arena_chat_mutes"]);
     // running it again is a no-op (the runner skips what is recorded)
-    expect((await migrate(db)).applied).toEqual([]);
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]);
   });
 
   it("does not touch the hero, Arena, reward or season data in any way (it only adds tables, an index and a policy)", async () => {
@@ -114,7 +113,7 @@ describe("migration 2400 — the Realtime policy on a Supabase project", () => {
   it("is repeatable (running the policy statement again replaces it) and never blocks the migration if the policy cannot be created", async () => {
     // a `realtime.messages` that cannot carry a policy (a view): the migration must still complete, saying what to do by hand
     await db.exec("create schema realtime; create view realtime.messages as select 1 as id;");
-    const result = await migrate(db);
+    const result = await migrate(db, undefined, { upTo: NEW });
     expect(result.applied).toEqual([NEW]);
     expect((await db.query("select 1 from supabase_migrations.schema_migrations where version = $1", [NEW])).length).toBe(1);
     expect((await db.query("select 1 from pg_tables where tablename = 'arena_chat_messages'")).length).toBe(1);

@@ -5,6 +5,7 @@ import { useId, useRef, useState, type ReactNode } from "react";
 
 import { HeroArena } from "@/components/hero/HeroArena";
 import { HeroAvatar } from "@/components/hero/HeroAvatar";
+import { HeroName } from "@/components/hero/HeroName";
 import type { HeroLook } from "@/components/hero/drawHero";
 import { PwrValue, RarityPlaque } from "@/components/hero/rarity";
 import { CheckIcon, ClassIcon, DownloadIcon, EyeIcon, LinkIcon, LockIcon, ShareIcon, TelegramIcon, UnlockIcon, UserCheckIcon, UserIcon } from "@/components/ui/Icons";
@@ -63,9 +64,7 @@ export function HeroIdentityPanel({ hero, classVisual, look, ownership, selfStat
           <HeroAvatar avatarUrl={hero.avatarUrl} look={look} size={52} label={hero.name} className="rounded-xl" />
           <div className="min-w-0 flex-1">
             {hero.title && <p className="truncate text-xs font-semibold tracking-wide text-clank-300 uppercase">{hero.title}</p>}
-            <h1 className={`font-display leading-[1.1] text-paper [overflow-wrap:anywhere] ${nameSize(hero.name)}`} title={hero.name} data-testid="hero-name">
-              {hero.name}
-            </h1>
+            <HeroName name={hero.name} testId="hero-name" />
           </div>
         </div>
 
@@ -82,17 +81,6 @@ export function HeroIdentityPanel({ hero, classVisual, look, ownership, selfStat
       </div>
     </section>
   );
-}
-
-/**
- * The name is the dominant text, so it stays big for ordinary names and steps down for long ones — a 40-character name still shows in full
- * (wrapping inside its column, breaking inside a very long word) instead of being cut off — names are capped at 40 characters, so it never gets very tall.
- */
-export function nameSize(name: string): string {
-  const n = [...name].length;
-  if (n <= 14) return "text-2xl sm:text-3xl";
-  if (n <= 24) return "text-xl sm:text-2xl";
-  return "text-lg sm:text-xl";
 }
 
 /** CLASS — a dark tile with the class glyph in the class colour. Its own shape and weight, nothing like the rarity plaque. */

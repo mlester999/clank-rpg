@@ -11,6 +11,7 @@ All schema lives in `migrations/` as plain, ordered SQL (`YYYYMMDDHHMMSS_name.sq
 | `…000500_arena.sql` | `arena_state`, cycles, persisted queue, battles (frozen once simulated/settled), participants, seasonal stats |
 | `…000600_security_hardening.sql` | `clank_harden_schema()`: RLS on every table, no API-role access. **End every future migration with `select public.clank_harden_schema();`** |
 | `…20261008002400_arena_chat.sql` | **Arena Chat** (docs/ARENA_CHAT.md): `arena_chat_messages` (durable history, keyset `id`, moderation `deleted_at`/`rev`), `arena_chat_mutes` (private reasons), indexes, and — only where a Supabase `realtime` schema exists — the listen-only Realtime policy for the private channel `arena-chat`. Server-only tables: RLS on, no policies, no API-role privileges |
+| `…20261009002500_hero_free_reroll.sql` | **Free daily hero reroll** (docs/HERO_FREE_REROLL.md): `hero_free_rerolls` (one immutable row per used reroll; **`PRIMARY KEY (telegram_user_id, utc_day)`** = one per member per UTC day), a guard that a row describes a real reroll of the member's own hero, a **deferred** check that a `member:*` hero version cannot commit without its allowance row, `audit_hero_free_rerolls()`. Additive; the feature flag `hero.free_reroll` ships **off**. |
 
 ## Applying them (no Docker)
 

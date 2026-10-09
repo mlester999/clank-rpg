@@ -114,4 +114,9 @@ export interface BoardPayload {
    * served by an older server (or built by a test) stays valid.
    */
   season?: { label: string; kind: "DEVELOPMENT" | "COMPETITIVE" } | null;
+  /**
+   * The reward programme as it is configured NOW (both boards), so the Leaderboards page can show the Daily and the Weekly pool, the qualification and the holder
+   * bonus together whichever board or finished period is on screen. The same `boardRules` that build every board; optional so older payloads stay valid.
+   */
+  programme?: { daily: BoardRuleView; weekly: BoardRuleView };
 }

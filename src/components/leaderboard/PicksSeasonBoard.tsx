@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { useRemote } from "@/lib/useRemote";
 
 import { BoardError, BoardSkeleton } from "./HeroBoards";
+import { BoardCountdown } from "./rewardParts";
 import { EmptyRows, SeasonChip, SeasonPicker, StatusChip } from "./boardParts";
 
 /**
@@ -36,6 +37,12 @@ export function PicksSeasonView({ payload, season, onSeason }: { payload: PicksS
         </div>
         <p className="mt-1 text-xs text-steel-300" data-testid="board-subtitle">{payload.season?.label ?? "Season"} · every valid Pick of the season. Daily and Weekly are the rewarded boards.</p>
         <SeasonPicker seasons={payload.seasons} selected={season} onSelect={onSeason} />
+        {/* only when the database holds a real, upcoming end time for the season being played — an end date is never invented */}
+        {payload.season?.endsAt ? (
+          <div className="mt-3 max-w-md">
+            <BoardCountdown word="Season" state="LIVE" serverNow={payload.serverNow} endsAt={payload.season.endsAt} allowDays />
+          </div>
+        ) : null}
         {me && (
           <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="board-my-stats" aria-label="My season stats">
             <Me label="Picks" value={me.picks.toLocaleString()} />

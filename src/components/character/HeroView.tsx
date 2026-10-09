@@ -17,6 +17,7 @@ import { api, friendly } from "@/lib/api";
 import type { CharacterDto, ClassVisual, InventoryItemView } from "@/lib/dto";
 import { useRemote } from "@/lib/useRemote";
 
+import { FreeRerollPanel } from "./FreeReroll";
 import { HeroIdentityPanel, HeroStandingPanel } from "./HeroIdentity";
 import { ArenaPicksPanel } from "@/components/rewards/ArenaPicksPanel";
 import { WalletPanel } from "./WalletPanel";
@@ -66,6 +67,9 @@ export function HeroView({ id }: { id: string }) {
   const [tab, setTab] = useState<"overview" | "picks" | "tactics" | "wallet">("overview");
   const [claimNote, setClaimNote] = useState<string | null>(null);
   const [tacticNote, setTacticNote] = useState<string | null>(null);
+  // After a reroll the hero is re-read from the server. Until that read lands the old class / rarity / PWR must not look current: dim them (the reroll panel itself stays).
+  const [staleBundle, setStaleBundle] = useState<HeroBundle | null>(null);
+  const staleAfterReroll = staleBundle !== null && bundle === staleBundle && loading;
 
   if (state === "loading") return <HeroSkeleton />;
   if (state === "missing") return <EmptyState title="Hero not found" body="This hero doesn't exist (or hasn't been created yet)." action={<Link href="/leaderboard" className="btn btn-sm">See the leaderboard</Link>} />;
@@ -105,21 +109,25 @@ export function HeroView({ id }: { id: string }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* identity + standing: the top hero section below `lg`, the left column above it */}
         <div className="hero-rail min-w-0 space-y-4">
-          <HeroIdentityPanel
-            hero={hero}
-            classVisual={classVisual}
-            look={look}
-            ownership={ownership}
-            selfStatus={data.self?.heroStatus}
-            note={claimNote}
-            onClaim={ownership === "UNCLAIMED_CLAIMABLE" ? claim : undefined}
-            onSignOut={isOwner ? signOut : undefined}
-          />
-          <HeroStandingPanel power={hero.power} rarity={hero.appearance.rarity as Rarity} season={hero.season} />
+          <div className={`min-w-0 space-y-4 transition-opacity ${staleAfterReroll ? "opacity-40" : ""}`} aria-busy={staleAfterReroll} data-testid="hero-rail-body">
+            <HeroIdentityPanel
+              hero={hero}
+              classVisual={classVisual}
+              look={look}
+              ownership={ownership}
+              selfStatus={data.self?.heroStatus}
+              note={claimNote}
+              onClaim={ownership === "UNCLAIMED_CLAIMABLE" ? claim : undefined}
+              onSignOut={isOwner ? signOut : undefined}
+            />
+            <HeroStandingPanel power={hero.power} rarity={hero.appearance.rarity as Rarity} season={hero.season} />
+          </div>
+          {/* the member's own hero only: the free daily reroll (feature-flagged on the server; a disabled feature says so plainly) */}
+          {isMine && <FreeRerollPanel onRerolled={() => { setStaleBundle(bundle); void load(); }} />}
         </div>
 
         {/* details */}
-        <div className="min-w-0 space-y-4">
+        <div className={`min-w-0 space-y-4 transition-opacity ${staleAfterReroll ? "opacity-40" : ""}`} aria-busy={staleAfterReroll}>
           {(isOwner || isMine) && (
             <nav className="flex gap-1 overflow-x-auto rounded-lg bg-ink-900 p-1" aria-label="Hero sections">
               {((isOwner && owner ? ["overview", "picks", "tactics", "wallet"] : ["overview", "picks"]) as Array<"overview" | "picks" | "tactics" | "wallet">).map((t) => (

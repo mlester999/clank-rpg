@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { ClassTag, CombatPower, HeroActionBar, HeroIdentityPanel, HeroStandingPanel, OwnershipPanel, RankProgress, nameSize, type IdentityPanelProps } from "@/components/character/HeroIdentity";
+import { ClassTag, CombatPower, HeroActionBar, HeroIdentityPanel, HeroStandingPanel, OwnershipPanel, RankProgress, type IdentityPanelProps } from "@/components/character/HeroIdentity";
 import { lookFor } from "@/components/hero/look";
 import { RarityPlaque } from "@/components/hero/rarity";
 import { CLASS_ICONS, classIcon } from "@/components/ui/Icons";
@@ -343,17 +343,16 @@ describe("the identity panel", () => {
     expect(html).not.toContain("hero-tagline");
   });
 
-  it("the name is the dominant type; long names step down and wrap — they are never cut off", () => {
+  it("the name is the dominant type, fitted to its box: long names shrink and wrap between words — they are never cut off", () => {
     const long = "Maximilian Bartholomew Fitzwilliam-Smyth"; // 40 characters, the maximum
     const html = panel({ hero: { name: long } });
     expect(html).toContain(`>${long}</h1>`);
     expect(html).toContain(`title="${long}"`);
-    expect(html).toContain("[overflow-wrap:anywhere]");
+    expect(html).toMatch(/<h1 class="hero-name font-display text-paper /);
+    expect(html).toContain('class="hero-name-box"'); // the size container the type is fitted to
+    expect(html).toMatch(/--name-total-em:\d+(\.\d+)?;--name-word-em:\d+(\.\d+)?/);
     expect(html).not.toMatch(/<h1[^>]*line-clamp/);
     expect(html).not.toMatch(/<h1[^>]*truncate/);
-    expect(nameSize("Fay")).toBe("text-2xl sm:text-3xl");
-    expect(nameSize("A".repeat(20))).toBe("text-xl sm:text-2xl");
-    expect(nameSize(long)).toBe("text-lg sm:text-xl");
     expect(panel({ hero: { name: "Supercalifragilisticexpialidocious" } })).toContain("Supercalifragilisticexpialidocious");
   });
 

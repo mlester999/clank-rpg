@@ -7,6 +7,7 @@ import { heroPath } from "@/domain/hero/publicId";
 import { rarityVisual } from "@/domain/hero/rarityVisuals";
 
 import { HeroArena } from "./HeroArena";
+import { HeroName } from "./HeroName";
 import { PwrValue, RarityBadge, rarityStyle } from "./rarity";
 
 /**
@@ -46,7 +47,9 @@ export function HeroCard({ model, animate = false, className = "", heading = "h2
 
         <HeroArena look={model.look} animate={animate} label={`${model.name}, ${rarityClassLine(model)}`} className="mt-3" />
 
-        <Heading className="mt-3 text-center font-display text-xl leading-tight [overflow-wrap:anywhere] text-paper sm:text-2xl" data-testid="hero-card-name">{model.name}</Heading>
+        <div className="mt-3">
+          <HeroName name={model.name} as={Heading} max="1.5rem" min="0.85rem" wrapCap="1.35rem" align="center" testId="hero-card-name" />
+        </div>
         <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1" data-testid="hero-card-class">
           <RarityBadge rarity={model.rarity} size="md" />
           <span className="font-display text-sm tracking-[0.16em] uppercase" style={{ color: v.colors.light }}>{model.className}</span>

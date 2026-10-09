@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, memo, useMemo } from "react";
+import { memo, useMemo } from "react";
 
 import { HeroAvatar } from "@/components/hero/HeroAvatar";
 import { lookFor } from "@/components/hero/look";
@@ -101,20 +101,13 @@ export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode 
         </div>
 
         {/* 2 · the prizes — the first thing the eye lands on after the title */}
-        {enabled && <PrizePools reward={state?.picks.reward} serverNow={state?.serverTime ?? now} />}
+        {enabled && <PrizePools reward={state?.picks.reward} />}
 
-        {/* 3 · how it works, in two short lines */}
+        {/* 3 · how it works, in two short lines (the full rules are on the Leaderboards) */}
         {enabled && (
-          <div className="mt-2.5 px-0.5" data-testid="picks-copy">
+          <div className="mt-2 px-0.5" data-testid="picks-copy">
             <p className="text-[0.84rem] leading-snug font-semibold text-paper" data-testid="picks-lead">
-              {/* each sentence stays whole: on a narrow screen the line breaks BETWEEN them, never inside "Earn +10 Points …". The space between them is a real
-                  text node OUTSIDE the inline-blocks (a space inside an inline-block is dropped at the line end, which glued "winner.Earn" together). */}
-              {(copy.lead.match(/[^.]+\./g) ?? [copy.lead]).map((sentence, i) => (
-                <Fragment key={i}>
-                  {i > 0 && " "}
-                  <span className="inline-block">{sentence.trim()}</span>
-                </Fragment>
-              ))}
+              {copy.lead}
             </p>
             {copy.scoring && <p className="mt-0.5 text-[0.7rem] leading-snug text-steel-300">{copy.scoring}</p>}
             <p className="mt-0.5 text-[0.7rem] leading-snug text-steel-400" data-testid="picks-free">

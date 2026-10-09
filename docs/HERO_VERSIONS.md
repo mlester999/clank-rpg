@@ -85,6 +85,8 @@ byte-for-byte untouched and remains viewable, but a `hero-gen/1` version cannot 
 
 Special (hand-authored) characters cannot be rerolled (they have fixed stats and no Telegram member).
 
+**Member rerolls (behind a feature flag).** The same `REROLL` version can also be made by the hero's own member, once per UTC day — `created_by = 'member:<telegram id>'`, one `hero_free_rerolls` row per use, same generator, same Arena protection. The admin reroll stays unlimited and audited; see [`HERO_FREE_REROLL.md`](HERO_FREE_REROLL.md).
+
 ## 5. History and rollback
 
 *History* lists every version newest first: version, action, date, class, rarity, POWER and its relation (`from vN` / `restores vN`), with **Preview** (draws any old

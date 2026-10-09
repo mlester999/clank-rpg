@@ -16,6 +16,12 @@ Below `lg` the two panels are simply the top section of the page (no skinny side
 the rank; on phones everything stacks. From `lg` they are the 320 px left column; the column sticks to the top only when the window is tall enough to
 show all of it (`.hero-rail` in `globals.css`) — otherwise its bottom would be unreachable.
 
+## The name is fitted to its line
+
+The display face (Bungee) is wide, so a fixed size broke an ordinary name like `MARKYYESTER` as "MARKYYEST / ER". `HeroName` (`src/components/hero/HeroName.tsx`, used on this page and on the hero card) sizes the name from the width of its box and the name's own width in `em`
+(`src/domain/character/nameFit.ts` — the face's real advances, measured in Chrome and padded 2 %): **one line at the largest size that fits** (up to 30 px here, 24 px on the card); a name too long for that **wraps only between words (and after a hyphen), balanced**, at the size its widest word allows;
+a single very long word **shrinks** (down to 12.8 px) and only below that may wrap inside the word — a name is never cut off and never gets an ellipsis. Pure CSS (`.hero-name`, container query units) with two custom properties from the server render: no measuring script, no layout shift. Verified in Chrome over 12 names × 10 widths (1920 → 320) on the page and the card: no broken word, no overflow. Tests: `tests/unit/hero-name-fit.test.ts`.
+
 ## Rarity, class and ownership look different on purpose
 
 | | Visual language | Not colour alone |

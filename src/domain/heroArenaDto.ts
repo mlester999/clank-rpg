@@ -16,6 +16,11 @@ export interface LeaderboardSeasonView {
   status: "ACTIVE" | "ENDED";
   /** The default: the season being played now. */
   current: boolean;
+  /**
+   * When the season ends (ms, UTC) — present ONLY when the database holds a real, FUTURE end time for the ACTIVE season. Today seasons end when an operator ends them, so this is
+   * normally null and no season countdown is shown: an end date is never invented. Optional so an older payload stays valid.
+   */
+  endsAt?: number | null;
 }
 
 export interface HeroRulesView {

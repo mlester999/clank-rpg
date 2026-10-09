@@ -75,6 +75,13 @@ const MESSAGES: Record<string, string> = {
   PHOTO_ANIMATED: "Animated images aren't accepted — use a still image.",
   PHOTO_TOO_SMALL: "The image must be at least 64×64 pixels.",
   PHOTO_DIMENSIONS_TOO_LARGE: "The image can be at most 4096×4096 pixels.",
+  FREE_REROLL_DISABLED: "Free rerolls aren't open yet.",
+  FREE_REROLL_UNAVAILABLE: "Free rerolls aren't ready on this server yet.",
+  ALREADY_USED_TODAY: "You've already used today's free reroll.",
+  HERO_IN_ARENA: "Your hero is lined up for a live Arena fight. Try again once the upcoming fights have finished — your free reroll is still waiting.",
+  HERO_UNAVAILABLE: "Your hero can't be rerolled right now.",
+  INVALID_ROLL: "The roll could not be completed. Nothing was used — try again.",
+  REQUEST_CONFLICT: "That request was already used. Reload the page and try again.",
   STORAGE_NOT_CONFIGURED: "Photo storage isn't configured on this server yet (see docs/HERO_PROFILE_PHOTOS.md).",
 };
 

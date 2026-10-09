@@ -96,7 +96,7 @@ export function ArenaPicksView({ data, note, onClaim, onTierChanged, token = nul
             <dd className="font-display text-xl text-paper tnum" data-testid="points-lifetime">{rewards.points.lifetime.toLocaleString()}</dd>
           </div>
         </dl>
-        <p className="mt-2 text-[0.66rem] text-steel-400">The Daily board ends 00:00 UTC; the Weekly board Monday 00:00 UTC. <a href="/leaderboard" className="underline underline-offset-2 hover:text-paper">Arena Picks leaderboards</a></p>
+        <p className="mt-2 text-[0.66rem] text-steel-400">Daily and Weekly boards reset on a fixed schedule — the live countdowns are on the <a href="/leaderboard" className="underline underline-offset-2 hover:text-paper">Arena Picks leaderboards</a>.</p>
       </section>
 
       <HolderBonusCard holder={rewards.holder} onChanged={() => onTierChanged?.()} token={token} />

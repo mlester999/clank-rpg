@@ -24,6 +24,7 @@
     "balance:sim": "tsx scripts/balance-sim.ts",
     "rarity:sim": "tsx scripts/rarity-sim.ts",
     "rarity:calibrate": "tsx scripts/calibrate-class-factors.ts",
+    "reroll:fairness": "tsx scripts/reroll-fairness.ts",
     "rarity:bench": "tsx scripts/bench-rarity-fx.ts",
     "battle:verify": "tsx scripts/verify-battle.ts",
     "telegram:import": "tsx scripts/import-telegram-export.ts",

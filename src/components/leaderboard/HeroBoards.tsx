@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { HeroAvatar } from "@/components/hero/HeroAvatar";
 import { lookFor } from "@/components/hero/look";
 import { RarityBadge } from "@/components/hero/rarity";
-import { useServerCountdown } from "@/components/leaderboard/useServerCountdown";
+import { BoardCountdown, ExactTimes } from "@/components/leaderboard/rewardParts";
 import { EmptyState, SkeletonBlock } from "@/components/ui/bits";
 import type { RecordMetric } from "@/domain/heroArena";
 import type { HeroBoardDto, HeroBoardPayload, HeroRecordsPayload, HeroRowDto, HeroRulesView, LeaderboardSeasonView } from "@/domain/heroArenaDto";
@@ -20,7 +20,7 @@ const CURRENT = "CURRENT";
 
 /**
  * HERO ARENA — the HERO competition. Heroes are ranked by ARENA WINS over the SETTLED battles of the period and of one season; PWR, rarity, wallet and Telegram
- * activity play no part. DAILY (00:00 UTC → 00:00 UTC) and WEEKLY (Monday → Monday) are REWARDED — the prize goes to the hero's owner, and waits for them if the hero
+ * activity play no part. DAILY (one UTC day) and WEEKLY (Monday → Monday, UTC) are REWARDED — the prize goes to the hero's owner, and waits for them if the hero
  * has not been claimed; SEASON is standings only. The pool, the boundaries and "now" come from the server.
  */
 export function HeroArenaBoard({ scope }: { scope: "daily" | "weekly" | "season" }) {
@@ -83,15 +83,18 @@ export function HeroBoardView({ payload, kind, selected, onSelect, season, onSea
   const rewarded = board.rewarded && view === "arena" && board.rules !== null;
   const word = view === "PWR" ? "" : KICKER[board.scope];
 
-  // The running period rolls over by itself: when its countdown reaches zero the server is already in the next one.
-  const countdown = useServerCountdown({ serverNow: board.serverNow, endsAt: board.endsAt ?? board.serverNow, active: isCurrent && board.endsAt !== null, onElapsed: onReload, withDays: !daily });
-  const waiting = isCurrent && board.endsAt !== null && countdown.parts.done;
+  // The running period rolls over by itself: when its countdown reaches zero the server is already in the next one. The countdown is a leaf on the shared
+  // clock (the board does not re-render every second); this only asks the server again, every 1.5 s, until it has moved on.
+  const [elapsedFor, setElapsedFor] = useState<number | null>(null);
+  const waiting = isCurrent && board.endsAt !== null && elapsedFor === board.endsAt;
   useEffect(() => {
     if (!waiting) return;
     const id = window.setInterval(onReload, 1500);
     return () => window.clearInterval(id);
   }, [waiting, onReload]);
+  const seasonEnd = board.scope === "SEASON" && view !== "PWR" ? (board.season?.endsAt ?? null) : null;
 
+  const sub = subtitle(view, board, selected, finalizingNow);
   return (
     <div data-testid="hero-board" data-view={view} data-scope={board.scope} data-state={board.state} data-rewarded={rewarded ? "true" : "false"}>
       <header className="plate plate-flat mb-3 p-3.5 sm:p-4">
@@ -102,29 +105,39 @@ export function HeroBoardView({ payload, kind, selected, onSelect, season, onSea
               <StatusChip rewarded={rewarded} scope={board.scope} stats={view !== "arena"} />
               <SeasonChip season={board.season} />
             </div>
-            <p className="mt-1 text-xs text-steel-300" data-testid="board-subtitle">{subtitle(view, board, selected, finalizingNow)}</p>
+            {sub && <p className="mt-1 text-xs text-steel-300" data-testid="board-subtitle">{sub}</p>}
           </div>
           {rewarded && board.rules && <PoolCard rules={board.rules} word={word} />}
         </div>
 
         {isPeriod && view !== "PWR" && (
-          <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {isCurrent ? (
-              <div className="rounded-md border border-clank-400/30 bg-clank-500/[0.07] px-3 py-2" data-testid="board-countdown-box">
-                <dt className="label">Ends in</dt>
-                <dd className="font-display text-lg text-paper tnum" role="timer" aria-label={`${word} board ends in ${countdown.text}`} data-testid="board-countdown" data-remaining-ms={Math.max(Math.round(countdown.remainingMs), 0)}>{countdown.text}</dd>
+          <>
+            <div className="mt-3 grid gap-2.5 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+              <BoardCountdown
+                word={word}
+                state={isCurrent ? "LIVE" : finalizingNow ? "FINALIZING" : "FINAL"}
+                serverNow={board.serverNow}
+                endsAt={board.endsAt ?? board.serverNow}
+                allowDays={!daily}
+                onElapsed={() => { setElapsedFor(board.endsAt); onReload(); }}
+                waiting={waiting}
+                completedLabel={board.start ? (daily ? periodLabel(board.start) : `Week of ${periodLabel(board.start)}`) : undefined}
+                finalizedAt={board.finalizedAt}
+              />
+              <div className="min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                <p className="label">How it works</p>
+                <p className="mt-0.5 text-[0.72rem] leading-snug text-steel-300" data-testid="board-how-short">{howItWorks(view, rewarded)}</p>
               </div>
-            ) : (
-              <div className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
-                <dt className="label">{finalizingNow ? "Status" : "Finalized"}</dt>
-                <dd className="font-display text-lg text-paper tnum">{finalizingNow ? "FINALIZING" : board.finalizedAt ? new Date(board.finalizedAt).toISOString().slice(0, 10) : "—"}</dd>
-              </div>
-            )}
-            <div className="min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
-              <dt className="label">How it works</dt>
-              <dd className="text-[0.72rem] leading-snug text-steel-300" data-testid="board-how-short">{howItWorks(view, rewarded)}</dd>
             </div>
-          </dl>
+            {board.startsAt !== null && board.endsAt !== null && <ExactTimes startsAt={board.startsAt} endsAt={board.endsAt} recurs={daily ? "every day" : "every Monday"} />}
+          </>
+        )}
+
+        {/* A season countdown exists ONLY when the database holds a real, upcoming end time for the season being played — an end date is never invented. */}
+        {seasonEnd !== null && (
+          <div className="mt-3 max-w-md">
+            <BoardCountdown word="Season" state="LIVE" serverNow={board.serverNow} endsAt={seasonEnd} allowDays onElapsed={onReload} />
+          </div>
         )}
 
         {isPeriod && view === "arena" && (
@@ -145,12 +158,13 @@ export function HeroBoardView({ payload, kind, selected, onSelect, season, onSea
   );
 }
 
-function subtitle(view: View, board: HeroBoardDto, selected: string, finalizing: boolean): string {
+function subtitle(view: View, board: HeroBoardDto, selected: string, finalizing: boolean): string | null {
   if (view === "PWR") return "The current PWR of every active hero. PWR is a live figure — there is no daily or weekly PWR.";
   if (board.scope === "SEASON") return `${board.season?.label ?? "Season"} · every settled Arena battle of the season`;
   const day = board.scope === "DAILY";
   const label = board.start ? periodLabel(board.start) : "";
-  if (selected === CURRENT && board.state === "CURRENT") return day ? `${label} · 00:00 UTC → 00:00 UTC` : `Week of ${label} · Monday 00:00 UTC → Monday 00:00 UTC`;
+  // The running period's window is the countdown card's business (its exact times are one tap away) — no raw "00:00 UTC → 00:00 UTC" line.
+  if (selected === CURRENT && board.state === "CURRENT") return null;
   return finalizing ? `Final results are being frozen · ${day ? label : `week of ${label}`}` : `Final results · ${day ? label : `week of ${label}`} · read-only`;
 }
 

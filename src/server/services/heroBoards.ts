@@ -37,14 +37,26 @@ interface SeasonRow {
   number: number | null;
   name: string;
   status: "ACTIVE" | "ENDED";
+  ends_at: Date | null;
 }
 
 /** The season being played now first, then the official seasons newest first (an ended development run is archived and not offered). */
-export async function listLeaderboardSeasons(q: Queryable): Promise<LeaderboardSeasonView[]> {
+export async function listLeaderboardSeasons(q: Queryable, nowMs: number = Date.now()): Promise<LeaderboardSeasonView[]> {
   const rows = await q.query<SeasonRow>(
-    `select id, kind, number, name, status from public.seasons where status = 'ACTIVE' or kind = 'COMPETITIVE' order by (status = 'ACTIVE') desc, starts_at desc, created_at desc limit 12`,
+    `select id, kind, number, name, status, ends_at from public.seasons where status = 'ACTIVE' or kind = 'COMPETITIVE' order by (status = 'ACTIVE') desc, starts_at desc, created_at desc limit 12`,
   );
-  return rows.map((s) => ({ id: s.id, label: seasonChipLabel({ kind: s.kind, number: s.number, name: s.name }), kind: s.kind, status: s.status, current: s.status === "ACTIVE" }));
+  return rows.map((s) => {
+    const endsAt = s.ends_at ? new Date(s.ends_at).getTime() : null;
+    return {
+      id: s.id,
+      label: seasonChipLabel({ kind: s.kind, number: s.number, name: s.name }),
+      kind: s.kind,
+      status: s.status,
+      current: s.status === "ACTIVE",
+      // Only a real, upcoming end of the season being played. An ended season's `ends_at` is when it ENDED (history), never a countdown.
+      endsAt: s.status === "ACTIVE" && endsAt !== null && endsAt > nowMs ? endsAt : null,
+    };
+  });
 }
 
 /** The requested season if it is one we offer, otherwise the current one (null when there is none at all). */

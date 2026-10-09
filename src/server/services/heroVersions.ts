@@ -297,9 +297,9 @@ export async function previewReroll(db: Db, characterId: string, actor: string, 
  * Appends the version and moves the hero to it — pointer AND projection — inside the caller's transaction (which holds the hero's row lock).
  * `clank.allow_class_change` is the existing, audited switch that lets the otherwise-permanent class column change, transaction-local.
  */
-async function appendAndProject(
+export async function appendAndProject(
   tx: Queryable,
-  hero: HeroRow,
+  hero: Pick<HeroRow, "id">,
   p: { action: Exclude<HeroVersionAction, "INITIAL">; state: HeroVersionState; sourceVersionId?: string; requestId: string; actor: string },
   deps: HeroVersioningDeps,
 ): Promise<{ row: HeroVersionRow; previous: HeroVersionRow }> {
@@ -328,7 +328,7 @@ async function appendAndProject(
   return { row, previous };
 }
 
-async function assertNotInArena(tx: Queryable, characterId: string): Promise<void> {
+export async function assertNotInArena(tx: Queryable, characterId: string): Promise<void> {
   const lock = await heroArenaLock(tx, characterId);
   if (lock.locked) throw new HeroVersionError("HERO_IN_ARENA", 409, ARENA_LOCK_MESSAGE);
 }

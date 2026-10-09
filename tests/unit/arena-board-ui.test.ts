@@ -58,12 +58,13 @@ describe("DAILY ARENA PICKS — the header", () => {
     expect(t).toMatch(/No ranked players yet\. Make an Arena Pick to enter today's standings\./); // a compact, intentional state — not a large awkward card
   });
 
-  it("WEEKLY reads 6D 23H 59M 59S one second into the week, with the 500,000 pool", () => {
+  it("WEEKLY reads 06D 23H 59M one second into the week (days, hours, minutes), with the 500,000 pool", () => {
     const b = board({ kind: "WEEKLY", start: "2026-10-12", serverNow: T("2026-10-12T00:00:01Z"), startsAt: T("2026-10-12T00:00:00Z"), endsAt: T("2026-10-19T00:00:00Z"), rules: rules("WEEKLY"), rows: [] });
     const t = text(view(payload(b)));
     expect(t).toMatch(/Weekly Arena Picks/i);
     expect(t).toMatch(/500,000 \$CLANKRPG Weekly prize pool/);
-    expect(t).toMatch(/Ends in 6D 23H 59M 59S/);
+    expect(t).toMatch(/Weekly leaderboard Ends in 06D 23H 59M/);
+    expect(t).not.toMatch(/06D 23H 59M \d\dS/); // with days the seconds are not shown
   });
 
   it("the signed-out view invites sign-in instead of showing a score", () => {

@@ -36,6 +36,8 @@ export interface RaritySimOptions {
   salt?: string;
   /** CALIBRATION ONLY: fit each class with this PWR factor instead of the frozen one (see scripts/calibrate-class-factors.ts). */
   classFactors?: Readonly<Record<string, number>>;
+  /** WHAT-IF ONLY: the rarity mix of the "production" scenario (defaults to the real odds) — e.g. the mix a population converges to under free rerolls. */
+  weights?: Readonly<Record<Rarity, number>>;
 }
 
 const PRODUCTION_WEIGHTS = DEFAULT_SETTINGS.character.rarityWeights;
@@ -85,8 +87,8 @@ export interface RaritySimSummary {
   wallClockMs: number;
 }
 
-function rollRarityBy(rng: Rng): Rarity {
-  return rng.weighted(RARITIES, (r) => PRODUCTION_WEIGHTS[r]);
+function rollRarityBy(rng: Rng, weights: Readonly<Record<Rarity, number>> = PRODUCTION_WEIGHTS): Rarity {
+  return rng.weighted(RARITIES, (r) => weights[r]);
 }
 
 /** One fighter exactly as hero generator 2 would roll its stats (optionally against what-if bands or what-if class factors). */
@@ -131,7 +133,7 @@ export function runRaritySim(opts: RaritySimOptions): RaritySimSummary {
       const classId = rng.pick(classIds);
       let rarity: Rarity;
       switch (opts.scenario) {
-        case "production": rarity = rollRarityBy(rng); break;
+        case "production": rarity = rollRarityBy(rng, opts.weights); break;
         case "uniform": rarity = rng.pick(RARITIES as unknown as Rarity[]); break;
         case "per-rarity": rarity = rotating; break;
         case "duel": rarity = i === 0 ? rotating : "COMMON"; break;
