@@ -5,9 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useTokenConfig } from "@/components/leaderboard/useTokenConfig";
-import { ArenaIcon, BagIcon, BookIcon, HeroesIcon, LockIcon, MoreIcon, TrophyIcon, UserIcon } from "@/components/ui/Icons";
+import { ArenaIcon, BagIcon, BookIcon, HeroesIcon, MoreIcon, TrophyIcon, UserIcon } from "@/components/ui/Icons";
 import { BUY_LABEL, CLANK_TRADE_URL } from "@/domain/rewards/buyLink";
-import { FEATURES, FEATURE_ORDER } from "@/content/features";
 
 import { AccountControl, resolveAccount, type AccountViewer } from "./AccountControl";
 import { Logo } from "./Logo";
@@ -36,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // undefined = still asking · null = signed out (anonymous) · object = signed in. Only a real answer from the server ever means "signed in".
   const [me, setMe] = useState<MeResponse["viewer"] | undefined>(undefined);
   const router = useRouter();
-  // The "Soon" sheet is tied to the page it was opened on, so navigating closes it without an effect.
+  // The "More" sheet is tied to the page it was opened on, so navigating closes it without an effect.
   const [moreAt, setMoreAt] = useState<string | null>(null);
   const more = moreAt === path;
   const isAdmin = path.startsWith("/admin");
@@ -93,21 +92,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 {label}
                 {isActive(path, href) && <span className="absolute inset-x-3 -bottom-[13px] h-[3px] rounded-full bg-clank-400 shadow-[0_0_12px_rgba(202,148,249,.8)]" />}
-              </Link>
-            ))}
-            <span className="mx-2 hidden h-5 w-px bg-white/10 min-[1700px]:block" />
-            {FEATURE_ORDER.map((id) => (
-              <Link
-                key={id}
-                href={`/soon/${id}`}
-                aria-current={isActive(path, `/soon/${id}`) ? "page" : undefined}
-                className={`group hidden items-center gap-1.5 rounded-md px-2.5 py-2 font-display text-[0.62rem] min-[1700px]:inline-flex tracking-wider uppercase transition-colors ${
-                  isActive(path, `/soon/${id}`) ? "text-paper" : "text-steel-400 hover:text-steel-300"
-                }`}
-                title={`${FEATURES[id].title} — coming soon`}
-              >
-                <LockIcon size={12} />
-                {FEATURES[id].nav}
               </Link>
             ))}
           </nav>
@@ -174,14 +158,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Docs
               <span className="chip ml-auto">Read</span>
             </Link>
-            <p className="label px-3 pt-2 pb-1">Coming soon</p>
-            {FEATURE_ORDER.map((id) => (
-              <Link key={id} href={`/soon/${id}`} className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold text-paper active:bg-white/5">
-                <LockIcon size={16} className="text-steel-400" />
-                {FEATURES[id].title}
-                <span className="chip ml-auto">Locked</span>
-              </Link>
-            ))}
           </div>
         )}
       </nav>

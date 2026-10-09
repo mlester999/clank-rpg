@@ -69,7 +69,7 @@ const basePicks = (over: Partial<PicksApi> = {}): PicksApi => ({
   ...over,
 });
 
-const panel = (state: ArenaStateDto, picks: PicksApi, over: { now?: number; decided?: boolean; onStage?: boolean; tokenLaunched?: boolean | null } = {}) =>
+const panel = (state: ArenaStateDto, picks: PicksApi, over: { now?: number; decided?: boolean; onStage?: boolean } = {}) =>
   renderToStaticMarkup(
     createElement(ArenaPicks, {
       state,
@@ -78,7 +78,6 @@ const panel = (state: ArenaStateDto, picks: PicksApi, over: { now?: number; deci
       picks,
       onStage: over.onStage === false ? null : { fighters: state.current?.fighters ?? [], decided: over.decided ?? false },
       loaded: true,
-      ...(over.tokenLaunched !== undefined ? { tokenLaunched: over.tokenLaunched } : {}),
     }),
   );
 
@@ -180,10 +179,8 @@ describe("Arena Picks panel — the premium prize presentation (hierarchy, state
 
   it("reads top to bottom: Arena Picks / next fight → the two prize pools → how it works (+10, free) → the sign-in step → the fighters", async () => {
     const state = await arena();
-    const html = panel(state, basePicks({ signedIn: false, eligibility: null }), { tokenLaunched: false });
+    const html = panel(state, basePicks({ signedIn: false, eligibility: null }));
     expect(ascending(order(html, 'id="arena-picks"', "Pick the next winner", 'data-testid="prize-pools"', 'data-testid="prize-daily"', 'data-testid="prize-weekly"', 'data-testid="prize-fineprint"', 'data-testid="picks-copy"', 'data-testid="picks-signin"', "<ol "))).toBe(true);
-    expect(html.indexOf('data-testid="prize-launch-note"')).toBeGreaterThan(html.indexOf('data-testid="prize-fineprint"'));
-    expect(html.indexOf('data-testid="prize-launch-note"')).toBeLessThan(html.indexOf('data-testid="picks-copy"'));
   });
 
   it("signed OUT: the Telegram step is a designed strip below the prizes and copy — the same link to the same sign-in page, never above the prizes", async () => {
@@ -214,12 +211,24 @@ describe("Arena Picks panel — the premium prize presentation (hierarchy, state
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Pick /);
   });
 
-  it("before $CLANKRPG launches the panel says tokens become claimable after launch; once launched it does not; unknown shows neither claim nor note", async () => {
+  it("the panel carries no token-launch disclaimer at all (it was removed): nothing about launch or claiming, in any state", async () => {
     const state = await arena();
-    expect(text(panel(state, basePicks(), { tokenLaunched: false }))).toContain("Token rewards become claimable after launch.");
-    expect(text(panel(state, basePicks(), { tokenLaunched: true }))).not.toMatch(/claimable after launch/);
-    expect(text(panel(state, basePicks(), { tokenLaunched: null }))).not.toMatch(/claimable after launch/);
-    for (const launched of [false, true, null]) expect(text(panel(state, basePicks(), { tokenLaunched: launched }))).not.toMatch(/\b(you won|paid out|claim now)\b/i);
+    for (const picks of [basePicks(), basePicks({ signedIn: false, eligibility: null }), basePicks({ pick: myPick(state, 1) })]) {
+      const html = panel(state, picks);
+      expect(text(html)).not.toMatch(/claimable|after launch|\blaunch(ed)?\b/i);
+      expect(html).not.toContain("prize-launch-note");
+    }
+  });
+
+  it("the two sentences of the explanation are separated by a REAL space — not merely an element boundary (the bug was 'winner.Earn')", async () => {
+    const state = await arena();
+    const html = panel(state, basePicks());
+    // the raw markup has a space text node between the two spans …
+    expect(html).toMatch(/Pick the winner\.<\/span> <span class="inline-block">Earn \+10 Points for every correct Pick\.<\/span>/);
+    // … so the visible text, with tags removed WITHOUT turning them into spaces, still reads correctly (the shared `text()` helper turns tags into spaces and would hide this)
+    const flat = html.replace(/<[^>]+>/g, "").replace(/&#x27;|&apos;/g, "'");
+    expect(flat).toContain("Pick the winner. Earn +10 Points for every correct Pick.");
+    expect(flat).not.toContain("winner.Earn");
   });
 
   it("the plaques follow the state's reward configuration, and the countdowns are measured from the state's own server time", async () => {

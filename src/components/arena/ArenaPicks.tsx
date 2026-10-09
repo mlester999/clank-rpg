@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo } from "react";
 
 import { HeroAvatar } from "@/components/hero/HeroAvatar";
 import { lookFor } from "@/components/hero/look";
 import { PwrValue, RarityBadge } from "@/components/hero/rarity";
 import type { Rarity } from "@/domain/character/appearance";
-import { useTokenConfig } from "@/components/leaderboard/useTokenConfig";
 import { CheckIcon, LockIcon, TelegramIcon } from "@/components/ui/Icons";
 import type { ArenaStateDto, ClassVisual, FighterDto, UpcomingBattleDto, UpcomingFighterDto } from "@/lib/dto";
 
@@ -28,8 +27,6 @@ interface Props {
   loaded: boolean;
   /** What the stage is showing: while the Arena is not running (not started, preparing, paused, development, offline) there is nothing to pick on. */
   mode?: StageMode;
-  /** Has $CLANKRPG launched? Normally read from the server (`GET /api/rewards/token`); a caller (a test, a preview) may state it. Unknown shows no launch note. */
-  tokenLaunched?: boolean | null;
 }
 
 /** The panel's calm line while there is no battle to pick on — never an empty 8-slot skeleton that looks broken. */
@@ -52,9 +49,7 @@ const IDLE_NOTE: Partial<Record<StageMode, { chip: string; text: string }>> = {
  * lock the moment the fight on stage is decided) — this panel only displays that verdict, and never shows a window open after
  * the server closed it. The crowd appears only once the window is closed.
  */
-export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode, tokenLaunched }: Props) {
-  const token = useTokenConfig();
-  const launched = tokenLaunched !== undefined ? tokenLaunched : token ? token.launched : null;
+export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode }: Props) {
   const enabled = Boolean(state?.picks.enabled);
   const idle = mode && !upcoming ? (IDLE_NOTE[mode] ?? null) : null;
   const display: WindowDisplay | null = windowDisplay(upcoming, now);
@@ -106,17 +101,19 @@ export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode,
         </div>
 
         {/* 2 · the prizes — the first thing the eye lands on after the title */}
-        {enabled && <PrizePools reward={state?.picks.reward} serverNow={state?.serverTime ?? now} tokenLaunched={launched} />}
+        {enabled && <PrizePools reward={state?.picks.reward} serverNow={state?.serverTime ?? now} />}
 
         {/* 3 · how it works, in two short lines */}
         {enabled && (
           <div className="mt-2.5 px-0.5" data-testid="picks-copy">
             <p className="text-[0.84rem] leading-snug font-semibold text-paper" data-testid="picks-lead">
-              {/* each sentence stays whole: on a narrow screen the line breaks BETWEEN them, never inside "Earn +10 Points …" */}
+              {/* each sentence stays whole: on a narrow screen the line breaks BETWEEN them, never inside "Earn +10 Points …". The space between them is a real
+                  text node OUTSIDE the inline-blocks (a space inside an inline-block is dropped at the line end, which glued "winner.Earn" together). */}
               {(copy.lead.match(/[^.]+\./g) ?? [copy.lead]).map((sentence, i) => (
-                <span key={i} className="inline-block">
-                  {sentence.trim()}{" "}
-                </span>
+                <Fragment key={i}>
+                  {i > 0 && " "}
+                  <span className="inline-block">{sentence.trim()}</span>
+                </Fragment>
               ))}
             </p>
             {copy.scoring && <p className="mt-0.5 text-[0.7rem] leading-snug text-steel-300">{copy.scoring}</p>}

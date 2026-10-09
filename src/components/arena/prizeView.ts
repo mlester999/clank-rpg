@@ -82,10 +82,6 @@ export function prizeFinePrint(p: { daily: PrizePlaque; weekly: PrizePlaque }): 
   return `Each pool is shared by ${top}, by rank. Prizes need ${p.daily.minimumPicks} valid Picks in a day (Daily) or ${p.weekly.minimumPicks} in a week (Weekly).`;
 }
 
-/** Shown only while $CLANKRPG has not launched (the server says so: `GET /api/rewards/token` → `launched: false`). Unknown (not loaded) shows nothing. */
-export const PRE_LAUNCH_NOTE = "Token rewards become claimable after launch.";
-export const launchNote = (launched: boolean | null | undefined): string | null => (launched === false ? PRE_LAUNCH_NOTE : null);
-
 const two = (n: number): string => String(n).padStart(2, "0");
 
 /** What the countdown reads for the instant a board has ended and the next one is already running. */

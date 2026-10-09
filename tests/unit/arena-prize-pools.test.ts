@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { PrizePools } from "@/components/arena/PrizePools";
-import { amountWidthEm, dailyResetText, groupDigits, launchNote, PICKS_FREE, PICKS_HOW, PRE_LAUNCH_NOTE, prizeFinePrint, prizePlaques, resetText, ROLLING_OVER, weeklyResetText } from "@/components/arena/prizeView";
+import { amountWidthEm, dailyResetText, groupDigits, PICKS_FREE, PICKS_HOW, prizeFinePrint, prizePlaques, resetText, ROLLING_OVER, weeklyResetText } from "@/components/arena/prizeView";
 import { pickCopy } from "@/components/arena/picksView";
 import { countdownParts } from "@/domain/rewards/leaderboard";
 import type { PicksRewardDto } from "@/domain/rewards/picksDto";
@@ -31,7 +31,7 @@ const REWARD: PicksRewardDto = {
   daily: { prizePool: "100,000", topRewarded: 10, endsAt: Date.UTC(2026, 9, 6, 0, 0, 0) },
   weekly: { prizePool: "500,000", topRewarded: 10, endsAt: Date.UTC(2026, 9, 12, 0, 0, 0) },
 };
-const render = (reward: PicksRewardDto | undefined, tokenLaunched: boolean | null = null, serverNow = MON_OCT_5) => renderToStaticMarkup(createElement(PrizePools, { reward, serverNow, tokenLaunched }));
+const render = (reward: PicksRewardDto | undefined, serverNow = MON_OCT_5) => renderToStaticMarkup(createElement(PrizePools, { reward, serverNow }));
 
 describe("what the plaques say", () => {
   it("shows the DAILY and WEEKLY pools as totals — 100,000 and 500,000 — in $CLANKRPG, for the Top 10", () => {
@@ -155,23 +155,11 @@ describe("number formatting", () => {
   });
 });
 
-describe("the launch note follows the server's word about the token", () => {
-  it("shows 'Token rewards become claimable after launch.' only while $CLANKRPG has NOT launched", () => {
-    expect(PRE_LAUNCH_NOTE).toBe("Token rewards become claimable after launch.");
-    expect(launchNote(false)).toBe(PRE_LAUNCH_NOTE);
-    expect(launchNote(true)).toBeNull();
-    expect(launchNote(null)).toBeNull(); // not known yet: nothing is implied
-    expect(launchNote(undefined)).toBeNull();
-    expect(text(render(REWARD, false))).toContain("Token rewards become claimable after launch.");
-    expect(render(REWARD, true)).not.toContain("prize-launch-note");
-    expect(render(REWARD, null)).not.toContain("prize-launch-note");
-  });
-
-  it("never says a reward has been paid or can be claimed now", () => {
-    for (const launched of [false, true, null]) {
-      const t = text(render(REWARD, launched));
-      expect(t).not.toMatch(/\b(paid|payout|claim now|claim your|claim rewards|you won|congratulations|winner of)\b/i);
-    }
+describe("no launch disclaimer on the plaques", () => {
+  it("says nothing about the token launch (the note was removed): no 'claimable after launch', no claim or payout words", () => {
+    const t = text(render(REWARD));
+    expect(t).not.toMatch(/launch|claimable|claim now|claim your|\b(paid|payout|you won|congratulations)\b/i);
+    expect(render(REWARD)).not.toContain("prize-launch-note");
   });
 });
 
@@ -197,16 +185,16 @@ describe("the countdowns are the leaderboard's own", () => {
     expect(text(html)).toContain("Resets in 12:00:00");
     expect(text(html)).toContain("Resets in 6d 12h 00m");
     // one minute before the Daily boundary
-    expect(text(render(REWARD, null, REWARD.daily.endsAt - 61_000))).toContain("Resets in 00:01:01");
+    expect(text(render(REWARD, REWARD.daily.endsAt - 61_000))).toContain("Resets in 00:01:01");
     // after the boundary the board is rolling over — never a negative time
-    const over = text(render(REWARD, null, REWARD.daily.endsAt + 1000));
+    const over = text(render(REWARD, REWARD.daily.endsAt + 1000));
     expect(over).toContain("Rolling over…");
     expect(over).not.toMatch(/-\d/);
   });
 });
 
 describe("accessibility and structure", () => {
-  const html = render(REWARD, false);
+  const html = render(REWARD);
 
   it("each plaque is a labelled region with a real heading ('Daily Prize pool'); the pictures are decorative", () => {
     expect(html).toMatch(/<article[^>]*aria-labelledby="prize-daily-title"/);

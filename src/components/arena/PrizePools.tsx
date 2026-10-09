@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 import { useServerCountdown } from "@/components/leaderboard/useServerCountdown";
 import type { PicksRewardDto } from "@/domain/rewards/picksDto";
 
-import { amountWidthEm, launchNote, prizeFinePrint, prizePlaques, resetText, ROLLING_OVER, type PrizePlaque } from "./prizeView";
+import { amountWidthEm, prizeFinePrint, prizePlaques, resetText, ROLLING_OVER, type PrizePlaque } from "./prizeView";
 
 /**
  * ARENA PICKS — the two PRIZE PLAQUES: the Daily and the Weekly $CLANKRPG pool, each a small game-board of its own.
@@ -129,10 +129,9 @@ function Plaque({ plaque, serverNow }: { plaque: PrizePlaque; serverNow: number 
 }
 
 // ------------------------------------------------------------------------------------------------ the pair
-export function PrizePools({ reward, serverNow, tokenLaunched }: { reward: PicksRewardDto | undefined; serverNow: number; tokenLaunched: boolean | null }) {
+export function PrizePools({ reward, serverNow }: { reward: PicksRewardDto | undefined; serverNow: number }) {
   const plaques = prizePlaques(reward);
   if (!plaques) return null;
-  const note = launchNote(tokenLaunched);
   return (
     <section className="mt-2.5" aria-label="Arena Picks prize pools" data-testid="prize-pools">
       <div className="prize-grid">
@@ -142,11 +141,6 @@ export function PrizePools({ reward, serverNow, tokenLaunched }: { reward: Picks
       <p className="mt-2 text-[0.66rem] leading-snug text-steel-300" data-testid="prize-fineprint">
         {prizeFinePrint(plaques)}
       </p>
-      {note && (
-        <p className="mt-1 text-[0.66rem] leading-snug font-semibold text-gold/90" data-testid="prize-launch-note">
-          {note}
-        </p>
-      )}
     </section>
   );
 }
