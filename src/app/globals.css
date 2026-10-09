@@ -390,6 +390,179 @@ body {
   .skeleton, .live-dot, .text-shine, .rise, .slide-up, .winner-glow, .trophy-float { animation: none; }
 }
 
+/* ---------- Arena Picks prize plaques (Daily · Weekly) ----------
+   The pair is ONE container: every size below is a share of a plaque's own width (`--cu` = 1 % of it), so an amount can neither overflow nor shrink to nothing on any
+   screen. The plaques are SUBGRIDS of the pair, so each row (picture, title, amount, token, ribbon, countdown) is as tall as the taller of the two and the
+   two amounts always sit on one line — even if an admin later sets pools of different lengths. */
+.plate-gold {
+  --plate-edge: linear-gradient(180deg, #ffeaa9 0%, #e8a82e 46%, #8d5a12 100%);
+}
+.prize-grid {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 0.5rem;
+  --cu: calc((100cqw - 0.5rem) / 200);
+}
+.prize-card {
+  --plate-inset: 1.5px;
+  grid-row: span 6;
+  display: grid;
+  grid-template-rows: subgrid;
+  justify-items: center;
+  align-items: start;
+  min-width: 0;
+  padding: 0.75rem 0.4rem 0.6rem;
+  text-align: center;
+}
+.prize-daily {
+  --plate-bg: radial-gradient(120% 80% at 50% -8%, rgba(183, 121, 245, 0.28), transparent 60%), linear-gradient(180deg, #1c1735 0%, #100d20 100%);
+  --stud: #9d86d6;
+}
+.prize-weekly {
+  --plate-inset: 2px;
+  --plate-bg: radial-gradient(120% 80% at 50% -8%, rgba(255, 176, 32, 0.26), transparent 58%), radial-gradient(90% 60% at 50% 112%, rgba(150, 99, 218, 0.2), transparent 70%), linear-gradient(180deg, #221b2b 0%, #120e18 100%);
+  --stud: #f5c04a;
+}
+/* four tiny corner studs, like the rivets of the arena plates: violet-steel on the Daily, gold on the Weekly */
+.prize-card::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 0 0, var(--stud, #6b7a93) 1.2px, transparent 1.8px) 0 0 / 100% 100% no-repeat,
+    radial-gradient(circle at 100% 0, var(--stud, #6b7a93) 1.2px, transparent 1.8px) 0 0 / 100% 100% no-repeat,
+    radial-gradient(circle at 0 100%, var(--stud, #6b7a93) 1.2px, transparent 1.8px) 0 0 / 100% 100% no-repeat,
+    radial-gradient(circle at 100% 100%, var(--stud, #6b7a93) 1.2px, transparent 1.8px) 0 0 / 100% 100% no-repeat;
+}
+.prize-sheen {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 42%;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 244, 214, 0.15) 50%, transparent 100%);
+  transform: translateX(-140%) skewX(-18deg);
+}
+.prize-weekly .prize-sheen { background: linear-gradient(100deg, transparent 0%, rgba(255, 233, 160, 0.22) 50%, transparent 100%); }
+.prize-art-box {
+  display: grid;
+  place-items: center;
+  height: clamp(2.05rem, calc(var(--cu) * 20), 3.75rem);
+}
+.prize-art {
+  display: block;
+  /* the trophy grows with its plaque (a wide plaque on a tablet gets a bigger crown), never below a legible size; the Weekly crown is a little larger */
+  width: clamp(1.75rem, calc(var(--cu) * 17), 3.2rem);
+  height: auto;
+  filter: drop-shadow(0 0 6px rgba(255, 176, 32, 0.4));
+}
+.prize-daily .prize-art { filter: drop-shadow(0 0 6px rgba(183, 121, 245, 0.45)); }
+.prize-weekly .prize-art { width: clamp(2.1rem, calc(var(--cu) * 21), 3.9rem); }
+.prize-title {
+  margin: 0.3rem 0 0;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.prize-title b {
+  display: block;
+  font-weight: 400;
+  font-size: clamp(0.8rem, calc(var(--cu) * 10), 1.1rem);
+  letter-spacing: 0.1em;
+  color: #f4eaff;
+}
+.prize-weekly .prize-title b { color: #fff1c4; }
+.prize-title span {
+  display: block;
+  margin-top: 0.22rem;
+  font-size: clamp(0.5rem, calc(var(--cu) * 6), 0.68rem);
+  letter-spacing: 0.22em;
+  color: var(--color-steel-300);
+}
+.prize-weekly .prize-title span { color: #d9bd7a; }
+.prize-amount {
+  align-self: center;
+  margin: 0.4rem 0 0;
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  /* a share of the plaque's width divided by the number's own width: a larger or smaller configured pool always fits (--amount-em is set from the amount's characters) */
+  font-size: clamp(0.9rem, calc(var(--cu) * 80 / var(--amount-em, 4.8)), 3rem);
+  line-height: 1.02;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fff6d4 0%, #ffd56a 42%, #f0a828 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 #4d2d87) drop-shadow(0 0 10px rgba(255, 176, 32, 0.26));
+}
+.prize-weekly .prize-amount {
+  font-size: clamp(0.9rem, calc(var(--cu) * 86 / var(--amount-em, 4.8)), 3.2rem);
+  filter: drop-shadow(0 2px 0 #7a4a08) drop-shadow(0 0 12px rgba(255, 176, 32, 0.4));
+}
+.prize-symbol {
+  margin: 0.28rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(0.62rem, calc(var(--cu) * 8), 0.92rem);
+  letter-spacing: 0.1em;
+  color: #ffc95c;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+}
+.prize-weekly .prize-symbol { color: #ffdc8c; }
+.prize-top {
+  margin: 0.55rem 0 0;
+  padding: 0.24rem 0.7rem;
+  font-family: var(--font-display);
+  font-size: clamp(0.5rem, calc(var(--cu) * 6.4), 0.68rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #f4eaff;
+  background: linear-gradient(180deg, rgba(150, 99, 218, 0.5), rgba(77, 45, 135, 0.62));
+  box-shadow: inset 0 0 0 1px rgba(202, 148, 249, 0.55);
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0 50%);
+}
+.prize-weekly .prize-top {
+  color: #fff3cf;
+  background: linear-gradient(180deg, rgba(232, 168, 46, 0.5), rgba(141, 90, 18, 0.62));
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 140, 0.6);
+}
+.prize-reset {
+  margin: 0.5rem 0 0;
+  font-size: clamp(0.56rem, calc(var(--cu) * 6.6), 0.72rem);
+  letter-spacing: 0.04em;
+  color: var(--color-steel-400);
+  white-space: nowrap;
+}
+.prize-reset b { color: var(--color-paper); font-weight: 700; }
+.prize-weekly .prize-reset b { color: #fff1c4; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* a gentle reveal, then ONE soft sheen across each plaque every few seconds (nothing loops continuously) */
+  .prize-card { animation: prize-in 0.55s cubic-bezier(0.2, 0.9, 0.2, 1) both; }
+  .prize-weekly { animation-delay: 0.1s; }
+  .prize-sheen { opacity: 1; animation: prize-sheen 10s ease-in-out 2s infinite; }
+  .prize-weekly .prize-sheen { animation-duration: 8s; animation-delay: 3.2s; }
+}
+@keyframes prize-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes prize-sheen {
+  0%, 74% { transform: translateX(-140%) skewX(-18deg); }
+  100% { transform: translateX(380%) skewX(-18deg); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .prize-card { transition: transform 0.18s ease, filter 0.18s ease; }
+  .prize-card:hover { transform: translateY(-2px); filter: brightness(1.07); }
+}
+
 /* scrollbars */
 * { scrollbar-width: thin; scrollbar-color: #3a4558 transparent; }
 

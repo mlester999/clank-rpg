@@ -7,9 +7,11 @@ import { HeroAvatar } from "@/components/hero/HeroAvatar";
 import { lookFor } from "@/components/hero/look";
 import { PwrValue, RarityBadge } from "@/components/hero/rarity";
 import type { Rarity } from "@/domain/character/appearance";
-import { CheckIcon, LockIcon } from "@/components/ui/Icons";
+import { useTokenConfig } from "@/components/leaderboard/useTokenConfig";
+import { CheckIcon, LockIcon, TelegramIcon } from "@/components/ui/Icons";
 import type { ArenaStateDto, ClassVisual, FighterDto, UpcomingBattleDto, UpcomingFighterDto } from "@/lib/dto";
 
+import { PrizePools } from "./PrizePools";
 import { pickCopy, secondsUntilLock, windowDisplay, type WindowDisplay } from "./picksView";
 import type { StageMode } from "./stageMode";
 import { pickMessage, type BattlePick, type PicksApi } from "./usePicks";
@@ -26,6 +28,8 @@ interface Props {
   loaded: boolean;
   /** What the stage is showing: while the Arena is not running (not started, preparing, paused, development, offline) there is nothing to pick on. */
   mode?: StageMode;
+  /** Has $CLANKRPG launched? Normally read from the server (`GET /api/rewards/token`); a caller (a test, a preview) may state it. Unknown shows no launch note. */
+  tokenLaunched?: boolean | null;
 }
 
 /** The panel's calm line while there is no battle to pick on — never an empty 8-slot skeleton that looks broken. */
@@ -48,7 +52,9 @@ const IDLE_NOTE: Partial<Record<StageMode, { chip: string; text: string }>> = {
  * lock the moment the fight on stage is decided) — this panel only displays that verdict, and never shows a window open after
  * the server closed it. The crowd appears only once the window is closed.
  */
-export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode }: Props) {
+export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode, tokenLaunched }: Props) {
+  const token = useTokenConfig();
+  const launched = tokenLaunched !== undefined ? tokenLaunched : token ? token.launched : null;
   const enabled = Boolean(state?.picks.enabled);
   const idle = mode && !upcoming ? (IDLE_NOTE[mode] ?? null) : null;
   const display: WindowDisplay | null = windowDisplay(upcoming, now);
@@ -99,16 +105,24 @@ export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode 
           </span>
         </div>
 
+        {/* 2 · the prizes — the first thing the eye lands on after the title */}
+        {enabled && <PrizePools reward={state?.picks.reward} serverNow={state?.serverTime ?? now} tokenLaunched={launched} />}
+
+        {/* 3 · how it works, in two short lines */}
         {enabled && (
-          <div className="mt-2 rounded-md border border-clank-400/25 bg-clank-500/[0.06] px-2.5 py-2" data-testid="picks-copy">
-            <p className="text-[0.76rem] leading-snug text-paper">{copy.lead}</p>
-            <p className="mt-1 text-[0.7rem] leading-snug text-steel-300">{copy.scoring}</p>
-            {copy.prize && (
-              <p className="mt-1 text-[0.68rem] leading-snug text-clank-200 tnum" data-testid="picks-prize">
-                {copy.prize}
-              </p>
-            )}
-            <p className="mt-1 text-[0.66rem] leading-snug text-steel-400">{copy.free}</p>
+          <div className="mt-2.5 px-0.5" data-testid="picks-copy">
+            <p className="text-[0.84rem] leading-snug font-semibold text-paper" data-testid="picks-lead">
+              {/* each sentence stays whole: on a narrow screen the line breaks BETWEEN them, never inside "Earn +10 Points …" */}
+              {(copy.lead.match(/[^.]+\./g) ?? [copy.lead]).map((sentence, i) => (
+                <span key={i} className="inline-block">
+                  {sentence.trim()}{" "}
+                </span>
+              ))}
+            </p>
+            {copy.scoring && <p className="mt-0.5 text-[0.7rem] leading-snug text-steel-300">{copy.scoring}</p>}
+            <p className="mt-0.5 text-[0.7rem] leading-snug text-steel-400" data-testid="picks-free">
+              {copy.free}
+            </p>
           </div>
         )}
 
@@ -128,13 +142,17 @@ export function ArenaPicks({ state, upcoming, now, picks, onStage, loaded, mode 
           </div>
         )}
 
+        {/* 4 · signed out: the one clear next step (the sign-in itself is unchanged: the same link to the Telegram sign-in page) */}
         {enabled && picks.signedIn === false && upcoming && (
-          <p className="mt-2 rounded-md border border-clank-500/30 bg-clank-500/10 px-2.5 py-1.5 text-[0.72rem] text-clank-200" data-testid="picks-signin">
-            <Link href="/character" className="font-bold underline underline-offset-2 hover:text-paper">
-              Sign in with Telegram
-            </Link>{" "}
-            to make your Pick.
-          </p>
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-lg border border-teal/25 bg-gradient-to-r from-teal/[0.1] to-transparent px-2.5 py-2" data-testid="picks-signin">
+            <TelegramIcon size={16} className="shrink-0 text-teal" />
+            <p className="min-w-0 text-[0.76rem] leading-snug text-paper">
+              <Link href="/character" className="font-bold text-teal underline underline-offset-2 hover:text-paper">
+                Sign in with Telegram
+              </Link>{" "}
+              to make your Pick.
+            </p>
+          </div>
         )}
         {ineligible && upcoming && (
           <p className="mt-2 rounded-md border border-white/15 bg-white/[0.04] px-2.5 py-1.5 text-[0.72rem] leading-snug text-steel-300" data-testid="picks-ineligible">

@@ -1,5 +1,7 @@
 import type { PicksRewardDto, UpcomingBattleDto } from "@/lib/dto";
 
+import { PICKS_FREE, PICKS_HOW } from "./prizeView";
+
 /**
  * Pure view logic of the Arena Picks panel (no React), so what the panel shows can be tested on its own.
  *
@@ -25,23 +27,23 @@ export function secondsUntilLock(upcoming: UpcomingBattleDto | null, serverNow: 
   return Math.max(0, Math.ceil((upcoming.picks.locksAt - serverNow) / 1000));
 }
 
-/** The panel's words. Short on purpose; nothing here mentions a per-battle token reward (Arena Picks feed the Daily and Weekly leaderboards). */
+/**
+ * The panel's words around the prize plaques. Short on purpose; nothing here mentions a per-battle token reward (Arena Picks feed the Daily and Weekly
+ * leaderboards, and the PRIZE amounts live on the plaques — see prizeView.ts).
+ */
 export interface PickCopy {
+  /** The one-line game explanation. */
   lead: string;
-  scoring: string;
-  prize: string | null;
+  /** Only while the reward programme is off: where Points lead. */
+  scoring: string | null;
   free: string;
 }
 
 export function pickCopy(reward: PicksRewardDto | undefined): PickCopy {
   const live = reward !== undefined && reward.status === "ACTIVE" && reward.pointsPerCorrectPick > 0;
-  const scoring = live
-    ? `Every valid Pick counts. A correct Pick earns +${reward.pointsPerCorrectPick} Points — the Daily and Weekly leaderboards are a race for the most correct Picks.`
-    : "Correct Picks earn Clank Points toward the Daily and Weekly leaderboards.";
-  let prize: string | null = null;
-  if (live && reward.daily.prizePool !== "0" && reward.weekly.prizePool !== "0") {
-    const top = reward.daily.topRewarded === reward.weekly.topRewarded ? `to the Top ${reward.daily.topRewarded}` : `to the Top ${reward.daily.topRewarded} (Daily) / Top ${reward.weekly.topRewarded} (Weekly)`;
-    prize = `Daily ${reward.daily.prizePool} · Weekly ${reward.weekly.prizePool} ${reward.symbol} ${top}`;
-  }
-  return { lead: "Pick who wins the next fight.", scoring, prize, free: "Free to play. No wallet required." };
+  return {
+    lead: live ? PICKS_HOW(reward.pointsPerCorrectPick) : "Pick who wins the next fight.",
+    scoring: live ? null : "Correct Picks earn Clank Points toward the Daily and Weekly leaderboards.",
+    free: PICKS_FREE,
+  };
 }

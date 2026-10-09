@@ -69,7 +69,7 @@ const basePicks = (over: Partial<PicksApi> = {}): PicksApi => ({
   ...over,
 });
 
-const panel = (state: ArenaStateDto, picks: PicksApi, over: { now?: number; decided?: boolean; onStage?: boolean } = {}) =>
+const panel = (state: ArenaStateDto, picks: PicksApi, over: { now?: number; decided?: boolean; onStage?: boolean; tokenLaunched?: boolean | null } = {}) =>
   renderToStaticMarkup(
     createElement(ArenaPicks, {
       state,
@@ -78,6 +78,7 @@ const panel = (state: ArenaStateDto, picks: PicksApi, over: { now?: number; deci
       picks,
       onStage: over.onStage === false ? null : { fighters: state.current?.fighters ?? [], decided: over.decided ?? false },
       loaded: true,
+      ...(over.tokenLaunched !== undefined ? { tokenLaunched: over.tokenLaunched } : {}),
     }),
   );
 
@@ -93,11 +94,17 @@ describe("Arena Picks panel — picks OPEN while the current fight is on", () =>
     expect(t).toMatch(/Arena Picks/);
     expect(t).toMatch(/Pick the next winner/);
     expect(t).toMatch(/Picks open · \d+s/);
-    expect(t).toContain("Pick who wins the next fight.");
-    expect(t).toContain("Every valid Pick counts. A correct Pick earns +10 Points — the Daily and Weekly leaderboards are a race for the most correct Picks.");
-    expect(t).not.toMatch(/first 20|per day|each day count|scored Picks/i); // the per-day cap is gone from the panel's words
-    expect(t).toContain("Free to play. No wallet required.");
-    expect(t).toContain("Daily 100,000 · Weekly 500,000 $CLANKRPG to the Top 10");
+    expect(t).toContain("Pick the winner. Earn +10 Points for every correct Pick.");
+    expect(t).not.toMatch(/Every valid Pick counts|first 20|per day|each day count|scored Picks/i); // the per-day cap is gone from the panel's words
+    expect(t).toContain("Free to play · No wallet required");
+    // the prizes are two plaques now, not a line of text: the TOTAL pools, the token, the Top 10
+    expect(html).toContain('data-testid="prize-daily"');
+    expect(html).toContain('data-testid="prize-weekly"');
+    expect(t).toContain("Daily Prize pool");
+    expect(t).toContain("Weekly Prize pool");
+    expect(t).toMatch(/100,000 \$CLANKRPG Top 10 winners/);
+    expect(t).toMatch(/500,000 \$CLANKRPG Top 10 winners/);
+    expect(t).not.toContain("Daily 100,000 · Weekly 500,000"); // the old plain line is gone
     for (const f of state.upcoming!.fighters) {
       expect(t).toContain(f.name);
       expect(t).toContain(state.classes[f.classId]!.name);
@@ -156,11 +163,74 @@ describe("Arena Picks panel — picks OPEN while the current fight is on", () =>
 
   it("with the reward programme OFF the panel promises no prize — Picks and Points still work", async () => {
     const state = await arena({ ...REWARD, status: "OFF", dailyMinimumPicks: 0, weeklyMinimumPicks: 0, daily: { ...REWARD.daily, prizePool: "0" }, weekly: { ...REWARD.weekly, prizePool: "0" } });
-    const t = text(panel(state, basePicks()));
+    const html = panel(state, basePicks());
+    const t = text(html);
     expect(t).toContain("Pick who wins the next fight.");
     expect(t).toMatch(/Correct Picks earn Clank Points/);
     expect(t).not.toMatch(/Daily [\d,]+ ·/);
+    expect(html).not.toContain('data-testid="prize-pools"'); // nothing is promised while the programme is off
+    expect(t).not.toMatch(/Prize pool|Top 10 winners|100,000|500,000/);
     expect(t).toMatch(/Picks open/);
+  });
+});
+
+describe("Arena Picks panel — the premium prize presentation (hierarchy, states, launch note)", () => {
+  const order = (html: string, ...needles: string[]) => needles.map((n) => html.indexOf(n));
+  const ascending = (xs: number[]) => xs.every((x, i) => x > -1 && (i === 0 || x > (xs[i - 1] as number)));
+
+  it("reads top to bottom: Arena Picks / next fight → the two prize pools → how it works (+10, free) → the sign-in step → the fighters", async () => {
+    const state = await arena();
+    const html = panel(state, basePicks({ signedIn: false, eligibility: null }), { tokenLaunched: false });
+    expect(ascending(order(html, 'id="arena-picks"', "Pick the next winner", 'data-testid="prize-pools"', 'data-testid="prize-daily"', 'data-testid="prize-weekly"', 'data-testid="prize-fineprint"', 'data-testid="picks-copy"', 'data-testid="picks-signin"', "<ol "))).toBe(true);
+    expect(html.indexOf('data-testid="prize-launch-note"')).toBeGreaterThan(html.indexOf('data-testid="prize-fineprint"'));
+    expect(html.indexOf('data-testid="prize-launch-note"')).toBeLessThan(html.indexOf('data-testid="picks-copy"'));
+  });
+
+  it("signed OUT: the Telegram step is a designed strip below the prizes and copy — the same link to the same sign-in page, never above the prizes", async () => {
+    const state = await arena();
+    const html = panel(state, basePicks({ signedIn: false, eligibility: null }));
+    const t = text(html);
+    expect(t).toContain("Sign in with Telegram to make your Pick.");
+    expect(html).toMatch(/<a[^>]*href="\/character"[^>]*>Sign in with Telegram<\/a>/);
+    expect(html.indexOf('data-testid="picks-signin"')).toBeGreaterThan(html.indexOf('data-testid="prize-weekly"'));
+    expect(html).toContain('data-testid="prize-daily"');
+    expect(html).toContain('data-testid="prize-weekly"');
+  });
+
+  it("signed IN: no sign-in strip, the prizes still lead, and the member's own pick state is the one the panel already had", async () => {
+    const state = await arena();
+    const html = panel(state, basePicks({ pick: myPick(state, 4) }));
+    expect(html).not.toContain('data-testid="picks-signin"');
+    expect(html).toContain('data-testid="prize-pools"');
+    expect(html).toContain(`aria-label="${state.upcoming!.fighters[4]!.name} is your pick"`);
+    expect(html.indexOf('data-testid="prize-pools"')).toBeLessThan(html.indexOf('data-picked="true"'));
+    expect(text(html)).not.toMatch(/Sign in with Telegram/);
+  });
+
+  it("an ineligible member sees the prizes, then the one eligibility sentence — and PICK stays off", async () => {
+    const state = await arena();
+    const html = panel(state, basePicks({ eligibility: { eligible: false, reason: "BELOW_THRESHOLD", explanation: "Members with 50+ qualifying messages in the official Clank.trade community can participate in rewarded Arena Picks." } }));
+    expect(html.indexOf('data-testid="prize-pools"')).toBeLessThan(html.indexOf('data-testid="picks-ineligible"'));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Pick /);
+  });
+
+  it("before $CLANKRPG launches the panel says tokens become claimable after launch; once launched it does not; unknown shows neither claim nor note", async () => {
+    const state = await arena();
+    expect(text(panel(state, basePicks(), { tokenLaunched: false }))).toContain("Token rewards become claimable after launch.");
+    expect(text(panel(state, basePicks(), { tokenLaunched: true }))).not.toMatch(/claimable after launch/);
+    expect(text(panel(state, basePicks(), { tokenLaunched: null }))).not.toMatch(/claimable after launch/);
+    for (const launched of [false, true, null]) expect(text(panel(state, basePicks(), { tokenLaunched: launched }))).not.toMatch(/\b(you won|paid out|claim now)\b/i);
+  });
+
+  it("the plaques follow the state's reward configuration, and the countdowns are measured from the state's own server time", async () => {
+    const state = await arena({ ...REWARD, daily: { ...REWARD.daily, prizePool: "75,000" }, weekly: { ...REWARD.weekly, prizePool: "300,000" } });
+    const html = panel(state, basePicks());
+    expect(html).toMatch(/data-testid="prize-daily-amount"[^>]*>75,000</);
+    expect(html).toMatch(/data-testid="prize-weekly-amount"[^>]*>300,000</);
+    expect(text(html)).not.toMatch(/100,000|500,000/);
+    const secondsLeft = Math.ceil((REWARD.daily.endsAt - state.serverTime) / 1000);
+    const hh = String(Math.floor(secondsLeft / 3600)).padStart(2, "0");
+    expect(html).toContain(`<b class="tnum">${hh}:`);
   });
 });
 
