@@ -1,8 +1,8 @@
 # Free daily hero reroll
 
-> **Status (2026-10-09): shipped and OFF.** The code is on `master`; migration `20261009002500_hero_free_reroll.sql` **is applied to the live database** (additive: an empty table, three guards, an auditor — verified read-only afterwards:
-> 0 rows, `audit_hero_free_rerolls()` and `audit_hero_versions()` both empty, RLS on, 139 heroes / 224 versions unchanged). The feature flag `hero.free_reroll` has **no row on live yet, which means disabled** (the reference seed adds it as disabled
-> on its next run) — **nobody can reroll.** Read [§ 4](#4-fairness-what-one-free-reroll-a-day-does-to-the-game) **before** switching it on: the mechanics are safe, the *game-balance* effect of a free daily reroll is large and is the owner's decision.
+> **Status (2026-10-09): LIVE.** The code is on `master`, migration `20261009002500_hero_free_reroll.sql` is applied to the live database (verified read-only: empty table, `audit_hero_free_rerolls()` and `audit_hero_versions()` empty, RLS on),
+> and on the owner's explicit go-ahead the feature flag `hero.free_reroll` was created and **switched ON** (audit-logged as `flag.set`): every claimed member with an eligible hero has one free reroll per UTC day. **Kill switch:** Admin → Feature flags → `hero.free_reroll` off
+> (instant; rerolls already made stay made). The owner enabled it knowing the long-run effect in [§ 4](#4-fairness-what-one-free-reroll-a-day-does-to-the-game) (a daily reroll is a ratchet toward Legendary); the safeguards listed there remain open options.
 
 One free reroll per member per **UTC calendar day**. The reroll replaces the member's hero's *generated state* (class, rarity, stats / PWR, look) with a fresh roll from the **same generator that creates
 every hero** — same class odds, same rarity weights, same PWR bands. The hero keeps its id, owner, claim, Gold, items, achievements, record, Picks and rewards; the old state stays in the version history.
@@ -160,7 +160,7 @@ select * from public.audit_hero_free_rerolls();   -- must return no rows
 select * from public.audit_hero_versions();       -- must return no rows
 ```
 
-**Enabling (owner's decision, after § 4):** the migration is already applied on live — run both audits, then switch `hero.free_reroll` on in Admin → feature flags (if the row does not exist yet, run `pnpm db:seed:reference` first — it adds it as disabled — or create it from Admin). **Disabling:** switch it off — instant (2 s flag cache), nothing is lost. **Rollback of the schema** (only before any member reroll exists): `drop trigger hero_versions_member_reroll_allowance on public.hero_versions; drop table public.hero_free_rerolls; drop function public.audit_hero_free_rerolls(), public.check_member_reroll_has_allowance(), public.guard_hero_free_reroll_insert(), public.guard_hero_free_reroll_immutable();`.
+**Enabled on live 2026-10-09** (the flag row did not exist yet, so it was created already enabled; from now on it is a normal row in Admin → Feature flags). Watch `select * from public.audit_hero_free_rerolls();` (must stay empty) and the rarity census. **Disabling:** switch it off — instant (2 s flag cache), nothing is lost. **Rollback of the schema** (only before any member reroll exists): `drop trigger hero_versions_member_reroll_allowance on public.hero_versions; drop table public.hero_free_rerolls; drop function public.audit_hero_free_rerolls(), public.check_member_reroll_has_allowance(), public.guard_hero_free_reroll_insert(), public.guard_hero_free_reroll_immutable();`.
 
 ## 8. Tests
 
