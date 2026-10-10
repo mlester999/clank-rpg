@@ -1,5 +1,5 @@
 import { cuesForEvents, type CueContext, type SoundCue } from "@/domain/audio/cues";
-import { ARENA_LABEL_MAX, truncateDisplayName } from "@/domain/character/displayName";
+import { ARENA_LABEL_MAX } from "@/domain/character/displayName";
 import { EV, EV_FLAG, FRAME_FLAG } from "@/domain/combat/types";
 import type { BattleDto, ClassVisual, FighterDto, ReplayDto } from "@/lib/dto";
 
@@ -13,6 +13,7 @@ import { rarityVisual } from "@/domain/hero/rarityVisuals";
 
 import { actionTimes, castTicks, impactLeadMs, sinceClipStart, type ActionTimes } from "./actionClock";
 import { ArenaPlayback, isPreFight, type PlaybackFrame, type StageTiming } from "./playback";
+import { fitPlateName, layoutPlates, newPlateState, plateMetrics, plateSizes, type PlateInput, type PlateMode, type PlateSizes, type PlateState, type Rect } from "./nameplates";
 import { updateOffsets } from "./spacing";
 import type { PhaseNow } from "./phase";
 import { drawRarityMark } from "./rarityFx";
@@ -31,9 +32,10 @@ import { TALL, WIDE, drawBackground, project, type Layout } from "./scene";
  *     event (actionClock.ts). Shots leave from the weapon (the sprite set's muzzle), never from the middle of the body.
  *   · Skills read by shape: a cleave sweeps, a nova cracks the floor with shards, a taunt shouts, a burst shatters, a heal rises, a dash leaves
  *     afterimages, a knock-out falls and raises dust.
- *   · Name plates never cover a hero: each hangs above its own hero's real head (a tall hat included), and in a crowd they step aside or
- *     shrink to an HP bar instead of overlapping (on a phone-sized stage the fight shows HP bars only). Damage numbers rise from above the
- *     plate, beside the head — never across a name.
+ *   · Name plates never cover a hero: each hangs above its own hero's real head (a tall hat included) and stays there for the whole fight, on a
+ *     phone as much as on a desktop. In a crowd a plate steps sideways or up just far enough to clear its neighbours (nameplates.ts), keeps
+ *     out of the measured HUD boxes, and only a hero buried in a pile falls back to a bare name, then to its HP bar. Damage numbers rise from
+ *     above the plate, beside the head — never across a name — and every number stays inside the stage.
  *   · No body-sized shapes: a blade leaves a thin trail along its arc (never a filled half-disc), a hit is a short light flash and a few
  *     sparks, a smite is a short shaft that drops onto the head.
  */
@@ -49,8 +51,6 @@ export interface RenderClock {
   combatMs: number;
   winnerSlot: number | null;
 }
-
-type PlateMode = "full" | "compact" | "bar";
 
 interface UnitState {
   slot: number;
@@ -107,11 +107,14 @@ interface UnitState {
   /** Live spectator stats, accumulated from the verified event log as playback passes each event. */
   damage: number;
   kills: number;
-  /** Name plate: eased lift (to step aside in a crowd) and density mode, with hysteresis so plates never flicker between modes. */
-  plateLift: number;
-  plateMode: PlateMode;
-  plateWant: PlateMode;
-  plateWantSince: number;
+  /** Name plate memory (nameplates.ts): mode, which side it stepped to, drawn position — kept between frames so plates never flicker. */
+  plate: PlateState;
+  /** The plate as last placed (what a fading plate keeps drawing) and the sizes of its modes for the current stage size. */
+  plateRect: Rect | null;
+  plateShown: PlateMode;
+  plateName: string;
+  plateSizes: PlateSizes | null;
+  plateSizesKey: string;
 }
 
 interface Fx {
@@ -131,17 +134,31 @@ export interface RosterEntry {
   flags: number;
 }
 
+/** One plate as drawn in the last frame (QA / tests only — see ArenaRenderer.capturePlates). Layout units. */
+export interface PlateDebug {
+  slot: number;
+  mode: PlateMode;
+  name: string;
+  rect: Rect;
+  displaced: boolean;
+  key: string;
+  /** Where the hero's head is (the plate's anchor). */
+  ax: number;
+  ay: number;
+}
+
+/** A floating number's remembered step away from a plate or button (layout units): see ArenaRenderer.fitText. */
+interface TextNudge {
+  dx: number;
+  dy: number;
+  /** False until the first frame: a number that is born next to a plate starts clear of it. */
+  set: boolean;
+}
+
 export interface ArenaEventOut {
   type: "ELIM";
   victim: number;
   killer: number | null;
-}
-
-interface PlateRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
 }
 
 const easeOutBack = (t: number) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
@@ -167,6 +184,8 @@ export class ArenaRenderer {
   private cssH = 0;
   private dpr = 1;
   private units: UnitState[] = [];
+  /** Every unit's plate memory by slot (the layout keeps its hysteresis here between frames). */
+  private plateStates = new Map<number, PlateState>();
   private fx: Fx[] = [];
   private battleId: string | null = null;
   private battle: BattleDto | null = null;
@@ -254,9 +273,10 @@ export class ArenaRenderer {
               hp: f.maxHp ?? 1, maxHp: f.maxHp ?? 1, hpShown: f.maxHp ?? 1, hpTrail: f.maxHp ?? 1,
               alive: true, flags: FRAME_FLAG.ALIVE, target: 0, attackAt: -1e9, castAt: -1e9, hurtAt: -1e9, deadAt: -1, textAt: -1e9,
               facing, spawnFacing: facing, moving: false, vx: 0, landed: false, hurtDir: 1, dashAt: -1e9, dashFrom: [sp[0], sp[1]], shieldAt: -1e9, numbers: 0, ox: 0, moveClock: slot * 137, plateTop: Number.NaN, feetAt: -1e9, feetRow: 0, faceSlot: -1, faceUntil: -1e9, flashAt: -1e9,
-              sheet: null, sheetSrc: null, damage: 0, kills: 0, plateLift: 0, plateMode: "full", plateWant: "full", plateWantSince: 0,
+              sheet: null, sheetSrc: null, damage: 0, kills: 0, plate: newPlateState(), plateRect: null, plateShown: "full", plateName: "", plateSizes: null, plateSizesKey: "",
             } satisfies UnitState;
           });
+        this.plateStates = new Map(this.units.map((u) => [u.slot, u.plate]));
         this.requestPages();
       }
     }
@@ -670,15 +690,20 @@ export class ArenaRenderer {
       U.feetAt = at;
     }
     const jitter = anchor === "feet" ? ((U.slot * 37 + at) % 29) - 14 : side * (22 + (((U.slot * 37 + at) % 9) - 4));
+    const nudge: TextNudge = { dx: 0, dy: 0, set: false };
+    let lastK = 0;
     this.add({
       t0: at, dur: 900, layer: "air",
       draw: (ctx, k) => {
+        const dtMs = Math.max(0, k - lastK) * 900;
+        lastK = k;
         const p = this.unitScreen(U);
         const pop = this.reducedMotion ? 1 : k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : 1.15 - Math.min(0.15, (k - 0.12) * 0.4);
         const rise = this.reducedMotion ? 20 : easeOutBack(Math.min(1, k * 1.6)) * 34 + k * 14;
         ctx.save();
         ctx.globalAlpha = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
-        ctx.font = `${Math.round(19 * scale * pop * this.textScale())}px ${this.displayFont}, ${this.fontFamily}`;
+        const size = Math.round(19 * scale * pop * this.textScale());
+        ctx.font = `${size}px ${this.displayFont}, ${this.fontFamily}`;
         ctx.textAlign = "center";
         ctx.lineWidth = 4;
         ctx.strokeStyle = "rgba(6,8,12,0.95)";
@@ -694,9 +719,11 @@ export class ArenaRenderer {
           for (let row = 0; row < 3 && this.feetRects.some((q) => Math.abs(q.x - tx) < (q.w + w) / 2 && Math.abs(q.y - ty) < h); row++) ty += h;
           this.feetRects.push({ x: tx, y: ty, w, h });
         }
-        ctx.strokeText(text, tx, ty);
+        // the number stays inside the stage, off the page's own controls and off every name plate (it steps beside or above them)
+        const fit = this.fitText(tx, ty, ctx.measureText(text).width + 4, size, nudge, dtMs);
+        ctx.strokeText(text, fit.x, fit.y);
         ctx.fillStyle = color;
-        ctx.fillText(text, tx, ty);
+        ctx.fillText(text, fit.x, fit.y);
         ctx.restore();
       },
     });
@@ -954,10 +981,9 @@ export class ArenaRenderer {
         ctx.lineWidth = 3;
         ctx.globalAlpha = 1 - k;
         for (let i = 0; i < n; i++) {
-          const x = p.x + (i - (n - 1) / 2) * 16 * p.s;
-          const y = p.y - 30 * p.s - k * 56 - i * 6;
-          ctx.strokeText(glyph, x, y);
-          ctx.fillText(glyph, x, y);
+          const at = this.fitText(p.x + (i - (n - 1) / 2) * 16 * p.s, p.y - 30 * p.s - k * 56 - i * 6, 12 * this.textScale(), 16 * this.textScale());
+          ctx.strokeText(glyph, at.x, at.y);
+          ctx.fillText(glyph, at.x, at.y);
         }
         ctx.restore();
       },
@@ -1004,9 +1030,9 @@ export class ArenaRenderer {
         ctx.fillStyle = "#ff5a4d";
         ctx.strokeStyle = "#0c0f15";
         ctx.lineWidth = 5;
-        const ty = p.y - (this.headTop(U) + 4) * p.s - (this.reducedMotion ? 0 : k * 22);
-        ctx.strokeText("KO", p.x, ty);
-        ctx.fillText("KO", p.x, ty);
+        const fit = this.fitText(p.x, p.y - (this.headTop(U) + 4) * p.s - (this.reducedMotion ? 0 : k * 22), ctx.measureText("KO").width + 4, 26 * this.textScale());
+        ctx.strokeText("KO", fit.x, fit.y);
+        ctx.fillText("KO", fit.x, fit.y);
         ctx.restore();
       },
     });
@@ -1404,145 +1430,371 @@ export class ArenaRenderer {
   /** Feet labels placed this frame (so labels of neighbouring heroes never overlap). */
   private readonly feetRects: Array<{ x: number; y: number; w: number; h: number }> = [];
   private readonly tagNames = new Map<string, string>();
-  /** Name-tag text, memoised (the label is drawn every frame, and grapheme segmentation is not free). */
-  private tagName(name: string, max: number): string {
-    const key = `${max}|${name}`;
+  /** Name-tag text, memoised (the label is drawn every frame, and grapheme segmentation + measuring are not free). */
+  private tagName(ctx: CanvasRenderingContext2D, name: string, maxChars: number, maxWidth: number, font: string): string {
+    const key = `${maxChars}|${Math.round(maxWidth)}|${font}|${name}`;
     let out = this.tagNames.get(key);
     if (out === undefined) {
       if (this.tagNames.size > 200) this.tagNames.clear();
-      out = truncateDisplayName(name, max);
+      out = fitPlateName(name, maxChars, maxWidth, (t) => this.textWidth(ctx, font, t));
       this.tagNames.set(key, out);
     }
     return out;
   }
 
+  // ---------------------------------------------------------------- kill feed
+  /** The last two eliminations, drawn on the stage itself (top-right) so they share the plates' geometry: a plate steps around them and the floating "KO" is drawn OVER them. */
+  private feed: Array<{ id: string; killer: string | null; victim: string; t0: number }> = [];
+
+  /** An elimination to announce on the stage. Shown ~4 s; at most two lines (the newest replaces the oldest). Idempotent per `id`. */
+  feedKill(id: string, killer: string | null, victim: string, now: number): void {
+    if (this.feed.some((l) => l.id === id)) return;
+    this.feed.push({ id, killer, victim, t0: now });
+    if (this.feed.length > 2) this.feed.shift();
+  }
+
+  /** Where each live feed line sits this frame (layout units), already fitted to the stage — also the boxes plates must stay out of. */
+  private feedBoxes(ctx: CanvasRenderingContext2D, now: number): Array<{ rect: Rect; text: string; alpha: number; dy: number }> {
+    if (this.feed.length === 0) return [];
+    this.feed = this.feed.filter((l) => now - l.t0 < 4200 && now >= l.t0 - 500);
+    if (this.feed.length === 0) return [];
+    const L = this.layout;
+    const m = plateMetrics(this.cssW, L.w);
+    const margin = m.u(this.cssW < 480 ? 8 : 12);
+    const font = `600 ${m.nameFs}px ${this.fontFamily}`;
+    const h = m.nameFs * 1.1 + m.u(9);
+    const iconW = m.u(13);
+    const maxW = L.w * (this.cssW < 480 ? 0.56 : 0.42);
+    const out: Array<{ rect: Rect; text: string; alpha: number; dy: number }> = [];
+    let y = margin;
+    for (const l of this.feed) {
+      // the names are shortened (measured, with an ellipsis) until the whole line fits its box — never clipped by the stage's edge
+      let chars = this.cssW < 400 ? 10 : ARENA_LABEL_MAX;
+      let text = "";
+      let w = 0;
+      for (; chars >= 3; chars--) {
+        const k = l.killer === null ? null : this.tagName(ctx, l.killer, chars, 1e9, font);
+        const v = this.tagName(ctx, l.victim, chars, 1e9, font);
+        text = k === null ? `${v} was eliminated` : `${k} eliminated ${v}`;
+        w = this.textWidth(ctx, font, text) + iconW + m.u(12);
+        if (w <= maxW) break;
+      }
+      const age = now - l.t0;
+      const alpha = age < 3400 ? 1 : clamp(1 - (age - 3400) / 800, 0, 1);
+      const dy = this.reducedMotion ? 0 : -m.u(8) * Math.max(0, 1 - age / 160);
+      out.push({ rect: { x: L.w - margin - w, y, w, h }, text, alpha, dy });
+      y += h + m.u(3);
+    }
+    return out;
+  }
+
+  private drawFeed(ctx: CanvasRenderingContext2D, boxes: ReturnType<ArenaRenderer["feedBoxes"]>): void {
+    if (boxes.length === 0) return;
+    const m = plateMetrics(this.cssW, this.layout.w);
+    for (const b of boxes) {
+      const { x, w, h } = b.rect;
+      const y = b.rect.y + b.dy;
+      ctx.save();
+      ctx.globalAlpha = b.alpha;
+      ctx.fillStyle = "rgba(6,9,14,0.84)";
+      this.rr(ctx, x, y, w, h, m.u(4));
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,90,100,0.45)";
+      ctx.lineWidth = m.u(1);
+      ctx.stroke();
+      // the cross, then the line
+      const cx = x + m.u(9);
+      const cy = y + h / 2;
+      const r = m.u(3.2);
+      ctx.strokeStyle = "#ff5a64";
+      ctx.lineWidth = m.u(1.8);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy - r);
+      ctx.lineTo(cx + r, cy + r);
+      ctx.moveTo(cx + r, cy - r);
+      ctx.lineTo(cx - r, cy + r);
+      ctx.stroke();
+      ctx.font = `600 ${m.nameFs}px ${this.fontFamily}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#f1f5fb";
+      ctx.fillText(b.text, x + m.u(18), cy + m.u(0.5));
+      ctx.restore();
+    }
+  }
+
+  /** When on, every frame leaves the plates it drew in `plates` (a test / QA hook; off in production, so nothing is allocated per frame). */
+  private plateLog: PlateDebug[] | null = null;
+  capturePlates(on = true): void {
+    this.plateLog = on ? [] : null;
+  }
+  get plates(): readonly PlateDebug[] {
+    return this.plateLog ?? [];
+  }
+  /** Layout size (units) and the css size of the stage, for converting what `plates` reports. */
+  get stage(): { layoutW: number; layoutH: number; cssW: number; cssH: number } {
+    return { layoutW: this.layout.w, layoutH: this.layout.h, cssW: this.cssW, cssH: this.cssH };
+  }
+
+  // ---------------------------------------------------------------- safe zones and focus
+  /** Boxes over the stage that belong to the page (the Survivors plate, the sound button …), in css px from the stage's top-left corner. */
+  private reservedCss: Rect[] = [];
+  /** …and the same boxes in layout units (rebuilt when the boxes or the stage size change). */
+  private reservedLayout: Rect[] | null = null;
+  /** The hero the viewer picked: its plate keeps its place and is marked. */
+  private focusSlot: number | null = null;
+
   /**
-   * NAME PLATES. Each hangs just above its own hero's head (a tall hat included). Before and after the fight a plate shows name, class and HP;
-   * during it, name and HP (the class reads from the silhouette); on a phone-sized stage name and HP before the fight and the HP bar alone
-   * during it (the roster under the stage carries the names). In a crowd, plates are placed front to back: one that would overlap a plate
-   * already placed steps up out of the way, and if that is not enough it shrinks to its HP bar — plates never stack on top of each other.
-   * Mode changes wait ~¼ s (no flicker when two heroes brush past each other) and every move is eased.
+   * Tells the renderer which parts of the stage the page covers with its own controls, MEASURED from the page (css px, relative to the canvas).
+   * Name plates and floating numbers keep clear of them — nothing is drawn where it would be hidden under a button.
+   */
+  setReserved(rects: readonly Rect[]): void {
+    const same = rects.length === this.reservedCss.length && rects.every((r, i) => {
+      const q = this.reservedCss[i] as Rect;
+      return Math.abs(r.x - q.x) < 0.5 && Math.abs(r.y - q.y) < 0.5 && Math.abs(r.w - q.w) < 0.5 && Math.abs(r.h - q.h) < 0.5;
+    });
+    if (same) return;
+    this.reservedCss = rects.map((r) => ({ ...r }));
+    this.reservedLayout = null;
+  }
+
+  /** The slot of the hero the viewer picked to win (or null): placed first, so its name never steps aside, and drawn with a gold edge. */
+  setFocus(slot: number | null): void {
+    this.focusSlot = slot;
+  }
+
+  private reserved(): readonly Rect[] {
+    if (!this.reservedLayout) {
+      const fx = this.layout.w / Math.max(1, this.cssW);
+      const fy = this.layout.h / Math.max(1, this.cssH);
+      const pad = 2 * fx;
+      this.reservedLayout = this.reservedCss.map((r) => ({ x: r.x * fx - pad, y: r.y * fy - pad, w: r.w * fx + 2 * pad, h: r.h * fy + 2 * pad }));
+    }
+    return this.reservedLayout;
+  }
+
+  /** The name plates drawn this frame (bars excluded), in layout units: floating text keeps off them so a number never hides a name. */
+  private plateBoxes: Rect[] = [];
+
+  /**
+   * Keeps a piece of centred floating text inside the stage, out of the page's reserved boxes (a button) and off the name plates: returns the x
+   * (centre) and y (baseline) to draw at. `w` and `h` are the text's width and height in layout units. A text that would sit on something steps to the
+   * cheapest free spot — beside it, or just above it. With `memo` (a number that lives ~1 s) the step is remembered: it moves away quickly (~40 ms)
+   * and comes back slowly (~110 ms), so a number brushing past a plate never flickers between two places.
+   */
+  private fitText(x: number, y: number, w: number, h: number, memo?: TextNudge, dtMs = 0): { x: number; y: number } {
+    const L = this.layout;
+    const m = 3 * (L.w / Math.max(1, this.cssW));
+    const cx0 = clamp(x, m + w / 2, L.w - m - w / 2);
+    const cy0 = clamp(y, m + h, L.h - m);
+    const reserved = this.reserved();
+    const plates = this.plateBoxes;
+    const hit = (cx: number, cy: number, r: Rect) => cx - w / 2 < r.x + r.w && cx + w / 2 > r.x && cy - h < r.y + r.h && cy > r.y;
+    const inStage = (cx: number, cy: number) => cx - w / 2 >= m - 0.01 && cx + w / 2 <= L.w - m + 0.01 && cy - h >= m - 0.01 && cy <= L.h - m + 0.01;
+    const blockedBy = (cx: number, cy: number): Rect | undefined => reserved.find((r) => hit(cx, cy, r)) ?? plates.find((r) => hit(cx, cy, r));
+    let cx = cx0;
+    let cy = cy0;
+    for (let pass = 0; pass < 3; pass++) {
+      const r = blockedBy(cx, cy);
+      if (!r) break;
+      // beside the obstacle (either side) or just above it — whichever is free and costs the least movement
+      const options = [
+        { x: r.x + r.w + m + w / 2, y: cy },
+        { x: r.x - m - w / 2, y: cy },
+        { x: cx, y: r.y - m },
+      ]
+        .filter((o) => inStage(o.x, o.y) && !blockedBy(o.x, o.y))
+        .sort((a, b) => Math.abs(a.x - cx) + Math.abs(a.y - cy) - (Math.abs(b.x - cx) + Math.abs(b.y - cy)));
+      if (options.length === 0) {
+        // nowhere free: stay out of the page's own controls at least
+        const box = reserved.find((q) => hit(cx, cy, q));
+        if (!box) break;
+        const right = box.x + box.w + w / 2;
+        cx = clamp(right + w / 2 <= L.w - m && (cx - box.x > box.w / 2 || box.x - w / 2 - w / 2 < m) ? right : box.x - w / 2, m + w / 2, L.w - m - w / 2);
+        break;
+      }
+      cx = (options[0] as { x: number; y: number }).x;
+      cy = (options[0] as { x: number; y: number }).y;
+    }
+    if (!memo) return { x: cx, y: cy };
+    const tdx = cx - cx0;
+    const tdy = cy - cy0;
+    if (!memo.set) {
+      memo.set = true;
+      memo.dx = tdx;
+      memo.dy = tdy;
+    }
+    const away = (t: number, cur: number) => Math.abs(t) > Math.abs(cur) + 0.01 || (t !== 0 && Math.sign(t) !== Math.sign(cur));
+    const toward = this.reducedMotion ? 1 : 1 - Math.exp(-dtMs / 110);
+    const out = this.reducedMotion ? 1 : 1 - Math.exp(-dtMs / 40);
+    memo.dx += (tdx - memo.dx) * (away(tdx, memo.dx) ? out : toward);
+    memo.dy += (tdy - memo.dy) * (away(tdy, memo.dy) ? out : toward);
+    return { x: clamp(cx0 + memo.dx, m + w / 2, L.w - m - w / 2), y: clamp(cy0 + memo.dy, m + h, L.h - m) };
+  }
+
+  // ---------------------------------------------------------------- name plates
+  /**
+   * NAME PLATES. Each hangs just above its own hero's head (a tall hat included) in EVERY phase and on every screen size: name and HP bar
+   * (name, class and HP before and after the fight on a wide stage). The geometry — which plate steps aside for which, which fall back to a
+   * bare name — lives in nameplates.ts; this decides what each plate says, feeds it where the heroes are drawn, and paints the result.
+   * Names are never scaled below ~10.5 css px; a small stage gets SHORTER names instead (measured, with an ellipsis).
    */
   private drawPlates(ctx: CanvasRenderingContext2D, clock: RenderClock, dtMs: number): void {
+    // Over the results the stage sits behind a translucent panel that names the winner and the runner-up: no plates (nor the kill feed) there — text
+    // seen through a panel would only read as clipped.
+    if (clock.phase === "RESULTS" || clock.phase === "DONE") {
+      if (this.plateLog) this.plateLog.length = 0;
+      this.plateBoxes.length = 0;
+      return;
+    }
     const L = this.layout;
-    const cpl = this.cssW / L.w;
-    // A phone-sized stage (< 480 css px) gets smaller plates: name + HP before the fight (the class reads from the silhouette and the roster
-    // below), and only the HP bar during it (names are in the roster) — eight full plates there covered the heroes they label.
-    const narrow = this.cssW < 480;
-    const pf = clamp((narrow ? 9 : 10.2) / (13 * cpl), 0.75, 2.2);
-    const fs = 13 * pf;
-    const subFs = fs * 0.72;
-    const small = this.cssW < 520;
-    const want: PlateMode = clock.phase === "COMBAT" ? (narrow ? "bar" : "compact") : narrow ? "compact" : "full";
-    const items: Array<{ u: UnitState; px: number; base: number; dead: number }> = [];
+    const m = plateMetrics(this.cssW, L.w);
+    const margin = m.u(3);
+    const phone = this.cssW < 480;
+    const want = clock.phase === "COMBAT" || phone ? "compact" : "full";
+    const decided = clock.phase === "VICTORY"; // (the results phases returned above)
+    const nameFont = `600 ${m.nameFs}px ${this.fontFamily}`;
+    const subFont = `700 ${m.subFs}px ${this.fontFamily}`;
+    const items: PlateInput[] = [];
+    const ends = new Map<number, { dead: number; ay: number; ax: number }>();
     for (const u of this.units) {
-      const dead = u.deadAt >= 0 ? clamp((clock.now - u.deadAt) / 1400, 0, 1) : 0;
+      const dead = u.deadAt >= 0 ? clamp((clock.now - u.deadAt) / 700, 0, 1) : 0;
       if (dead >= 1) continue;
       if (clock.phase === "INTRO" && clock.sinceStart - u.slot * 85 < 500) continue;
       const p = this.unitScreen(u);
-      items.push({ u, px: p.x, base: p.y - (this.headTop(u) + PLATE_GAP) * p.s - (u.alive ? 0 : dead * 20), dead });
+      const ay = p.y - (this.headTop(u) + PLATE_GAP) * p.s - (u.alive ? 0 : dead * 20);
+      ends.set(u.slot, { dead, ay, ax: p.x });
+      if (!u.alive) continue; // a fallen hero's plate is no obstacle: it only fades where it stood
+      const key = `${this.cssW}|${u.fighter.name}`;
+      if (u.plateSizesKey !== key) {
+        u.plateSizesKey = key;
+        u.plateName = this.tagName(ctx, u.fighter.name, m.maxChars, m.maxNameW, nameFont);
+        const nameW = this.textWidth(ctx, nameFont, u.plateName);
+        const classW = this.textWidth(ctx, subFont, (u.visual?.name ?? "Hero").toUpperCase());
+        u.plateSizes = plateSizes(m, nameW, classW);
+      }
+      const focus = this.focusSlot === u.slot;
+      const winner = decided && clock.winnerSlot === u.slot;
+      items.push({ slot: u.slot, ax: p.x, ay, sizes: u.plateSizes as PlateSizes, want, priority: focus || winner ? -1e6 : -ay });
     }
-    // front-most (lowest on screen) first: it keeps its natural place
-    items.sort((a, b) => b.base - a.base);
-    const placed: PlateRect[] = [];
-    const hits = (r: PlateRect) => placed.find((q) => r.x < q.x + q.w + 2 && r.x + r.w + 2 > q.x && r.y < q.y + q.h + 2 && r.y + r.h + 2 > q.y);
-    const ease = this.reducedMotion ? 1 : 1 - Math.exp(-dtMs / 110);
-    for (const it of items) {
-      const u = it.u;
-      const name = this.tagName(u.fighter.name, small ? 9 : ARENA_LABEL_MAX);
-      // Find the mode this plate can have without overlapping: its natural mode (stepping up by at most ~1½ plates), else just the HP bar.
-      let mode: PlateMode = want;
-      let lift = 0;
-      const geo = this.plateSize(ctx, u, name, want, pf, fs, subFs);
-      let r: PlateRect = { x: clamp(it.px - geo.w / 2, 4, L.w - geo.w - 4), y: it.base - geo.h, w: geo.w, h: geo.h };
-      for (let tries = 0; tries < 3; tries++) {
-        const q = hits(r);
-        if (!q) break;
-        lift = it.base - (q.y - 3);
-        r = { ...r, y: it.base - lift - geo.h };
-      }
-      if (hits(r) || lift > geo.h * 1.6) {
-        mode = "bar";
-        lift = 0;
-      }
-      if (u.alive === false) mode = u.plateMode; // a fading plate keeps its look
-      if (mode !== u.plateMode) {
-        if (u.plateWant !== mode) {
-          u.plateWant = mode;
-          u.plateWantSince = clock.now;
-        } else if (clock.now - u.plateWantSince > 240 || isPreFight(clock.phase) || this.reducedMotion) {
-          u.plateMode = mode;
-        }
-      } else {
-        u.plateWant = mode;
-      }
-      const target = u.plateMode === "bar" ? 0 : lift;
-      u.plateLift += (target - u.plateLift) * ease;
-      const g = u.plateMode === mode ? geo : this.plateSize(ctx, u, name, u.plateMode, pf, fs, subFs);
-      const rect: PlateRect = { x: clamp(it.px - g.w / 2, 4, L.w - g.w - 4), y: it.base - u.plateLift - g.h, w: g.w, h: g.h };
-      placed.push(rect);
-      u.plateTop = rect.y;
-      this.drawPlate(ctx, u, clock, rect, u.plateMode, name, pf, fs, subFs, it.dead);
+    if (this.plateLog) this.plateLog.length = 0;
+    this.plateBoxes.length = 0;
+    const snap = this.reducedMotion || isPreFight(clock.phase);
+    const feedBoxes = this.feedBoxes(ctx, clock.now);
+    // The kill feed is a four-second caption: plates keep out of it when they can, and a name goes over it rather than being dropped to an HP bar.
+    // (So the feed is painted BEFORE the plates: where the two meet, the name is on top.)
+    const placements = layoutPlates(items, { bounds: { x: margin, y: margin, w: L.w - 2 * margin, h: L.h - 2 * margin }, reserved: this.reserved(), soft: feedBoxes.map((b) => b.rect), gap: m.u(2), immediate: snap, dtMs }, this.plateStates, clock.now);
+    this.drawFeed(ctx, feedBoxes);
+    for (const pl of placements) {
+      const u = this.units.find((x) => x.slot === pl.slot) as UnitState;
+      const e = ends.get(pl.slot) as { dead: number; ay: number; ax: number };
+      const rect = pl.rect;
+      u.plateRect = rect;
+      u.plateShown = pl.mode;
+      if (pl.mode !== "bar") this.plateBoxes.push(rect);
+      // floating numbers rise from above the plate only when the plate is over the head; a plate off to the side leaves the head's own space free
+      u.plateTop = e.ax >= rect.x + 4 && e.ax <= rect.x + rect.w - 4 ? rect.y : Number.NaN;
+      this.drawPlate(ctx, u, clock, rect, pl.mode, u.plateName, m, 1 - pl.alpha, pl.displaced ? { x: e.ax, y: e.ay } : null);
+      this.plateLog?.push({ slot: pl.slot, mode: pl.mode, name: u.plateName, rect, displaced: pl.displaced, key: pl.key, ax: e.ax, ay: e.ay });
     }
-  }
-
-  private plateSize(ctx: CanvasRenderingContext2D, u: UnitState, name: string, mode: PlateMode, pf: number, fs: number, subFs: number): { w: number; h: number } {
-    if (mode === "bar") return { w: 46 * pf, h: 6.4 * pf };
-    const nameW = this.textWidth(ctx, `600 ${mode === "compact" ? fs * 0.92 : fs}px ${this.fontFamily}`, name);
-    if (mode === "compact") return { w: Math.max(62 * pf, nameW + 14 * pf), h: fs * 0.92 + 13 * pf };
-    const classW = this.textWidth(ctx, `700 ${subFs}px ${this.fontFamily}`, (u.visual?.name ?? "Hero").toUpperCase());
-    return { w: Math.max(76 * pf, nameW + 16 * pf, classW + 16 * pf), h: fs + subFs + 15 * pf };
+    // heroes that have just fallen: their plate stays over the body (no longer an obstacle for the living) and fades
+    for (const u of this.units) {
+      if (u.alive || !u.plateRect || !u.plateSizes) continue;
+      const e = ends.get(u.slot);
+      if (!e) continue;
+      const sz = u.plateSizes[u.plateShown];
+      const x = clamp(e.ax - sz.w / 2, margin, L.w - margin - sz.w);
+      const y = clamp(e.ay - sz.h, margin, L.h - margin - sz.h);
+      u.plateTop = y;
+      this.drawPlate(ctx, u, clock, { x, y, w: sz.w, h: sz.h }, u.plateShown, u.plateName, m, e.dead, null);
+    }
   }
 
   private drawPlate(
-    ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock, r: PlateRect, mode: PlateMode, name: string, pf: number, fs: number, subFs: number, dead: number,
+    ctx: CanvasRenderingContext2D, u: UnitState, clock: RenderClock, r: Rect, mode: PlateMode, name: string, m: ReturnType<typeof plateMetrics>, fade: number, pointer: { x: number; y: number } | null,
   ): void {
     const { x, y, w, h } = r;
+    const { u: px } = m;
     const accent = u.visual?.colors[0] ?? "#8b97ab";
     const rv = rarityVisual(u.fighter.appearance.rarity);
+    const decided = clock.phase === "VICTORY" || clock.phase === "RESULTS" || clock.phase === "DONE";
+    const gold = u.alive && ((decided && clock.winnerSlot === u.slot) || this.focusSlot === u.slot);
     ctx.save();
-    ctx.globalAlpha = 1 - dead;
+    ctx.globalAlpha = 1 - fade;
+    if (pointer && mode !== "bar") {
+      // a plate that is not straight above its hero points at it: a thin leader from the plate's lower edge to the top of the head
+      const sx = clamp(pointer.x, x + px(6), x + w - px(6));
+      ctx.strokeStyle = gold ? "#ffd04a" : accent;
+      ctx.globalAlpha = (1 - fade) * 0.75;
+      ctx.lineWidth = px(1.1);
+      ctx.beginPath();
+      ctx.moveTo(sx, y + h);
+      ctx.lineTo(pointer.x, pointer.y + px(1));
+      ctx.stroke();
+      ctx.fillStyle = gold ? "#ffd04a" : accent;
+      ctx.beginPath();
+      ctx.arc(pointer.x, pointer.y + px(1), px(1.5), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1 - fade;
+    }
     if (mode === "bar") {
       ctx.fillStyle = "rgba(6,9,14,0.86)";
-      this.rr(ctx, x, y, w, h, 2.5 * pf);
+      this.rr(ctx, x, y, w, h, px(2));
       ctx.fill();
       ctx.fillStyle = u.alive ? accent : "#3a4558";
-      ctx.fillRect(x, y, 2.4 * pf, h);
-      this.hpBar(ctx, u, x + 3.4 * pf, y + 1.2 * pf, w - 4.6 * pf, h - 2.4 * pf);
+      ctx.fillRect(x, y, px(2), h);
+      this.hpBar(ctx, u, x + px(2.8), y + px(1), w - px(3.8), h - px(2));
+      ctx.restore();
+      return;
+    }
+    const nfs = m.nameFs;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    if (mode === "tag") {
+      // no box: the name outlined for legibility over whatever it hangs in front of, with a thin HP line under it
+      ctx.font = `600 ${nfs}px ${this.fontFamily}`;
+      ctx.lineJoin = "round";
+      ctx.lineWidth = px(2.8);
+      ctx.strokeStyle = "rgba(6,8,12,0.95)";
+      const ty = y + nfs * 0.55;
+      ctx.strokeText(name, x + w / 2, ty);
+      ctx.fillStyle = u.alive ? (gold ? "#ffe08a" : "#f1f5fb") : "#8b97ab";
+      ctx.fillText(name, x + w / 2, ty);
+      this.hpBar(ctx, u, x + px(1), y + h - px(2.6), w - px(2), px(2.2));
       ctx.restore();
       return;
     }
     // plate
-    ctx.fillStyle = "rgba(6,9,14,0.82)";
-    this.rr(ctx, x, y, w, h, 5 * pf);
+    ctx.fillStyle = "rgba(6,9,14,0.86)";
+    this.rr(ctx, x, y, w, h, px(4));
     ctx.fill();
-    ctx.strokeStyle = u.alive ? (clock.winnerSlot === u.slot && clock.phase !== "COMBAT" ? "#ffd04a" : accent) : "#3a4558";
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = u.alive ? (gold ? "#ffd04a" : accent) : "#3a4558";
+    ctx.lineWidth = px(gold ? 1.8 : 1.3);
     ctx.stroke();
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    const nfs = mode === "compact" ? fs * 0.92 : fs;
+    // text sits in the area above the HP bar; the bar is the plate's floor
+    const textTop = y + px(2.4);
     ctx.font = `600 ${nfs}px ${this.fontFamily}`;
     ctx.fillStyle = u.alive ? "#f1f5fb" : "#8b97ab";
-    ctx.fillText(name, x + w / 2, y + 2 * pf + (nfs + 3 * pf) / 2 + 0.5);
+    ctx.fillText(name, x + (w - px(7)) / 2 + px(0.5), textTop + nfs * 0.55);
     if (mode === "full") {
       // Heroes have no level, so the class (in its accent colour) is the second line.
-      ctx.font = `700 ${subFs}px ${this.fontFamily}`;
+      ctx.font = `700 ${m.subFs}px ${this.fontFamily}`;
       ctx.fillStyle = u.alive ? accent : "#5d6a7d";
-      ctx.fillText((u.visual?.name ?? "Hero").toUpperCase(), x + w / 2, y + 2 * pf + (fs + 3 * pf) + (subFs + 1 * pf) / 2 + 0.5);
+      ctx.fillText((u.visual?.name ?? "Hero").toUpperCase(), x + (w - px(7)) / 2 + px(0.5), textTop + nfs * 1.1 + m.subFs * 0.6);
     }
     // The rarity shows on the plate as an EDGE and a small tier SHAPE (dot · diamond · star · crown) — never as text in the stage.
     if (rv.tier > 0 && u.alive) {
       ctx.save();
       ctx.globalAlpha *= 0.55 + rv.tier * 0.1;
       ctx.strokeStyle = rv.colors.base;
-      ctx.lineWidth = 0.7 + rv.tier * 0.35;
-      this.rr(ctx, x + 2.2, y + 2.2, w - 4.4, h - 4.4, 3.4 * pf);
+      ctx.lineWidth = px(0.7 + rv.tier * 0.3);
+      this.rr(ctx, x + px(1.6), y + px(1.6), w - px(3.2), h - px(3.2), px(3));
       ctx.stroke();
       ctx.restore();
     }
-    drawRarityMark(ctx, u.fighter.appearance.rarity, x + w - 7 * pf, y + 7 * pf, 3.2 * pf);
-    this.hpBar(ctx, u, x + 3, y + h - 7.5 * pf, w - 6, 4.8 * pf);
+    drawRarityMark(ctx, u.fighter.appearance.rarity, x + w - px(5.6), y + px(5.6), px(2.7));
+    this.hpBar(ctx, u, x + px(3), y + h - px(5.6), w - px(6), px(3.4));
     ctx.restore();
   }
 

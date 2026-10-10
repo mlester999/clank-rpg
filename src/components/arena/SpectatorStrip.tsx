@@ -43,7 +43,7 @@ export function SpectatorStrip({ state, fighters, phase, winnerCharacterId, rost
     <ul className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Live fighter status">
       {Array.from({ length: state?.groupSize ?? 8 }, (_, i) => {
         const f = fighters.find((x) => x.slot === i) ?? fighters[i];
-        if (!f) return <li key={i} className="skeleton h-[5.4rem]" aria-hidden />;
+        if (!f) return <li key={i} className="skeleton h-[6.2rem]" aria-hidden />;
         const r = live.find((x) => x.slot === f.slot);
         return (
           <FighterCard
@@ -80,12 +80,12 @@ const FighterCard = memo(function FighterCard({ f, state, hpFrac, alive, kills, 
         aria-label={`${f.name}: ${alive ? `${Math.round(hpFrac * 100)}% health` : "eliminated"}`}
       >
         <span className="flex items-center gap-2">
-          <HeroAvatar avatarUrl={null} look={lookFor(f.appearance, visual, state.visuals.disabledCosmetics)} size={34} label={f.name} className="rounded" />
+          <HeroAvatar avatarUrl={null} look={lookFor(f.appearance, visual, state.visuals.disabledCosmetics)} size={34} label={f.name} className="shrink-0 rounded" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[0.78rem] leading-tight font-bold text-paper" title={f.name}>{f.name}</span>
-            <span className="flex items-center gap-1 truncate text-[0.66rem] leading-tight text-steel-300">
+            <span className="block truncate text-[0.78rem] leading-tight font-bold text-paper" title={f.name} data-testid="fighter-name">{f.name}</span>
+            <span className="flex min-w-0 items-center gap-1 text-[0.66rem] leading-tight text-steel-300">
               <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: visual?.colors[0] ?? "#8b97ab" }} aria-hidden />
-              {visual?.name}{f.power !== null ? ` · ${f.power.toLocaleString()}` : ""}
+              <span className="min-w-0 truncate">{visual?.name}{f.power !== null ? ` · ${f.power.toLocaleString()}` : ""}</span>
             </span>
           </span>
           <span className="shrink-0" style={{ color: rarityVisual(f.appearance.rarity).colors.base }} title={`${rarityVisual(f.appearance.rarity).label} rarity`} aria-label={`${rarityVisual(f.appearance.rarity).label} rarity`}><RarityIcon rarity={f.appearance.rarity as Rarity} size={12} /></span>
@@ -93,10 +93,11 @@ const FighterCard = memo(function FighterCard({ f, state, hpFrac, alive, kills, 
         <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white/10">
           <span className="block h-full rounded-full transition-[width] duration-150" style={{ width: `${Math.round(hpFrac * 100)}%`, background: color }} />
         </span>
-        <span className="mt-1 flex items-center justify-between gap-1 text-[0.64rem] text-steel-300 tnum">
-          <span>{hpNow !== null ? <><b className="text-paper">{hpNow}</b>/{f.maxHp} HP</> : "—"}</span>
+        {/* HP on the left, the fight's tally on the right; on a narrow card they wrap onto two lines rather than run into each other */}
+        <span className="mt-1 flex flex-wrap items-center justify-between gap-x-2 text-[0.64rem] leading-snug text-steel-300 tnum">
+          <span className="whitespace-nowrap">{hpNow !== null ? <><b className="text-paper">{hpNow}</b>/{f.maxHp} HP</> : "—"}</span>
           {fighting ? (
-            <span className="flex items-center gap-2" title="Eliminations · damage dealt">
+            <span className="flex items-center gap-1.5 whitespace-nowrap" title="Eliminations · damage dealt">
               <span><b className="text-paper">{kills}</b> KO</span>
               <span><b className="text-paper">{damage.toLocaleString()}</b> dmg</span>
             </span>
@@ -104,12 +105,14 @@ const FighterCard = memo(function FighterCard({ f, state, hpFrac, alive, kills, 
             <span className="text-steel-400">ready</span>
           )}
         </span>
-        <span className="mt-1 flex min-h-[1rem] flex-wrap gap-1">
+        {/* statuses: a fixed one-line slot (no layout shift when one appears), at most two named, the rest counted. The row WRAPS inside its one-line height, so on a narrow card a pill that does not fit drops out whole instead of being cut in half by the card's edge */}
+        <span className="mt-1 flex h-[1.05rem] flex-wrap content-start gap-x-1 overflow-hidden">
           {!alive && <Pill cls="border-danger/50 text-danger">KO</Pill>}
           {winner && <Pill cls="border-clank-300/60 text-clank-300">Winner</Pill>}
-          {status.map((s) => (
+          {status.slice(0, !alive || winner ? 1 : 2).map((s) => (
             <Pill key={s.bit} cls={s.cls}>{s.label}</Pill>
           ))}
+          {status.length > (!alive || winner ? 1 : 2) && <Pill cls="border-white/20 text-steel-300">+{status.length - (!alive || winner ? 1 : 2)}</Pill>}
         </span>
       </Link>
     </li>
@@ -117,5 +120,5 @@ const FighterCard = memo(function FighterCard({ f, state, hpFrac, alive, kills, 
 });
 
 function Pill({ cls, children }: { cls: string; children: React.ReactNode }) {
-  return <span className={`rounded-full border px-1.5 text-[0.58rem] leading-[1.05rem] font-bold tracking-wider uppercase ${cls}`}>{children}</span>;
+  return <span className={`shrink-0 rounded-full border px-1.5 text-[0.58rem] leading-[1.05rem] font-bold tracking-wider whitespace-nowrap uppercase ${cls}`}>{children}</span>;
 }

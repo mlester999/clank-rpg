@@ -1,19 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
-import { HeroPortrait } from "@/components/hero/HeroPortrait";
-import { RarityFrame } from "@/components/hero/rarity";
-import type { Rarity } from "@/domain/character/appearance";
-import { lookFor } from "@/components/hero/look";
 import { DEFAULT_SPRITE_SET } from "@/components/sprites/library";
 import { PhaseCueTracker } from "@/domain/audio/cues";
 import { useSpriteLibrary } from "@/components/sprites/useSprites";
-import { CheckIcon, TrophyIcon } from "@/components/ui/Icons";
 import { ARENA_LABEL_MAX, truncateDisplayName } from "@/domain/character/displayName";
 import { DEFAULT_SETTINGS } from "@/domain/settings";
-import type { ArenaStateDto, FighterDto, ResultRowDto } from "@/lib/dto";
+import type { ArenaStateDto, FighterDto } from "@/lib/dto";
 
 
 import { SoundToggle } from "./audio/SoundToggle";
@@ -24,9 +18,10 @@ import { HeroEligibilityCard } from "./HeroEligibility";
 import { ArenaRenderer, type ArenaPhase } from "./ArenaRenderer";
 import { ArenaPicks } from "./ArenaPicks";
 import { RecentWinners } from "./RecentWinners";
+import { ResultsPanel, type PickLine } from "./ResultsPanel";
 import { RosterStore } from "./rosterStore";
 import { SpectatorStrip } from "./SpectatorStrip";
-import { ArenaHeader, CountdownOverlay, PhaseBanner, StageHint, SurvivorsHud } from "./StageHud";
+import { ArenaHeader, CountdownOverlay, PhaseBanner, PicksOpenHint, StageHint, SurvivorsHud } from "./StageHud";
 import { StageStatusCard } from "./StageStatusCard";
 import { headerStatus, stageMode } from "./stageMode";
 import { telemetry } from "./telemetry";
@@ -64,6 +59,7 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ArenaRenderer | null>(null);
+  const measureRef = useRef<(() => void) | null>(null);
   const stateRef = useRef(state);
   const replayRef = useRef(replay);
   const bySlotRef = useRef<Map<number, FighterDto>>(new Map());
@@ -92,9 +88,22 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
     if (!canvas || !wrap) return;
     const renderer = new ArenaRenderer(canvas);
     rendererRef.current = renderer;
+    // The page's own controls over the stage (the Survivors plate, the sound button, the kill feed) are MEASURED, so name plates and floating
+    // numbers keep clear of them at any size. Re-measured whenever the stage resizes or the set of boxes changes.
+    const measure = () => {
+      const w = wrap.getBoundingClientRect();
+      const boxes: Array<{ x: number; y: number; w: number; h: number }> = [];
+      for (const el of wrap.querySelectorAll<HTMLElement>("[data-stage-reserve]")) {
+        const b = el.getBoundingClientRect();
+        if (b.width > 0 && b.height > 0) boxes.push({ x: b.left - w.left, y: b.top - w.top, w: b.width, h: b.height });
+      }
+      renderer.setReserved(boxes);
+    };
+    measureRef.current = measure;
     const resize = () => {
       const r = wrap.getBoundingClientRect();
       renderer.resize(Math.max(280, r.width), Math.max(200, r.height), window.devicePixelRatio || 1);
+      measure();
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -111,7 +120,9 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
       // Long Telegram-derived names are shortened for this pill only; the stored name is untouched.
       const short = (n: string | undefined) => (n ? truncateDisplayName(n, ARENA_LABEL_MAX) : "a hero");
       const text = k ? `${short(k.name)} eliminated ${short(v?.name)}` : `${short(v?.name)} was eliminated`;
-      setKills((list) => [...list.slice(-3), { id, text }]);
+      // The visible feed is drawn ON the stage (same frame, same geometry as the name plates); this list is its screen-reader twin.
+      renderer.feedKill(id, k?.name ?? null, v?.name ?? "a hero", getNow());
+      setKills((list) => [...list.slice(-1), { id, text }]);
       setTimeout(() => setKills((list) => list.filter((l) => l.id !== id)), 4200);
     };
 
@@ -167,6 +178,7 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
       renderer.onCue = null;
       audio.stopAll();
       rendererRef.current = null;
+      measureRef.current = null;
     };
   }, [getNow, roster, audio]);
 
@@ -241,6 +253,26 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
   const pickedFighter = picks.current.pick ? fighters.find((f) => f.characterId === picks.current.pick!.characterId) : undefined;
   const onStage = useMemo(() => (current ? { fighters, decided } : null), [current, fighters, decided]);
 
+  // The hero the viewer picked keeps its name in place on the stage (and is marked); and the page's boxes over the stage are re-measured when they change.
+  const focusSlot = pickedFighter?.slot ?? null;
+  useEffect(() => {
+    rendererRef.current?.setFocus(focusSlot);
+  }, [focusSlot, current?.id]);
+  const hudShown = Boolean(current) && phase !== "IDLE";
+  useEffect(() => {
+    measureRef.current?.();
+  }, [hudShown, mode]);
+
+  const pickOutcome = picks.current.round?.outcome;
+  const pickLine: PickLine | null =
+    picksOn && picks.current.pick && pickedFighter
+      ? {
+          name: pickedFighter.name,
+          outcome: pickOutcome?.result === "CORRECT" || pickOutcome?.result === "INCORRECT" || pickOutcome?.result === "VOID" ? pickOutcome.result : "PENDING",
+          ...(pickOutcome?.result === "CORRECT" && !pickOutcome.pending ? { points: pickOutcome.points } : {}),
+        }
+      : null;
+
   // Healthy operation: the next eight are on stage the instant this reaches zero. "Starting…" covers the few
   // milliseconds of that hand-over; "Preparing next battle…" only appears if the server is genuinely late.
   const nextLabel = state?.next ? nextBattleLabel(state.next.startsAt, now) : null;
@@ -256,20 +288,18 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
         </div>
 
         {/* the stage */}
-        <div className="plate plate-clank rivets p-[3px] xl:col-start-1 xl:row-start-2" style={{ ["--chamfer" as string]: "14px" }} data-testid="arena-stage" data-battle={current?.id} data-phase={phase} data-mode={mode}>
-          <div ref={wrapRef} className="relative aspect-[800/780] w-full overflow-hidden bg-ink-950 sm:aspect-[5/3]" style={{ clipPath: "inherit" }}>
+        <div className="stage-frame plate plate-clank rivets p-[3px] xl:col-start-1 xl:row-start-2" style={{ ["--chamfer" as string]: "14px" }} data-testid="arena-stage" data-battle={current?.id} data-phase={phase} data-mode={mode}>
+          {/* @container: everything laid over the stage (results, hints, the survivors plate) sizes itself from the stage's own width, not the page's */}
+          <div ref={wrapRef} className="@container relative aspect-[800/780] w-full overflow-hidden bg-ink-950 sm:aspect-[5/3]" style={{ clipPath: "inherit" }}>
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" role="img" aria-label={current ? `The arena: ${fighters.map((f) => `${f.name} the ${state?.classes[f.classId]?.name ?? "hero"}`).join(", ")}` : "The arena awaits its next heroes"} />
 
             {/* top HUD */}
             {current && phase !== "IDLE" && <SurvivorsHud alive={hud.alive} total={fighters.length || 8} />}
 
-            {/* kill feed */}
-            <div className="pointer-events-none absolute top-14 right-2 flex flex-col items-end gap-1 sm:top-16 sm:right-3" aria-live="polite">
+            {/* kill feed: drawn on the stage (top-right, by the renderer); this is its screen-reader twin */}
+            <div className="sr-only" aria-live="polite" data-testid="kill-feed">
               {kills.map((k) => (
-                <div key={k.id} className="slide-up rounded bg-ink-950/80 px-2 py-1 text-[0.7rem] font-semibold text-paper ring-1 ring-danger/40 sm:text-xs">
-                  <span className="mr-1 text-danger">✖</span>
-                  {k.text}
-                </div>
+                <p key={k.id}>{k.text}</p>
               ))}
             </div>
 
@@ -277,64 +307,13 @@ export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
             <CountdownOverlay phase={phase} countdown={hud.countdown} />
             {current && (
               <StageHint phase={phase}>
-                {picksOn && upcomingWindow === "OPEN" ? (
-                  <>
-                    Picks open for the next fight <span className="hidden xl:inline">— choose a winner on the right</span>
-                    <span className="xl:hidden">— scroll down to pick</span>
-                  </>
-                ) : (
-                  "Heroes entering the arena…"
-                )}
+                {picksOn && upcomingWindow === "OPEN" ? <PicksOpenHint /> : "Heroes entering the arena…"}
               </StageHint>
             )}
             {current && <PhaseBanner phase={phase} sinceCombatStartMs={now - (current.combatStartsAt ?? 0)} />}
 
             {/* results: #1 winner + #2 runner-up, ~5 s, then straight into the next battle */}
-            {showResults && results && (
-              <div className="absolute inset-0 grid place-items-center overflow-hidden bg-ink-950/60 p-3 backdrop-blur-[2px]">
-                <div aria-hidden className="winner-glow pointer-events-none absolute inset-0" />
-                <div className="slide-up relative w-full max-w-3xl">
-                  <p className="mb-2 text-center font-display text-xs tracking-[0.3em] text-clank-300 uppercase">Results</p>
-                  <div className="grid grid-cols-[1.2fr_1fr] items-end gap-2 sm:gap-4">
-                    {results.map(({ f, r }, i) => (
-                      <ResultCard key={f.characterId} fighter={f} place={i + 1} visual={state?.classes[f.classId]} disabled={state?.visuals.disabledCosmetics} row={r} />
-                    ))}
-                  </div>
-                  {picksOn && picks.current.pick && pickedFighter && (
-                    <p className="mt-3 flex flex-wrap items-center justify-center gap-2 text-center text-xs text-steel-300 sm:text-sm" data-testid="pick-overlay">
-                      Your pick: <b className="text-paper">{pickedFighter.name}</b>
-                      {picks.current.round?.outcome?.result === "CORRECT" ? (
-                        <span className="chip border-teal/50 bg-teal/15 text-teal">
-                          <CheckIcon size={12} /> Correct pick
-                          {!picks.current.round.outcome.pending ? ` +${picks.current.round.outcome.points} Points` : ""}
-                        </span>
-                      ) : picks.current.round?.outcome?.result === "INCORRECT" ? (
-                        <span className="chip">Not this time</span>
-                      ) : picks.current.round?.outcome?.result === "VOID" ? (
-                        <span className="chip">Battle cancelled</span>
-                      ) : (
-                        <span className="chip">Settling…</span>
-                      )}
-                    </p>
-                  )}
-                  {nextLabel && (
-                    <p className="mt-2 flex items-center justify-center gap-2 text-xs text-steel-300 sm:text-sm">
-                      {nextLabel.kind === "countdown" ? (
-                        <>
-                          <span className="label">Next battle in</span>
-                          <span className="font-display text-clank-300 tnum">{nextLabel.seconds}</span>
-                          <span className="label">sec</span>
-                        </>
-                      ) : nextLabel.kind === "starting" ? (
-                        <span className="label">Next battle starting…</span>
-                      ) : (
-                        <span className="label text-clank-300">Preparing next battle…</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+            {showResults && results && <ResultsPanel entries={results} classes={state?.classes ?? {}} disabled={state?.visuals.disabledCosmetics} pick={pickLine} next={nextLabel} />}
 
             {/* the intentional waiting screens (not started / preparing / paused / development / between seasons) and the one real error */}
             {waiting && (
@@ -398,38 +377,6 @@ const StaticSections = memo(function StaticSections({ threshold }: { threshold: 
 
 /** Used only while the first arena state is still loading; the live value comes from settings (state.heroThreshold). */
 const FALLBACK_HERO_THRESHOLD = DEFAULT_SETTINGS.telegram.qualifyingThreshold;
-
-const ResultCard = memo(function ResultCard({ fighter, place, visual, disabled, row }: { fighter: FighterDto; place: 1 | 2 | number; visual: ArenaStateDto["classes"][string] | undefined; disabled: string[] | undefined; row?: ResultRowDto | null | undefined }) {
-  const first = place === 1;
-  const hpLeft = row?.finalHp != null && row.finalHp > 0 ? row.finalHp : null;
-  return (
-    <Link href={`/heroes/${fighter.publicId}`} className={`plate ${first ? "plate-clank" : ""} flex flex-col items-center gap-1 p-3 text-center transition-transform hover:-translate-y-0.5 ${first ? "" : "opacity-95"}`}>
-      {first && (
-        <span aria-hidden className="trophy-float grid h-8 w-8 place-items-center rounded-full bg-clank-300 text-ink-950 shadow-[0_0_22px_rgba(202,148,249,.8)]">
-          <TrophyIcon size={18} />
-        </span>
-      )}
-      <span className={`font-display ${first ? "text-sm text-clank-300" : "text-xs text-steel-300"} tracking-[0.25em]`}>{first ? "#1 WINNER" : "#2 RUNNER-UP"}</span>
-      <RarityFrame rarity={fighter.appearance.rarity as Rarity} compact={!first} className="grid place-items-center" style={{ width: first ? 132 : 96, height: first ? 132 : 96 }}>
-        <HeroPortrait look={lookFor(fighter.appearance, visual, disabled)} size={first ? 132 : 96} animate victory={first} label={fighter.name} className="relative" />
-      </RarityFrame>
-      <span className={`max-w-full truncate font-display ${first ? "text-lg sm:text-2xl" : "text-sm sm:text-lg"} text-paper`} title={fighter.name}>{fighter.name}</span>
-      <span className="text-xs text-steel-300 tnum">
-        <b className="font-semibold" style={{ color: visual?.colors[0] }}>{visual?.name ?? "Hero"}</b>
-        {fighter.power !== null ? ` · PWR ${fighter.power.toLocaleString()}` : ""}
-        {fighter.title ? ` · ${fighter.title}` : ""}
-      </span>
-      {row && (
-        <span className="mt-0.5 flex flex-wrap justify-center gap-x-3 text-[0.7rem] text-steel-300 tnum">
-          <span><b className="text-paper">{row.eliminations}</b> {row.eliminations === 1 ? "KO" : "KOs"}</span>
-          <span><b className="text-paper">{row.damageDealt.toLocaleString()}</b> damage</span>
-          {hpLeft !== null && <span><b className="text-paper">{hpLeft.toLocaleString()}</b> HP left</span>}
-          {row.goldAwarded > 0 && <span className="text-gold">+{row.goldAwarded} Gold</span>}
-        </span>
-      )}
-    </Link>
-  );
-});
 
 /** Running, but fewer eligible heroes than a battle needs: the ONLY place a "heroes so far" counter appears. */
 function GatheringCard({ state }: { state: ArenaStateDto | null }) {

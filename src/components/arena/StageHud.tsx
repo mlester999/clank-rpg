@@ -9,18 +9,19 @@ import type { ArenaPhase } from "./ArenaRenderer";
  * queue. The 60-second limit is enforced by the server and shown to nobody; the 3 · 2 · 1 before each fight is.
  */
 
-/** Top-left plate while a battle is on stage: how many are still standing. */
+/**
+ * Top-left plate while a battle is on stage: how many are still standing. It shrinks on a small stage (sized from the stage's own width) and is a
+ * MEASURED safe zone: the arena renderer keeps name plates and floating numbers out from under it (`data-stage-reserve`).
+ */
 export function SurvivorsHud({ alive, total }: { alive: number; total: number }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2 sm:p-3">
-      <div className="plate plate-flat min-w-[7.5rem] px-3 py-1.5" style={{ ["--chamfer" as string]: "6px" }}>
-        <p className="label !text-[0.58rem]">Survivors</p>
-        <p className="font-display text-lg leading-none tnum text-paper">
+    <div className="pointer-events-none absolute top-2 left-2 @xl:top-3 @xl:left-3">
+      <div data-stage-reserve data-testid="survivors-hud" className="plate plate-flat min-w-[5.25rem] px-2.5 py-1 @sm:min-w-[6.5rem] @sm:px-3 @sm:py-1.5 @xl:min-w-[7.5rem]" style={{ ["--chamfer" as string]: "6px" }}>
+        <p className="label !text-[0.54rem] @sm:!text-[0.58rem]">Survivors</p>
+        <p className="font-display text-base leading-none tnum text-paper @sm:text-lg">
           {alive}/{total}
         </p>
       </div>
-      <div className="flex min-w-0 flex-1 justify-center" />
-      <div className="min-w-[7.5rem]" />
     </div>
   );
 }
@@ -38,13 +39,39 @@ export function CountdownOverlay({ phase, countdown }: { phase: ArenaPhase; coun
   );
 }
 
-/** One line of guidance while the eight stand idle / count down. */
+/**
+ * Guidance while the eight stand idle / count down, centred along the foot of the stage. It keeps 3.25 rem clear on BOTH sides — the speaker lives in
+ * the bottom-right corner and the guidance never touches it (nor does the left side look lopsided).
+ */
 export function StageHint({ phase, children }: { phase: ArenaPhase; children?: ReactNode }) {
   if (phase !== "INTRO" && phase !== "COUNTDOWN") return null;
   return (
-    // px-14: the guidance keeps clear of the speaker button (bottom-right) and balances it on the left
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 grid place-items-center px-14">
-      <span className="chip bg-ink-950/85 text-center text-clank-300">{children}</span>
+    <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-[3.25rem] @xl:bottom-3" data-testid="stage-hint">
+      {typeof children === "string" ? <span className="chip max-w-full bg-ink-950/85 text-center text-clank-300">{children}</span> : children}
+    </div>
+  );
+}
+
+/**
+ * "Picks are open for the next fight — go and pick." Two deliberate lines on a narrow stage (a short title over one line of guidance), one line on
+ * a wide one (42 rem and up, measured on the stage) — never a sentence that wraps into fragments. Each line is `whitespace-nowrap` so it cannot break in the middle; the stage width, not
+ * the copy, chooses the layout. (Under the 1280 px page layout the picks panel is below the stage; at 1280+ it is to the right.)
+ */
+export function PicksOpenHint() {
+  return (
+    <div
+      className="flex max-w-full flex-col items-center rounded-lg border border-clank-400/45 bg-ink-950/88 px-3 py-1.5 text-center leading-tight shadow-[0_2px_10px_rgba(0,0,0,.45)] @2xl:flex-row @2xl:gap-2.5 @2xl:px-4"
+      data-testid="picks-open-hint"
+    >
+      <p className="text-[0.64rem] font-bold tracking-[0.1em] whitespace-nowrap text-clank-300 uppercase @sm:text-[0.7rem] @2xl:font-display @2xl:text-xs @2xl:tracking-[0.14em]">
+        <span className="@2xl:hidden">Next fight picks open</span>
+        <span className="hidden @2xl:inline">Picks open for the next fight</span>
+      </p>
+      <span aria-hidden className="hidden h-3 w-px bg-clank-400/40 @2xl:block" />
+      <p className="mt-0.5 text-[0.68rem] whitespace-nowrap text-steel-300 @sm:text-xs @2xl:mt-0">
+        <span className="hidden xl:inline">Choose a winner on the right</span>
+        <span className="xl:hidden">Scroll down to pick your hero</span>
+      </p>
     </div>
   );
 }

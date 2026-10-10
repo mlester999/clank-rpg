@@ -543,3 +543,22 @@ body {
   .docs-toc-link:hover { color: var(--color-paper); }
   .docs-toc-link[aria-current="true"] { color: var(--color-clank-200); border-left-color: var(--color-clank-400); }
 }
+
+/* ---------- Arena stage on a short (landscape) screen ---------- */
+/* A phone held sideways has far less height than width: the whole 5:3 stage is kept on screen — between the sticky header (4 rem) and the bottom
+   navigation (4 rem), with a little air — instead of running off the bottom of the viewport. (svh: the SMALL viewport, so a collapsing browser toolbar
+   never makes it jump.) */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1023px) {
+  .stage-frame {
+    width: 100%;
+    max-width: calc((100svh - 8.5rem) * 1.6667);
+    margin-inline: auto;
+  }
+}
+
+/* ---------- On-screen keyboard ---------- */
+/* While the Arena Chat's message box has the keyboard up (set by ChatComposer from the visual viewport) the bottom navigation steps aside: the
+   keyboard is on screen, and no browser's handling of fixed bars can leave the navigation over the box being typed in. */
+html[data-kbd="open"] nav.fixed[aria-label="Main"] {
+  display: none;
+}

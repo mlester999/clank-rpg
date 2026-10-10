@@ -15,8 +15,12 @@ import { useArenaChat } from "./useArenaChat";
  * canvas, clock and audio never wait for it, and it never waits for them.
  */
 
-/** The same height for the loading skeleton and the live list, so the page does not jump when the history arrives. */
-const BODY_HEIGHT = "h-[18.5rem] sm:h-[26rem] lg:h-[30rem]";
+/**
+ * The panel's TOTAL height — header, history and message box together — fixed per screen size (≈ 240 px on a phone, 280 px on a tablet, 300 px on
+ * a desktop), so the page never jumps when the history arrives and hundreds of messages can never stretch the page: the history scrolls INSIDE the
+ * panel (`min-h-0 flex-1 overflow-y-auto`) and a new message changes nothing about the panel's size.
+ */
+export const CHAT_PANEL_HEIGHT = "h-[15rem] sm:h-[17.5rem] lg:h-[18.75rem]";
 
 export function LiveChip({ live, realtime }: { live: LiveState; realtime: boolean }) {
   const [text, tone, title] =
@@ -28,8 +32,8 @@ export function LiveChip({ live, realtime }: { live: LiveState; realtime: boolea
           ? ["Reconnecting…", "warn", "The live connection dropped. Your messages are kept; it is rejoining."]
           : ["Updating", "wait", "New messages appear within about 20 seconds."];
   return (
-    <span className="chip shrink-0" title={title} role="status" aria-label={`Chat status: ${text}`} data-testid="chat-status" data-live={live} data-tone={tone}>
-      <span aria-hidden className={`h-2 w-2 rounded-full ${tone === "live" ? "bg-teal shadow-[0_0_8px_#2ee6c8]" : tone === "warn" ? "animate-pulse bg-gold" : "bg-steel-400"}`} />
+    <span className="chip !h-5 shrink-0 !px-2 !text-[0.6rem]" title={title} role="status" aria-label={`Chat status: ${text}`} data-testid="chat-status" data-live={live} data-tone={tone}>
+      <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${tone === "live" ? "bg-teal shadow-[0_0_8px_#2ee6c8]" : tone === "warn" ? "animate-pulse bg-gold" : "bg-steel-400"}`} />
       {text}
     </span>
   );
@@ -37,16 +41,16 @@ export function LiveChip({ live, realtime }: { live: LiveState; realtime: boolea
 
 function Skeleton() {
   return (
-    <div className="space-y-4 px-3 py-4 sm:px-4" aria-hidden data-testid="chat-skeleton">
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="flex animate-pulse gap-3">
-          <span className="h-9 w-9 shrink-0 rounded-[6px] bg-white/[0.06]" />
-          <div className="flex-1 space-y-2">
+    <div className="space-y-3 px-3 py-3 sm:px-4" aria-hidden data-testid="chat-skeleton">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex animate-pulse gap-2.5">
+          <span className="h-7 w-7 shrink-0 rounded-[6px] bg-white/[0.06] sm:h-8 sm:w-8" />
+          <div className="flex-1 space-y-1.5">
             <div className="flex justify-between gap-6">
-              <span className="h-3 w-24 rounded bg-white/[0.08]" />
-              <span className="h-3 w-10 rounded bg-white/[0.05]" />
+              <span className="h-2.5 w-24 rounded bg-white/[0.08]" />
+              <span className="h-2.5 w-10 rounded bg-white/[0.05]" />
             </div>
-            <span className="block h-3 rounded bg-white/[0.05]" style={{ width: `${88 - i * 14}%` }} />
+            <span className="block h-2.5 rounded bg-white/[0.05]" style={{ width: `${88 - i * 16}%` }} />
           </div>
         </div>
       ))}
@@ -56,14 +60,14 @@ function Skeleton() {
 
 function Notice({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="grid h-full place-items-center px-4 py-8 text-center" data-testid="chat-notice">
+    <div className="grid h-full place-items-center overflow-y-auto px-4 py-3 text-center" data-testid="chat-notice">
       <div className="max-w-sm">
-        <span aria-hidden className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-clank-600/30 text-clank-300">
-          <ChatIcon size={22} />
+        <span aria-hidden className="mx-auto grid h-8 w-8 place-items-center rounded-full bg-clank-600/30 text-clank-300">
+          <ChatIcon size={16} />
         </span>
-        <h3 className="mt-3 font-display text-sm tracking-[0.12em] text-paper uppercase">{title}</h3>
-        <p className="mt-1.5 text-sm text-steel-300">{children}</p>
-        {action && <div className="mt-4">{action}</div>}
+        <h3 className="mt-1.5 font-display text-xs tracking-[0.12em] text-paper uppercase">{title}</h3>
+        <p className="mt-1 text-[0.8rem] leading-snug text-steel-300">{children}</p>
+        {action && <div className="mt-2.5">{action}</div>}
       </div>
     </div>
   );
@@ -121,19 +125,19 @@ export const ArenaChat = memo(function ArenaChat() {
   const onTrim = useCallback(() => chat.trim(), [chat]);
 
   return (
-    <section id="arena-chat" aria-labelledby="arena-chat-title" className="plate plate-clank flex min-w-0 flex-col" style={{ ["--chamfer" as string]: "14px" }} data-testid="arena-chat" data-phase={snap.phase} data-live={snap.live}>
-      <header className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-3 sm:px-4">
-        <h2 id="arena-chat-title" className="flex min-w-0 items-center gap-2 font-display text-sm tracking-[0.2em] whitespace-nowrap text-clank-300 uppercase sm:text-base">
-          <ChatIcon size={18} className="shrink-0" />
+    <section id="arena-chat" aria-labelledby="arena-chat-title" className={`plate plate-clank flex min-w-0 flex-col ${CHAT_PANEL_HEIGHT}`} style={{ ["--chamfer" as string]: "12px" }} data-testid="arena-chat" data-phase={snap.phase} data-live={snap.live}>
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 py-1.5 sm:px-4 sm:py-2">
+        <h2 id="arena-chat-title" className="flex min-w-0 items-center gap-1.5 font-display text-[0.78rem] tracking-[0.18em] whitespace-nowrap text-clank-300 uppercase sm:text-sm">
+          <ChatIcon size={15} className="shrink-0" />
           Arena Chat
         </h2>
         {snap.phase === "ready" && <LiveChip live={snap.live} realtime={snap.realtime} />}
       </header>
-      <div className={`flex min-h-0 flex-col ${snap.phase === "closed" || snap.phase === "error" ? "min-h-48" : BODY_HEIGHT}`}>
+      <div className="flex min-h-0 flex-1 flex-col">
         <ChatBody snap={snap} onRetry={onRetry} onLoadOlder={onLoadOlder} onTrim={onTrim} />
       </div>
       {snap.phase === "ready" && (
-        <div className="border-t border-white/10 bg-ink-950/40" data-testid="chat-footer">
+        <div className="shrink-0 border-t border-white/10 bg-ink-950/40" data-testid="chat-footer">
           {snap.you ? <ChatComposer key={snap.you.senderKey} you={snap.you} onSend={onSend} /> : <GuestPrompt />}
         </div>
       )}

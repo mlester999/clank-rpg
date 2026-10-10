@@ -17,6 +17,26 @@ export function mix(a: string, b: string, t: number): string {
   return rgbToHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
 }
 
+/** WCAG relative luminance of a colour (0 = black … 1 = white). */
+export function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * A colour made readable as TEXT on a dark panel: a class colour such as the Rogue's deep slate (#2f4858) is the right accent for a border or a dot but
+ * nearly invisible as type. It is lightened toward white, in small steps, only as far as needed to reach `minLuminance` — a colour that is already light
+ * enough is returned untouched, so every class keeps its own hue.
+ */
+export function onDark(hex: string, minLuminance = 0.3): string {
+  let out = hex;
+  for (let i = 0; i < 12 && luminance(out) < minLuminance; i++) out = mix(out, "#ffffff", 0.1);
+  return out;
+}
+
 export const lighten = (hex: string, t: number) => mix(hex, "#ffffff", t);
 export const darken = (hex: string, t: number) => mix(hex, "#000000", t);
 

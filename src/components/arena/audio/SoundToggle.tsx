@@ -22,7 +22,8 @@ export function SoundToggleView({ snapshot, onToggle }: { snapshot: AudioSnapsho
   const label = unavailable ? "Sound is unavailable in this browser" : state === "on" ? "Mute Arena sound" : state === "off" ? "Turn Arena sound on" : "Enable Arena sound";
   const Icon = state === "on" || state === "locked" ? SpeakerIcon : SpeakerOffIcon;
   return (
-    <div className="group pointer-events-none absolute right-1 bottom-1 z-20 sm:right-2 sm:bottom-2">
+    // data-stage-reserve: the arena renderer MEASURES this box and keeps name plates and floating numbers out from under it
+    <div data-stage-reserve className="group pointer-events-none absolute right-1 bottom-1 z-20 sm:right-2 sm:bottom-2">
       <span
         role="tooltip"
         id="sound-toggle-tip"

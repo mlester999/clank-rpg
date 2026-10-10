@@ -7,11 +7,7 @@ import { exactTime, relativeTime } from "@/domain/chat/relativeTime";
 import type { ChatMessageDto } from "@/domain/chat/types";
 
 import { ChatMessageRow } from "./ChatMessageRow";
-
-/** Within this many pixels of the bottom the viewer is "following" the room. */
-const FOLLOW_PX = 56;
-/** Scrolled this close to the top, the next page of history is requested. */
-const TOP_PX = 96;
+import { isFollowing, nearTop, newMessagesLabel, onMessagesChanged, restoredTop, shouldGlide, unseenCount } from "./scrollRules";
 
 /** A clock that ticks every `ms` (only while the tab is visible), so "2m ago" keeps up without refetching anything. */
 export function useNow(ms: number): number {
@@ -62,7 +58,7 @@ export function ChatMessageList({ messages, mineKey, hasMore, loadingOlder, olde
   const now = useNow(30_000);
 
   const lastId = messages.length > 0 ? (messages[messages.length - 1] as ChatMessageDto).id : null;
-  const unseen = useMemo(() => (seenUpTo === null ? 0 : messages.reduce((n, m) => n + (m.id > seenUpTo ? 1 : 0), 0)), [messages, seenUpTo]);
+  const unseen = useMemo(() => unseenCount(messages.map((m) => m.id), seenUpTo), [messages, seenUpTo]);
 
   const lastIdRef = useRef<number | null>(lastId);
   useEffect(() => {
@@ -73,8 +69,7 @@ export function ChatMessageList({ messages, mineKey, hasMore, loadingOlder, olde
     if (!el) return;
     following.current = true;
     // a short hop glides; a long way (more than a few screens of history) jumps — a smooth scroll over thousands of pixels is slow and nobody wants to watch it
-    const far = el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 3;
-    if (smooth && !far && typeof el.scrollTo === "function") el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (smooth && shouldGlide(el) && typeof el.scrollTo === "function") el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     else el.scrollTop = el.scrollHeight;
     setSeenUpTo(lastIdRef.current);
   }, []);
@@ -85,17 +80,14 @@ export function ChatMessageList({ messages, mineKey, hasMore, loadingOlder, olde
     if (!el) return;
     const first = messages.length > 0 ? (messages[0] as ChatMessageDto).id : null;
     const was = rendered.current;
-    if (anchor.current && was.first !== null && first !== null && first < was.first) {
+    const change = onMessagesChanged({ first, last: lastId, was, anchored: anchor.current !== null, following: following.current });
+    if (change === "restore" && anchor.current) {
       // older history was added above: keep what the viewer was looking at where it was
-      el.scrollTop = anchor.current.top + (el.scrollHeight - anchor.current.height);
+      el.scrollTop = restoredTop(anchor.current, el.scrollHeight);
       anchor.current = null;
-    } else if (lastId !== null && was.last !== lastId) {
-      if (was.last === null || following.current) {
-        el.scrollTop = el.scrollHeight;
-        setSeenUpTo(lastId);
-      }
-    } else if (first !== null && was.first !== null && first > was.first && following.current) {
-      el.scrollTop = el.scrollHeight; // the oldest were trimmed away while following
+    } else if (change === "to-bottom") {
+      el.scrollTop = el.scrollHeight;
+      if (lastId !== null && was.last !== lastId) setSeenUpTo(lastId); // (trimmed away while following: nothing new to count)
     }
     rendered.current = { first, last: lastId };
   }, [messages, lastId]);
@@ -116,10 +108,10 @@ export function ChatMessageList({ messages, mineKey, hasMore, loadingOlder, olde
   const onScroll = useCallback(() => {
     const el = box.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_PX;
+    const atBottom = isFollowing(el);
     following.current = atBottom;
     if (atBottom) setSeenUpTo(lastIdRef.current);
-    if (el.scrollTop <= TOP_PX && hasMore && !loadingOlder && !olderFailed) {
+    if (nearTop(el.scrollTop) && hasMore && !loadingOlder && !olderFailed) {
       anchor.current = { height: el.scrollHeight, top: el.scrollTop };
       onLoadOlder();
     }
@@ -145,11 +137,11 @@ export function ChatMessageList({ messages, mineKey, hasMore, loadingOlder, olde
         data-testid="chat-scroll"
       >
         {(hasMore || loadingOlder) && (
-          <div className="flex justify-center px-3 py-2">
+          <div className="flex justify-center px-3 py-1">
             {loadingOlder ? (
               <span className="text-xs text-steel-300" role="status">Loading earlier messages…</span>
             ) : (
-              <button type="button" onClick={loadOlderByButton} className="rounded-md px-3 py-1.5 text-xs font-bold text-clank-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-clank-300" data-testid="chat-older">
+              <button type="button" onClick={loadOlderByButton} className="rounded-md px-3 py-1 text-xs font-bold text-clank-300 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-clank-300" data-testid="chat-older">
                 {olderFailed ? "Couldn't load — try again" : "Load earlier messages"}
               </button>
             )}
@@ -166,10 +158,10 @@ export function ChatMessageList({ messages, mineKey, hasMore, loadingOlder, olde
         <button
           type="button"
           onClick={() => toBottom(true)}
-          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-clank-300/60 bg-clank-700 px-3.5 py-1.5 text-xs font-bold text-paper shadow-[0_6px_18px_rgba(0,0,0,.5)] hover:bg-clank-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clank-300"
+          className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full border border-clank-300/60 bg-clank-700 px-3 py-1 text-[0.7rem] font-bold text-paper shadow-[0_6px_18px_rgba(0,0,0,.5)] hover:bg-clank-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clank-300"
           data-testid="chat-new-messages"
         >
-          ↓ New messages{unseen > 1 ? ` (${unseen > 99 ? "99+" : unseen})` : ""}
+          {newMessagesLabel(unseen)}
         </button>
       )}
     </div>

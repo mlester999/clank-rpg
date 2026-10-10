@@ -116,7 +116,12 @@ and a same-origin request (non-GET) are required, a signed-in player is not an a
   **Reconnecting…**, or **Updating** (no live delivery: new messages appear within ~20 s) — "Live" is only shown when the room is actually joined.
 * A catch-up **merges**: held history stays, new messages appear in id order, a message hidden meanwhile disappears, duplicates (a broadcast and the sender's own response) are the same message.
 * Scrolling: at the bottom the list **follows**; scrolled up it **stays put** and shows "↓ New messages (n)"; older pages loaded at the top **keep the viewer's place**; the viewer's own message always goes to the
-  bottom; only the list scrolls, never the page; the in-memory room is capped at 600 messages and trimmed (only while following).
+  bottom; only the list scrolls, never the page; the in-memory room is capped at 600 messages and trimmed (only while following). The rules are plain functions in `chat/scrollRules.ts`
+  (unit-tested without a browser).
+* **Compact layout** (see `docs/ARENA_RESPONSIVE.md`): the panel's *total* height — header, history and message box — is fixed per screen size: **240 px** on a phone, **280 px** from 640 px, **300 px** from 1024 px.
+  The history scrolls inside it, so hundreds of messages never stretch the page and a new message never changes the panel's size. On a phone the chat sits directly under the Live Arena and the fighter status
+  cards (it is a right-hand sidebar nowhere). The message box keeps clear of the on-screen keyboard and the fixed bottom navigation (`chat/keyboard.ts`, from `visualViewport`; the navigation steps aside while
+  the keyboard is up). Names stay on the left of a row with an ellipsis, the age on the far right.
 
 ## Cost and safety for the database and the host
 
