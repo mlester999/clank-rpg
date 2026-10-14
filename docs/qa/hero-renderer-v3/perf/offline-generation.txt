@@ -1,0 +1,73 @@
+generation {
+ "N=1": {
+  "totalMs": 67,
+  "frames": 73,
+  "framesPerHero": 73,
+  "frameMs": {
+   "p50": 0.93,
+   "p95": 1.11,
+   "p99": 1.22,
+   "max": 1.22
+  },
+  "heroAllClipsMs": {
+   "p50": 67.23,
+   "p95": 67.23,
+   "p99": 67.23
+  },
+  "stripBytesAllClips": 2242560
+ },
+ "N=8": {
+  "totalMs": 653,
+  "frames": 584,
+  "framesPerHero": 73,
+  "frameMs": {
+   "p50": 1.07,
+   "p95": 1.52,
+   "p99": 2.63,
+   "max": 3.11
+  },
+  "heroAllClipsMs": {
+   "p50": 83.96,
+   "p95": 94.87,
+   "p99": 94.87
+  },
+  "stripBytesAllClips": 17940480
+ },
+ "N=24": {
+  "totalMs": 1896,
+  "frames": 1752,
+  "framesPerHero": 73,
+  "frameMs": {
+   "p50": 1.05,
+   "p95": 1.28,
+   "p99": 2.35,
+   "max": 14.69
+  },
+  "heroAllClipsMs": {
+   "p50": 78.25,
+   "p95": 91.66,
+   "p99": 114.42
+  },
+  "stripBytesAllClips": 53821440
+ },
+ "N=100": {
+  "totalMs": 7391,
+  "frames": 7300,
+  "framesPerHero": 73,
+  "frameMs": {
+   "p50": 1,
+   "p95": 1.22,
+   "p99": 1.32,
+   "max": 10.61
+  },
+  "heroAllClipsMs": {
+   "p50": 74.05,
+   "p95": 86.7,
+   "p99": 95.27
+  },
+  "stripBytesAllClips": 224256000
+ }
+}
+lru {"firstAppearanceMs":{"p50":1.27,"p95":3.49,"p99":19.51},"evictedOldest":true,"recentKept":true,"jsHeapGrowthFor99HeroesKB":-59,"maxCachedHeroes":48}
+v2 {"pages":19,"pngBytesAll":8539830,"decodedBitmapBytesAll":160882688,"largestPage":{"k":"tank-sentinel-0","w":2048,"h":1539,"bytes":713646},"framesPerHero":37,"composedStripBytesPerHero":1136640}
+v3 spriteStats (compositor part) {"strips":99,"frames":99,"ms":143.09720900000138,"maxFrameMs":13.510417000001326}

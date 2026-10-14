@@ -77,7 +77,7 @@ describe("arena state — the on-stage battle", () => {
       expect(f.appearance.sprite).toMatchObject({ v: 1 });
       expect(s.classes[f.classId]).toMatchObject({ weapon: expect.any(String), body: expect.any(String), colors: expect.any(Array) });
     }
-    expect(s.visuals).toEqual({ spriteSet: "clank-dev-v2", disabledCosmetics: [] }); // hero renderer v2
+    expect(s.visuals).toEqual({ spriteSet: "clank-v3", disabledCosmetics: [] }); // hero renderer v3
   });
 
   it("keeps the timing contract: intro → 3·2·1 → ≤60 s combat → victory beat → 5 s results", async () => {

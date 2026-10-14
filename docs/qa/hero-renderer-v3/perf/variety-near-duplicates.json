@@ -1,0 +1,50 @@
+{
+ "warrior": {
+  "sameRarityPairs": 1200,
+  "identical": 0,
+  "under5pct": 0,
+  "under10pct": 1,
+  "closestPair": "15/51 LEGENDARY",
+  "closestDiff": "6.5%"
+ },
+ "tank": {
+  "sameRarityPairs": 1200,
+  "identical": 0,
+  "under5pct": 2,
+  "under10pct": 3,
+  "closestPair": "10/58 EPIC",
+  "closestDiff": "1.5%"
+ },
+ "rogue": {
+  "sameRarityPairs": 1200,
+  "identical": 0,
+  "under5pct": 0,
+  "under10pct": 13,
+  "closestPair": "84/92 COMMON",
+  "closestDiff": "6.2%"
+ },
+ "ranger": {
+  "sameRarityPairs": 1200,
+  "identical": 0,
+  "under5pct": 1,
+  "under10pct": 1,
+  "closestPair": "11/15 LEGENDARY",
+  "closestDiff": "1.4%"
+ },
+ "mage": {
+  "sameRarityPairs": 1200,
+  "identical": 0,
+  "under5pct": 0,
+  "under10pct": 2,
+  "closestPair": "33/81 RARE",
+  "closestDiff": "6.9%"
+ },
+ "cleric": {
+  "sameRarityPairs": 1200,
+  "identical": 0,
+  "under5pct": 0,
+  "under10pct": 0,
+  "closestPair": "29/97 RARE",
+  "closestDiff": "20.7%"
+ }
+}

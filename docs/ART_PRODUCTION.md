@@ -1,5 +1,8 @@
 # Hero art — the production path (brief for an artist or studio)
 
+> **Update:** hero renderer v3 ([SPRITES_V3.md](SPRITES_V3.md)) replaces v2's layer pipeline with an anatomical 2.5D pixel renderer (IK grips,
+> per-pixel depth, head-anchored faces, stride-locked walks). The brief below still applies to hand-authored art on the atlas contract.
+
 **Where we are.** The heroes on screen today (`clank-dev-v2`, "hero renderer v2") are **procedurally generated stand-in art**: vector shapes
 posed on a skeleton, rasterised at 4× and posterised into pixels by `scripts/sprites/v2`. They are consistent, readable and fully wired
 (every hero's stored look, class, rarity and identity traits draw correctly; attacks line up with the server's events), and the last three

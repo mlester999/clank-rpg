@@ -39,11 +39,11 @@ const snapshot = async () => {
 };
 
 describe("migration 2500 — placement and shape", () => {
-  it("is the highest migration, directly after the Arena Chat's 2400, and the only new file for the reroll — forward-only (no existing migration is edited)", async () => {
+  it("comes directly after the Arena Chat's 2400, and the only new file for the reroll — forward-only (no existing migration is edited)", async () => {
     const all = (await readMigrations()).map((m) => m.version);
-    expect(all.at(-1)).toBe(NEW);
-    expect(all.at(-2)).toBe(PREVIOUS);
-    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW]);
+    expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
+    // only hero renderer v3 (one settings value, migration 2600) follows it
+    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW, "20261014002600"]);
     const sql = await readFile(path.join(MIGRATIONS_DIR, FILE), "utf8");
     expect(sql.trimEnd().endsWith("select public.clank_harden_schema();")).toBe(true);
   });
@@ -64,11 +64,11 @@ describe("migration 2500 — placement and shape", () => {
       await createCharacterForUser(db, user as never, { settings, classes, secret: "test-secret-value-1234567890", origin: "TELEGRAM" });
     }
     const before = await snapshot();
-    const result = await migrate(db);
+    const result = await migrate(db, undefined, { upTo: NEW });
     expect(result.applied).toEqual([NEW]);
     expect(await snapshot()).toEqual(before); // every existing table is byte-identical
     expect(Number((await db.query<{ n: number }>("select count(*)::int as n from public.hero_free_rerolls"))[0]!.n)).toBe(0);
-    expect((await migrate(db)).applied).toEqual([]);
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]);
     expect(await db.query("select * from public.audit_hero_versions()")).toEqual([]);
     expect(await db.query("select * from public.audit_hero_free_rerolls()")).toEqual([]);
   });

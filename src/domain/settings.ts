@@ -766,7 +766,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   picks: { rewardGold: 2 },
   arena_picks: DEFAULT_ARENA_PICKS,
   hero_arena: DEFAULT_HERO_ARENA,
-  visuals: { spriteSet: "clank-dev-v2", disabledCosmetics: [] },
+  visuals: { spriteSet: "clank-v3", disabledCosmetics: [] },
 };
 
 export function parseSettings<K extends SettingsKey>(key: K, value: unknown): GameSettings[K] {

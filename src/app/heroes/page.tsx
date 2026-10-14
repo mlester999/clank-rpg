@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { HeroCardCompact } from "@/components/hero/HeroCard";
 import { RarityIcon } from "@/components/hero/rarity";
+import { LiveSpriteSet } from "@/components/sprites/LiveSpriteSet";
 import { EmptyState, PageHeader } from "@/components/ui/bits";
 import { RARITIES } from "@/domain/character/appearance";
 import { RARITY_LABEL } from "@/domain/hero/card";
@@ -50,6 +51,7 @@ export default async function HeroesPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-3 py-6 sm:px-6">
+      <LiveSpriteSet id={settings.visuals.spriteSet} />
       <PageHeader title="The" accent="Heroes" subtitle={`${data.total.toLocaleString()} hero${data.total === 1 ? "" : "es"} in the arena. Open one to see their card, stats and recent fights.`} />
 
       <form action="/heroes" method="get" role="search" className="mb-3 flex gap-2" data-testid="heroes-search">

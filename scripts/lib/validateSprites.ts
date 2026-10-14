@@ -5,7 +5,15 @@ import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 import { COSMETIC_ITEMS } from "../../src/domain/sprites/catalog";
 import { blockSize, directionBlocks } from "../../src/domain/sprites/geometry";
+import { rollAppearance, type Rarity } from "../../src/domain/character/appearance";
+import { DEFAULT_CLASSES } from "../../src/domain/content";
+import { deriveSpriteConfig } from "../../src/domain/sprites/config";
 import { ATTACK_CLIPS, decodeCells, safeParseManifest, type SpriteManifest } from "../../src/domain/sprites/spec";
+import { CLIP_ORDER, TIMING } from "../../src/domain/sprites/v3/clips";
+import { FRAME_H, FRAME_W, heroOf, renderClipFrame } from "../../src/domain/sprites/v3/render";
+import { isProceduralSet, v3Manifest } from "../../src/domain/sprites/v3/set";
+import { validateFrame } from "../../src/domain/sprites/v3/validate";
+import { createRng } from "../../src/domain/util/rng";
 
 /**
  * Acceptance check for a sprite set (the shipped dev set AND any production pack):
@@ -34,6 +42,8 @@ export async function validateSpriteSet(setId: string, opts: { strict?: boolean;
   const out = (manifest: SpriteManifest | null, cells = 0, atlases = 0): SpriteValidation => ({
     ok: errors.length === 0, manifest, errors, warnings, stats: { layers: manifest ? Object.keys(manifest.layers).length : 0, atlases, cellsChecked: cells },
   });
+
+  if (isProceduralSet(setId)) return validateProcedural(setId, opts.strict === true);
 
   let raw: unknown;
   try {
@@ -163,4 +173,42 @@ export async function validateSpriteSet(setId: string, opts: { strict?: boolean;
   if (m.status === "dev-placeholder") warnings.push("status is dev-placeholder: this is stand-in art, not production art");
 
   return out(m, cells, Object.keys(atlas).length);
+}
+
+
+/**
+ * A PROCEDURAL set (hero renderer v3) has no atlases to inspect: its manifest is checked against the schema, and real generated heroes are
+ * rendered and validated frame by frame (src/domain/sprites/v3/validate.ts) — `strict` renders 30 heroes per class, otherwise 8; every clip,
+ * every frame. A weapon may sweep across a face for at most two frames of an action.
+ */
+function validateProcedural(setId: string, strict: boolean): SpriteValidation {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const parsed = safeParseManifest(JSON.parse(JSON.stringify(v3Manifest())));
+  if (!parsed.ok) errors.push(`manifest invalid: ${parsed.error}`);
+  const rarities: Rarity[] = ["COMMON", "RARE", "EPIC", "LEGENDARY"];
+  const per = strict ? 30 : 8;
+  let frames = 0;
+  for (const cls of DEFAULT_CLASSES) {
+    for (let i = 0; i < per; i++) {
+      const rarity = rarities[i % 4] as Rarity;
+      const config = deriveSpriteConfig(rollAppearance(createRng(`validate-${setId}-${cls.id}-${i}`), cls, rarity), cls.look, rarity);
+      const hero = heroOf({ config, colors: cls.look.colors, rarity });
+      for (const clip of CLIP_ORDER) {
+        if (clip.startsWith("attack") && clip !== hero.lo.attack) continue;
+        let brief = 0;
+        for (let f = 0; f < TIMING[clip].frames; f++) {
+          const fr = renderClipFrame(hero, clip, f);
+          frames++;
+          if (fr.w !== FRAME_W || fr.h !== FRAME_H || fr.rgba.length !== FRAME_W * FRAME_H * 4) errors.push(`${cls.id}#${i} ${clip}#${f}: wrong frame size`);
+          for (const iss of validateFrame(hero, clip, fr)) {
+            if (iss.code === "eyes-action") brief++;
+            else errors.push(`${cls.id}#${i} ${hero.g.arch} ${clip}#${f} ${iss.code}: ${iss.detail}`);
+          }
+        }
+        if (brief > 2) errors.push(`${cls.id}#${i} ${hero.g.arch} ${clip}: a face covered for ${brief} frames of the action`);
+      }
+    }
+  }
+  return { ok: errors.length === 0, manifest: parsed.ok ? parsed.manifest : null, errors, warnings, stats: { layers: 0, atlases: 0, cellsChecked: frames } };
 }

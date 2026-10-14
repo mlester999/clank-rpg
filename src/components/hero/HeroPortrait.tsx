@@ -4,8 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { spriteKey } from "@/domain/sprites/config";
 import { getHeroSheet } from "@/components/sprites/compositor";
-import { DEFAULT_SPRITE_SET } from "@/components/sprites/library";
-import { useSpriteLibrary } from "@/components/sprites/useSprites";
+import { useActiveSpriteSet, useSpriteLibrary } from "@/components/sprites/useSprites";
 
 import { rarityVisual } from "@/domain/hero/rarityVisuals";
 
@@ -21,7 +20,7 @@ interface Props {
   victory?: boolean;
   className?: string;
   label?: string;
-  /** Sprite set to draw from (defaults to the standard set). */
+  /** Sprite set to draw from (default: the one the look names — a hero page's — else the live set as last heard on this device). */
   setId?: string;
   /** Draw only the hero (no rarity backdrop): it stands on whatever is behind the canvas — the card's arena image. */
   transparent?: boolean;
@@ -32,9 +31,10 @@ interface Props {
  * (or if it cannot draw this hero) it falls back to the procedural vector hero, so a portrait is
  * never blank. Static portraits draw once; animated ones loop the idle (or victory) clip.
  */
-export function HeroPortrait({ look, size = 64, frame = "bust", animate = false, victory = false, className = "", label, setId = DEFAULT_SPRITE_SET, transparent = false }: Props) {
+export function HeroPortrait({ look, size = 64, frame = "bust", animate = false, victory = false, className = "", label, setId, transparent = false }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const lib = useSpriteLibrary(setId);
+  const live = useActiveSpriteSet();
+  const lib = useSpriteLibrary(setId ?? (look as { spriteSet?: string }).spriteSet ?? live);
   const source = lib.source;
   // Depend on the visual identity, not on object identity (parents rebuild `look` on every render).
   const key = spriteKey(look.sprite, look.colors, look.rarity);
@@ -92,9 +92,10 @@ export function HeroPortrait({ look, size = 64, frame = "bust", animate = false,
       const m = source.manifest;
       const clip = victory && m.clips.victory ? "victory" : sheet.plan.idleClip;
       const def = m.clips[clip]!;
-      const strip = sheet.strip(clip, 0);
-      if (!strip) return waiting ? background() : paintVector(tSec);
       const f = def.loop ? Math.floor(tSec * def.fps) % def.frames : 0;
+      // only the frame shown is needed (a procedural set generates it on demand; a composed set builds its strip whole)
+      const strip = sheet.strip(clip, 0, f);
+      if (!strip) return waiting ? background() : paintVector(tSec);
       // Source crop in sprite pixels, derived from the manifest (so any frame size / proportion works).
       const n = m.nominalHeightPx;
       const crop =

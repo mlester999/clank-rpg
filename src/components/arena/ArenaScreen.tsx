@@ -2,9 +2,9 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 
-import { DEFAULT_SPRITE_SET } from "@/components/sprites/library";
+import { announceSpriteSet } from "@/components/sprites/library";
 import { PhaseCueTracker } from "@/domain/audio/cues";
-import { useSpriteLibrary } from "@/components/sprites/useSprites";
+import { useActiveSpriteSet, useSpriteLibrary } from "@/components/sprites/useSprites";
 import { ARENA_LABEL_MAX, truncateDisplayName } from "@/domain/character/displayName";
 import { DEFAULT_SETTINGS } from "@/domain/settings";
 import type { ArenaStateDto, FighterDto } from "@/lib/dto";
@@ -54,7 +54,10 @@ const EMPTY_HUD: Hud = { phase: "IDLE", countdown: null, alive: 0 };
  */
 export function ArenaScreen({ initial }: { initial: ArenaStateDto | null }) {
   const { state, replay, online, connection, loaded, getNow } = useArena(initial);
-  const lib = useSpriteLibrary(state?.visuals.spriteSet ?? DEFAULT_SPRITE_SET);
+  const live = useActiveSpriteSet();
+  const lib = useSpriteLibrary(state?.visuals.spriteSet ?? live);
+  // the server's live set: portraits on every page follow it (remembered on this device)
+  useEffect(() => announceSpriteSet(state?.visuals.spriteSet), [state?.visuals.spriteSet]);
   const { audio, snapshot: sound } = useArenaAudio();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);

@@ -18,6 +18,7 @@ import { isPowerInBand } from "../../src/domain/hero/rarity";
 import { HERO_GENERATOR_VERSION } from "../../src/domain/hero/heroVersion";
 import { planLayers } from "../../src/domain/sprites/plan";
 import { parseManifest } from "../../src/domain/sprites/spec";
+import { isProceduralSet } from "../../src/domain/sprites/v3/set";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -492,9 +493,10 @@ export async function verifyTelegramBackfillScratch(input: ScratchBackfillInput)
       if (r.generator_version === HERO_GENERATOR_VERSION && !isPowerInBand(r.rarity as Rarity, Number(r.power))) outsideTier++;
       if (Number(r.cached) !== Number(r.power)) cachedPowerMismatch++;
     }
-    const manifestPath = path.resolve(process.cwd(), "public", "sprites", input.settings.visuals.spriteSet, "manifest.json");
-    const manifest = parseManifest(JSON.parse(await readFile(manifestPath, "utf8")) as unknown);
-    const missingAssets = current.reduce((n, r) => n + (r.sprite ? planLayers(r.sprite as never, manifest).missing.length : 0), 0);
+    // a procedural set (hero renderer v3) generates every catalogue item: nothing can be missing; an atlas set is checked against its manifest
+    const setId = input.settings.visuals.spriteSet;
+    const manifest = isProceduralSet(setId) ? null : parseManifest(JSON.parse(await readFile(path.resolve(process.cwd(), "public", "sprites", setId, "manifest.json"), "utf8")) as unknown);
+    const missingAssets = manifest ? current.reduce((n, r) => n + (r.sprite ? planLayers(r.sprite as never, manifest).missing.length : 0), 0) : 0;
     const byRarityMax = (r: Rarity) => Math.max(0, ...current.filter((x) => x.rarity === r).map((x) => Number(x.power)));
     const byRarityMin = (r: Rarity) => Math.min(Infinity, ...current.filter((x) => x.rarity === r).map((x) => Number(x.power)));
     let nonOverlapping = true;

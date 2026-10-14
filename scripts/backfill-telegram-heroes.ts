@@ -30,6 +30,7 @@ import { DEFAULT_SETTINGS } from "../src/domain/settings";
 import { scoreUserHistory } from "../src/domain/telegram/history";
 import { planLayers } from "../src/domain/sprites/plan";
 import { parseManifest } from "../src/domain/sprites/spec";
+import { isProceduralSet } from "../src/domain/sprites/v3/set";
 import { readMigrations } from "../src/server/db/migrate";
 import { createPostgresDb } from "../src/server/db/postgres";
 import { getEnv, getSecret } from "../src/server/env";
@@ -56,6 +57,8 @@ const PREVIOUS_DEFAULT_THRESHOLD = 100;
 
 async function validateSpriteOutput(settings: typeof DEFAULT_SETTINGS, heroes: Array<{ userId: number; sprite: unknown }>) {
   if (heroes.length === 0) return { set: settings.visuals.spriteSet, status: "not needed", atlasesPresent: 0, atlasCount: 0, renderableHeroes: 0, missingLayers: [] as string[] };
+  // a procedural set (hero renderer v3) draws every hero from its look: no atlases, nothing missing
+  if (isProceduralSet(settings.visuals.spriteSet)) return { set: settings.visuals.spriteSet, status: "procedural", atlasesPresent: 0, atlasCount: 0, renderableHeroes: heroes.length, missingLayers: [] as string[] };
   const directory = path.resolve(process.cwd(), "public", "sprites", settings.visuals.spriteSet);
   const raw = JSON.parse(await readFile(path.join(directory, "manifest.json"), "utf8")) as unknown;
   const manifest = parseManifest(raw);

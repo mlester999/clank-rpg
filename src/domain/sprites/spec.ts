@@ -21,15 +21,17 @@ import { z } from "zod";
 export const SPRITE_SPEC_VERSION = 2;
 
 /** Logical states the arena can ask a hero to be in. */
-export const ANIM_STATES = ["IDLE", "MOVE", "ATTACK", "SKILL", "HIT", "KO", "VICTORY"] as const;
+export const ANIM_STATES = ["IDLE", "MOVE", "ATTACK", "SKILL", "HIT", "KO", "VICTORY", "BLOCK", "TURN"] as const;
 export type AnimState = (typeof ANIM_STATES)[number];
 
 /**
  * Concrete clips (rows) a sprite set provides. ATTACK comes in three styles so every weapon
  * family animates plausibly while all layers still share one frame grid. `idle2` (optional) is a second
  * STANCE: each hero stands in one of the two, chosen from its never-rerolled look (plan.idleClip).
+ * Optional presentation clips (renderer v3): `run` (a faster gait, chosen by ground speed), `block` (the target of a MISS parries or
+ * dodges), `turn` (a facing change passes through a front view). A set without them behaves exactly as before.
  */
-export const CLIP_KEYS = ["idle", "move", "attack_slash", "attack_thrust", "attack_shoot", "skill", "hit", "ko", "victory", "idle2"] as const;
+export const CLIP_KEYS = ["idle", "move", "attack_slash", "attack_thrust", "attack_shoot", "skill", "hit", "ko", "victory", "idle2", "run", "block", "turn"] as const;
 export type ClipKey = (typeof CLIP_KEYS)[number];
 export const ATTACK_CLIPS = ["attack_slash", "attack_thrust", "attack_shoot"] as const satisfies readonly ClipKey[];
 export type AttackClip = (typeof ATTACK_CLIPS)[number];
@@ -69,6 +71,13 @@ export const clipSchema = z.strictObject({
   loop: z.boolean(),
   /** Frame where the hit "lands" (attacks/skills) — lets effects line up with the animation. */
   impact: int(0, 31).optional(),
+  /** Locomotion clips: sprite pixels covered by one cycle (documentation for the stride-locked clock). */
+  stride: z.number().min(1).max(512).optional(),
+  /**
+   * `run`: the ground speed (world units / s) at which the cycle plays at its own fps. The arena's move clock runs at real time at 62 units / s
+   * (the walk's cadence); a run authored for a faster speed is advanced proportionally slower, so its feet stay planted too.
+   */
+  refSpeed: z.number().min(1).max(1000).optional(),
 });
 export type ClipDef = z.infer<typeof clipSchema>;
 

@@ -1,0 +1,21 @@
+frames 48600, 1.03 ms/frame
+{"warrior":{},"tank":{"eyes-action":6},"rogue":{},"ranger":{},"mage":{"eyes-action":7},"cleric":{}}
+extents {"idle":{"x0":32,"x1":74,"y0":5,"y1":75},"idle2":{"x0":28,"x1":65,"y0":5,"y1":75},"move":{"x0":32,"x1":72,"y0":5,"y1":76},"run":{"x0":32,"x1":72,"y0":6,"y1":76},"attack_slash":{"x0":19,"x1":83,"y0":15,"y1":76},"skill":{"x0":12,"x1":84,"y0":5,"y1":76},"hit":{"x0":23,"x1":73,"y0":5,"y1":75},"block":{"x0":28,"x1":73,"y0":5,"y1":75},"ko":{"x0":5,"x1":94,"y0":5,"y1":78},"victory":{"x0":25,"x1":60,"y0":6,"y1":75},"turn":{"x0":27,"x1":67,"y0":5,"y1":76},"attack_thrust":{"x0":30,"x1":73,"y0":5,"y1":76},"attack_shoot":{"x0":29,"x1":64,"y0":15,"y1":75}}
+6	eyes-action tank-sentinel ko
+5	eyes-action mage-sage attack_thrust
+2	eyes-action mage-sage skill
+tank:eyes-action 
+  sweep-tank-8 tank-sentinel COMMON ko#1: both eyes covered in an action frame
+  sweep-tank-16 tank-sentinel COMMON ko#1: both eyes covered in an action frame
+  sweep-tank-44 tank-sentinel COMMON ko#1: both eyes covered in an action frame
+  sweep-tank-52 tank-sentinel COMMON ko#1: both eyes covered in an action frame
+  sweep-tank-68 tank-sentinel COMMON ko#1: both eyes covered in an action frame
+  sweep-tank-72 tank-sentinel COMMON ko#1: both eyes covered in an action frame
+mage:eyes-action 
+  sweep-mage-2 mage-sage EPIC attack_thrust#2: both eyes covered in an action frame
+  sweep-mage-39 mage-sage LEGENDARY attack_thrust#2: both eyes covered in an action frame
+  sweep-mage-39 mage-sage LEGENDARY skill#4: both eyes covered in an action frame
+  sweep-mage-43 mage-sage LEGENDARY attack_thrust#2: both eyes covered in an action frame
+  sweep-mage-43 mage-sage LEGENDARY skill#4: both eyes covered in an action frame
+  sweep-mage-51 mage-sage LEGENDARY attack_thrust#2: both eyes covered in an action frame
+worst: sweep-mage-39(2:eyes-action) sweep-mage-43(2:eyes-action) sweep-tank-8(1:eyes-action) sweep-tank-16(1:eyes-action) sweep-tank-44(1:eyes-action) sweep-tank-52(1:eyes-action) sweep-tank-68(1:eyes-action) sweep-tank-72(1:eyes-action) sweep-mage-2(1:eyes-action) sweep-mage-51(1:eyes-action) sweep-mage-74(1:eyes-action) sweep-warrior-0(0:)

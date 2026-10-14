@@ -24,7 +24,18 @@ export interface AnimInput {
   backpedal?: boolean;
   /** The run cycle's clock when it is driven by the ground covered (stride-locked: a slow step plays as a walk). Default: `loopClockMs`. */
   moveClockMs?: number;
+  /** Ground speed (world units / s, smoothed). A set with a `run` clip runs above RUN_SPEED and walks below it. */
+  speed?: number;
+  /** ms since this hero parried / dodged a blow (the target of a MISS). A set with a `block` clip plays it. */
+  sinceBlockMs?: number;
+  /** ms since this hero's facing flipped. A set with a `turn` clip plays it (a turn through a front view). */
+  sinceTurnMs?: number;
 }
+
+/** Above this ground speed (world units / s) a hero with a `run` clip runs (the arena adds hysteresis). */
+export const RUN_SPEED = 80;
+/** The arena's move clock runs at real time at this ground speed (the walk's authored cadence). */
+export const MOVE_CLOCK_SPEED = 62;
 
 export interface Playback {
   state: AnimState;
@@ -45,6 +56,7 @@ export function resolveClip(m: SpriteManifest, wanted: ClipKey): ClipKey {
     attack_thrust: ["attack_thrust", "attack_slash"],
     victory: ["victory", "idle"],
     idle2: ["idle2", "idle"],
+    run: ["run", "move"],
   };
   for (const k of chain[wanted] ?? [wanted]) if (m.clips[k]) return k;
   return "idle";
@@ -101,7 +113,16 @@ export function selectPlayback(input: AnimInput, m: SpriteManifest, attackClip: 
   const skillLive = within(m, "skill", input.sinceSkillMs) && !(running && pastImpact(m, "skill", input.sinceSkillMs));
   if (skillLive && (!attackLive || input.sinceSkillMs <= input.sinceAttackMs)) return make("SKILL", "skill", input.sinceSkillMs);
   if (attackLive) return make("ATTACK", atk, input.sinceAttackMs);
+  // a parry / dodge (sets that draw one) reads instead of the hit reaction for a blow that missed
+  if (m.clips.block && input.sinceBlockMs !== undefined && within(m, "block", input.sinceBlockMs) && !running && !(input.sinceHurtMs < input.sinceBlockMs)) return make("BLOCK", "block", input.sinceBlockMs);
   if (within(m, "hit", input.sinceHurtMs) && !running) return make("HIT", "hit", input.sinceHurtMs);
-  if (input.moving && !input.stunned) return make("MOVE", "move", input.moveClockMs ?? input.loopClockMs, input.backpedal === true);
+  // a facing change passes through a front view (sets that draw one)
+  if (m.clips.turn && input.sinceTurnMs !== undefined && within(m, "turn", input.sinceTurnMs) && !input.stunned) return make("TURN", "turn", input.sinceTurnMs);
+  if (input.moving && !input.stunned) {
+    const run = m.clips.run;
+    const clock = input.moveClockMs ?? input.loopClockMs;
+    if (run && (input.speed ?? 0) >= RUN_SPEED) return make("MOVE", "run", clock * (MOVE_CLOCK_SPEED / (run.refSpeed ?? MOVE_CLOCK_SPEED)), input.backpedal === true);
+    return make("MOVE", "move", clock, input.backpedal === true);
+  }
   return make("IDLE", idleClip, input.loopClockMs);
 }

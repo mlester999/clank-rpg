@@ -7,7 +7,7 @@ import { drawHero, HERO_HEIGHT, type HeroLook, type HeroPose } from "@/component
 import { lookFor } from "@/components/hero/look";
 import { getHeroSheet, type HeroSheet, type SpriteSource } from "@/components/sprites/compositor";
 import { drawHeroSprite, playbackFor, type SpriteDraw } from "@/components/sprites/draw";
-import { resolveClip, type AnimInput } from "@/domain/sprites/animator";
+import { resolveClip, RUN_SPEED, type AnimInput } from "@/domain/sprites/animator";
 
 import { rarityVisual } from "@/domain/hero/rarityVisuals";
 
@@ -91,6 +91,14 @@ interface UnitState {
   ox: number;
   /** The run cycle's own clock: it advances with the ground the hero actually covers (a slow step is a walk, a sprint a run — no sliding feet). */
   moveClock: number;
+  /** Smoothed ground speed (world units / s) and whether the hero is running (a set with a `run` clip; hysteresis keeps it from flickering). */
+  speed: number;
+  running: boolean;
+  /** The last parried / dodged blow (the target of a MISS) and the last facing flip — presentation clips of sets that draw them. */
+  blockAt: number;
+  turnAt: number;
+  /** The facing the sprite was last drawn with (0: not drawn yet). */
+  drawnFacing: 0 | 1 | -1;
   /** Screen y of the top of this hero's name plate as last drawn (NaN: none) — numbers rise from above it, never across the name. */
   plateTop: number;
   /** The last label shown at the feet, and its row (labels close together stack instead of overlapping). */
@@ -175,6 +183,11 @@ const MOUTH_Y = 84 * STAGE_K;
 const CHEST_Y = 50 * STAGE_K;
 /** A name plate hangs this far above the top of its hero (hero units). */
 const PLATE_GAP = 8;
+/** Time per display frame spent composing clips ahead of need (ms): before the bell, and — procedural sets only — during the fight. */
+const WARM_BUDGET_MS = 5;
+const WARM_BUDGET_FIGHT_MS = 2;
+/** A display frame that took longer than this (ms) was late: a procedural set warms nothing on it. */
+const LATE_FRAME_MS = 18;
 
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -272,7 +285,7 @@ export class ArenaRenderer {
               slot, fighter: f, look: lookFor(f.appearance, visual), visual, x: sp[0], y: sp[1],
               hp: f.maxHp ?? 1, maxHp: f.maxHp ?? 1, hpShown: f.maxHp ?? 1, hpTrail: f.maxHp ?? 1,
               alive: true, flags: FRAME_FLAG.ALIVE, target: 0, attackAt: -1e9, castAt: -1e9, hurtAt: -1e9, deadAt: -1, textAt: -1e9,
-              facing, spawnFacing: facing, moving: false, vx: 0, landed: false, hurtDir: 1, dashAt: -1e9, dashFrom: [sp[0], sp[1]], shieldAt: -1e9, numbers: 0, ox: 0, moveClock: slot * 137, plateTop: Number.NaN, feetAt: -1e9, feetRow: 0, faceSlot: -1, faceUntil: -1e9, flashAt: -1e9,
+              facing, spawnFacing: facing, moving: false, vx: 0, landed: false, hurtDir: 1, dashAt: -1e9, dashFrom: [sp[0], sp[1]], shieldAt: -1e9, numbers: 0, ox: 0, moveClock: slot * 137, speed: 0, running: false, blockAt: -1e9, turnAt: -1e9, drawnFacing: 0, plateTop: Number.NaN, feetAt: -1e9, feetRow: 0, faceSlot: -1, faceUntil: -1e9, flashAt: -1e9,
               sheet: null, sheetSrc: null, damage: 0, kills: 0, plate: newPlateState(), plateRect: null, plateShown: "full", plateName: "", plateSizes: null, plateSizesKey: "",
             } satisfies UnitState;
           });
@@ -339,7 +352,8 @@ export class ArenaRenderer {
     if (frame.reset) {
       this.fx = [];
       for (const u of this.units) {
-        u.attackAt = u.castAt = u.hurtAt = u.textAt = u.dashAt = u.shieldAt = u.flashAt = u.faceUntil = -1e9;
+        u.attackAt = u.castAt = u.hurtAt = u.textAt = u.dashAt = u.shieldAt = u.flashAt = u.faceUntil = u.blockAt = u.turnAt = -1e9;
+        u.drawnFacing = 0;
         u.deadAt = -1;
         u.facing = u.spawnFacing;
       }
@@ -362,6 +376,8 @@ export class ArenaRenderer {
         u.deadAt = -1;
         u.moving = false;
         u.vx = 0;
+        u.speed = 0;
+        u.running = false;
         u.facing = u.spawnFacing;
         u.hpShown = u.hpTrail = u.hp = u.maxHp;
         continue;
@@ -370,6 +386,9 @@ export class ArenaRenderer {
       u.moving = speed > 14 && !f.jumped;
       // the run cycle advances with the ground covered: ≈ 62 units/s is the authored cadence; slower reads as a walk (clamped so it never freezes)
       if (u.moving) u.moveClock += dtMs * clamp(speed / 62, 0.4, 1.6);
+      // smoothed ground speed for the walk / run choice (a set with a `run` clip), with hysteresis
+      u.speed += ((u.moving ? speed : 0) - u.speed) * (1 - Math.exp(-dtMs / 140));
+      u.running = u.moving && (u.speed > RUN_SPEED || (u.running && u.speed > RUN_SPEED - 9));
       u.vx = f.jumped ? 0 : ((u.x - px) / Math.max(1, dtMs)) * 1000;
       const wasAlive = u.alive;
       u.alive = f.alive;
@@ -467,7 +486,11 @@ export class ArenaRenderer {
         break;
       }
       case EV.MISS:
-        if (B) this.damageText(B, "MISS", "#9aa4b2", 0.8, at);
+        if (B) {
+          this.damageText(B, "MISS", "#9aa4b2", 0.8, at);
+          // the target parries / dodges (a set with a `block` clip): the clip's guard is up as the blow would have landed
+          B.blockAt = at - 60;
+        }
         break;
       case EV.SKILL: {
         if (!A) return;
@@ -1090,24 +1113,35 @@ export class ArenaRenderer {
     for (const f of this.fx) if (f.layer === "air") this.drawFx(ctx, f, now);
     this.fx = this.fx.filter((f) => now - f.t0 < f.dur + 50);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.warmSheets(clock);
+    this.warmSheets(clock, dtMs);
   }
 
   /**
-   * The clips a hero will need in the fight, composed AHEAD of it while the eight stand idle (intro, 3 · 2 · 1): one strip per frame, so a
-   * slow phone never composes a hero's first swing, hit or fall in the middle of the fight. Presentation only — what is drawn, and when, is
-   * unchanged; a clip not warmed in time is composed on first use, as before.
+   * The clips a hero will need in the fight, composed AHEAD of it while the eight stand idle (intro, 3 · 2 · 1), so a slow phone never composes
+   * a hero's first swing, hit or fall in the middle of the fight. Clip by clip across ALL heroes (everyone's walk before anyone's victory),
+   * within a small time budget per display frame: a composed set builds one strip per frame; a procedural set (v3) generates the frames that fit
+   * its budget (this device's measured cost per frame) — at least one per display frame before the bell, and during the fight only what fits,
+   * never on a display frame that is already late. Presentation only — what is drawn, and when, is unchanged; a frame not warmed in time is
+   * generated on first use.
    */
-  private warmSheets(clock: RenderClock): void {
-    if (!isPreFight(clock.phase) || !this.sprites) return;
+  private warmSheets(clock: RenderClock, dtMs: number): void {
+    if (!this.sprites) return;
+    const pre = isPreFight(clock.phase);
+    const procedural = Boolean(this.sprites.procedural);
+    if (!pre && !(procedural && clock.phase === "COMBAT")) return;
+    if (procedural && dtMs > LATE_FRAME_MS) return; // behind already: add nothing to this frame
     const m = this.sprites.manifest;
-    for (const u of this.units) {
-      const sheet = this.sheetFor(u);
-      if (!sheet) continue;
-      for (const clip of [sheet.plan.idleClip, "move", sheet.plan.attackClip, "skill", "hit", "ko", "victory"] as const) {
+    const until = performance.now() + (pre ? WARM_BUDGET_MS : WARM_BUDGET_FIGHT_MS);
+    let force = pre;
+    const order = ["idle", "move", "attack", "skill", "hit", "run", "ko", "block", "turn", "victory"] as const;
+    for (const slot of order) {
+      for (const u of this.units) {
+        const sheet = this.sheetFor(u);
+        if (!sheet) continue;
+        const clip = slot === "idle" ? sheet.plan.idleClip : slot === "attack" ? sheet.plan.attackClip : slot;
         if (!m.clips[clip] || sheet.isComposed(clip)) continue;
-        sheet.strip(clip);
-        return;
+        if (!sheet.warm(clip, until, force)) return;
+        force = false;
       }
     }
   }
@@ -1363,6 +1397,11 @@ export class ArenaRenderer {
     const sinceAttackMs = t && bell >= 0 ? sinceClipStart(t.attacks, bell, impactLeadMs(m.clips[resolveClip(m, sheet.plan.attackClip)])) : Infinity;
     const sinceSkillMs = t && bell >= 0 ? sinceClipStart(t.skills, bell, impactLeadMs(m.clips.skill)) : Infinity;
     const backpedal = u.moving && Math.abs(u.vx) > 10 && Math.sign(u.vx) === -u.facing;
+    // a facing flip starts the `turn` clip (sets that draw one) — never before the bell, never on the first draw
+    if (u.drawnFacing !== u.facing) {
+      if (u.drawnFacing !== 0 && bell >= 0 && u.alive) u.turnAt = now;
+      u.drawnFacing = u.facing;
+    }
     const input: AnimInput = {
       alive: u.alive,
       moving: u.moving && u.alive,
@@ -1375,6 +1414,9 @@ export class ArenaRenderer {
       loopClockMs: now + u.slot * 137, // de-synchronise idle loops between heroes
       moveClockMs: u.moveClock,
       backpedal,
+      speed: u.running ? Math.max(u.speed, RUN_SPEED) : Math.min(u.speed, RUN_SPEED - 1),
+      sinceBlockMs: bell >= 0 ? now - u.blockAt : Infinity,
+      sinceTurnMs: bell >= 0 ? now - u.turnAt : Infinity,
     };
     const sinceFlash = now - u.flashAt;
     const sinceShield = now - u.shieldAt;

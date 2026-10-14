@@ -13,6 +13,7 @@ import { CARD_NAME_MAX, CARD_STATS, CLANK_PURPLE, cardText, formatPower, type He
 import { HERO_CARD_BACKGROUND_DIR, heroArenaLayout, heroCardBackgroundFile } from "@/domain/hero/cardBackground";
 import { rarityVisual, type RarityVisual } from "@/domain/hero/rarityVisuals";
 import { parseManifest } from "@/domain/sprites/spec";
+import { V3_SET, V3_SET_ID, v3Manifest } from "@/domain/sprites/v3/set";
 import { mix } from "@/domain/util/color";
 
 /**
@@ -70,6 +71,11 @@ const SERVER_PAGES = 6;
 
 async function loadSpriteSource(setId: string): Promise<ServerSprites | null> {
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(setId)) return null; // a set id becomes a directory name: never anything else
+  if (setId === V3_SET_ID) {
+    // hero renderer v3 is procedural: nothing to read from disk, the hero is generated from its look
+    const factory: CanvasFactory = (w, h) => createCanvas(w, h) as unknown as HTMLCanvasElement;
+    return { src: { manifest: v3Manifest(), images: {}, factory, procedural: V3_SET }, load: async () => undefined };
+  }
   let hit = sources.get(setId);
   if (!hit) {
     hit = (async () => {
@@ -341,7 +347,7 @@ function drawArt(ctx: SKRSContext2D, model: HeroCardModel, src: SpriteSource | n
 /** Renders a hero card. Never throws for a valid model: missing art falls back to the vector hero, a missing font to a system one. */
 export async function renderHeroCardPng(model: HeroCardModel, opts: { spriteSet?: string; backgroundDir?: string } = {}): Promise<Buffer> {
   ensureFont();
-  const sprites = await loadSpriteSource(opts.spriteSet ?? "clank-dev-v2");
+  const sprites = await loadSpriteSource(opts.spriteSet ?? V3_SET_ID);
   const arena = await loadArenaImage(model.rarity, opts.backgroundDir ?? defaultArenaDir());
   const src = sprites?.src ?? null;
   // the hero's own skeleton page — read last, right before the synchronous drawing below (no other card can evict it in between)

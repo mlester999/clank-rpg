@@ -3,6 +3,7 @@ import type { SpriteConfig } from "../sprites/config";
 import { graphemes } from "../character/displayName";
 import { STAT_KEYS, STAT_LABELS, type StatBlock } from "../stats";
 import { hashObject } from "../util/hash";
+import { V3_ART_REVISION, V3_SET_ID } from "../sprites/v3/version";
 import { RARITY_LADDER } from "./rarity";
 import { heroUrl } from "./publicId";
 
@@ -74,7 +75,9 @@ export const CARD_NAME_MAX = 40;
 
 /** A short content key for the image / OG URL: it changes exactly when something visible on the card changes (a reroll, a rollback to a different look, a rename, the sprite set or its art revision, …). */
 export function cardKey(m: HeroCardModel): string {
-  return hashObject({ n: cardText(m.name, CARD_NAME_MAX), c: m.classId, r: m.rarity, p: m.power, s: m.stats, l: m.look, k: m.seasonRank, a: CARD_ART_REVISION }).slice(0, 12);
+  // a procedural set redraws in place when its art revision changes: that revision is part of the key (cards drawn by other sets keep theirs)
+  const a = m.look.spriteSet === V3_SET_ID ? `${CARD_ART_REVISION}:v3.${V3_ART_REVISION}` : CARD_ART_REVISION;
+  return hashObject({ n: cardText(m.name, CARD_NAME_MAX), c: m.classId, r: m.rarity, p: m.power, s: m.stats, l: m.look, k: m.seasonRank, a }).slice(0, 12);
 }
 
 /** "Legendary Mage" */

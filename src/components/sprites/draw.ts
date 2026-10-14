@@ -23,6 +23,22 @@ export interface SpriteDraw {
   auraFrame?: number;
 }
 
+/**
+ * Pixel-perfect placement for pixel art: when a sprite pixel would land on a NEARLY whole number of device pixels (within 12 % — e.g. 1.96 on a
+ * desktop stage), the scale snaps to that whole number and the hero's feet to the device-pixel grid, so every sprite pixel is an exact square
+ * (no uneven 1-px / 2-px columns from nearest-neighbour scaling). Farther from a whole number the size is kept (heroes never jump in size).
+ * Only the drawn size of the art changes, by at most 12 %; nothing about positions or combat.
+ */
+export function snapPixelScale(ctx: CanvasRenderingContext2D, k: number): number {
+  if (typeof ctx.getTransform !== "function") return k;
+  const t = ctx.getTransform();
+  const dev = Math.hypot(t.a, t.b) * k;
+  const near = Math.round(dev);
+  if (near < 1 || Math.abs(t.b) > 1e-6 || Math.abs(t.c) > 1e-6 || Math.abs(dev - near) / near > 0.12) return k;
+  ctx.setTransform(t.a, t.b, t.c, t.d, Math.round(t.e), Math.round(t.f));
+  return k * (near / dev);
+}
+
 /** Chooses the playback for a hero. Thin wrapper so the renderer imports from one place. */
 export function playbackFor(sheet: HeroSheet, src: SpriteSource, input: AnimInput): Playback {
   return selectPlayback(input, src.manifest, sheet.plan.attackClip, sheet.plan.idleClip);
@@ -36,14 +52,15 @@ export function playbackFor(sheet: HeroSheet, src: SpriteSource, input: AnimInpu
 export function drawHeroSprite(ctx: CanvasRenderingContext2D, src: SpriteSource, sheet: HeroSheet, d: SpriteDraw, heightUnits: number): boolean {
   const m = src.manifest;
   const dir = directionBlock(src, d.direction);
-  const strip = sheet.strip(d.playback.clip, dir.index);
+  const strip = sheet.strip(d.playback.clip, dir.index, d.playback.frame);
   if (!strip) return false;
-  const k = heightUnits / m.nominalHeightPx;
+  let k = heightUnits / m.nominalHeightPx;
   const sx = d.playback.frame * m.frame.w;
   ctx.save();
   ctx.imageSmoothingEnabled = m.pixelArt === false;
   ctx.imageSmoothingQuality = "high";
   if (d.alpha !== undefined) ctx.globalAlpha *= d.alpha;
+  if (m.pixelArt !== false) k = snapPixelScale(ctx, k);
   ctx.scale(dir.mirror ? -k : k, k);
   const dx = -m.anchor.x;
   const dy = -m.anchor.y;
@@ -62,8 +79,8 @@ export function drawHeroSprite(ctx: CanvasRenderingContext2D, src: SpriteSource,
   const shield = d.shield ?? 0;
   const flash = d.flash ?? 0;
   if (flash > 0.01 || d.chill || shield > 0.01) {
-    const white = sheet.silhouette(d.playback.clip, dir.index);
-    const cool = d.chill || shield > 0.01 ? sheet.silhouette(d.playback.clip, dir.index, "#8fe3ff") : null;
+    const white = sheet.silhouette(d.playback.clip, dir.index, "#ffffff", d.playback.frame);
+    const cool = d.chill || shield > 0.01 ? sheet.silhouette(d.playback.clip, dir.index, "#8fe3ff", d.playback.frame) : null;
     if (white) {
       const base = ctx.globalAlpha;
       const over = (sil: HTMLCanvasElement | null, alpha: number, x = 0, w = m.frame.w) => {

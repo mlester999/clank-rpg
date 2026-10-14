@@ -69,7 +69,7 @@ describe("migration 2300 — combat rules 3.1.0 engagement + hero renderer v2 (s
     const after = await loadSettings(db);
     expect(after.combat).toEqual(DEFAULT_SETTINGS.combat); // the app now reads EXACTLY the shipped 3.1.0 combat
     expect({ ...after.combat, engagement: undefined }).toEqual({ ...before.combat, engagement: undefined }); // …and only `engagement` was added
-    expect(after.visuals).toEqual(DEFAULT_SETTINGS.visuals);
+    expect(after.visuals).toEqual({ spriteSet: "clank-dev-v2", disabledCosmetics: [] }); // 2300's own target (renderer v3 is moved by migration 2600)
     expect({ ...after, combat: before.combat, visuals: before.visuals }).toEqual(before);
     expect(await otherRows()).toEqual(others);
     expect(await heroData()).toEqual(heroes);

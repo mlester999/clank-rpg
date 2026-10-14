@@ -1,0 +1,1160 @@
+{
+ "perf-v3-desktop": {
+  "url": "http://localhost:3792",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 150,
+   "durationMs": 32700,
+   "fighters": [
+    "Hammer Hana (warrior LEGENDARY)",
+    "Ironclad Ivy (ranger COMMON)",
+    "Turbine Tess (warrior RARE)",
+    "Hinge Hugo (cleric EPIC)",
+    "Bellows Bo (warrior RARE)",
+    "Piston Pete (ranger EPIC)",
+    "Mallet Mae (tank RARE)",
+    "Dynamo Dan (cleric COMMON)"
+   ]
+  },
+  "perf": {
+   "frames": 2617,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 33.4,
+   "max": 66.7,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 28,
+   "sprite": {
+    "strips": 183,
+    "frames": 1292,
+    "ms": 1112.7999994754791,
+    "maxFrameMs": 22.400000035762787
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 67,
+     "sinceStart": 44749,
+     "sinceBell": 39249,
+     "sinceEnd": 6549
+    },
+    {
+     "d": 67,
+     "sinceStart": 44849,
+     "sinceBell": 39349,
+     "sinceEnd": 6649
+    },
+    {
+     "d": 67,
+     "sinceStart": 44916,
+     "sinceBell": 39416,
+     "sinceEnd": 6716
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 74,
+   "load": 77
+  }
+ },
+ "perf-v3-mobile": {
+  "url": "http://localhost:3792",
+  "preset": "mobile",
+  "throttle": 1,
+  "battle": {
+   "number": 152,
+   "durationMs": 36300,
+   "fighters": [
+    "Grease Monkey (cleric EPIC)",
+    "Ratchet Rex (rogue EPIC)",
+    "Bellows Bo (warrior RARE)",
+    "Boltcutter (tank RARE)",
+    "Gantry Gil (ranger RARE)",
+    "Mallet Mae (tank RARE)",
+    "Rivet (cleric RARE)",
+    "Anvil Ada (ranger LEGENDARY)"
+   ]
+  },
+  "perf": {
+   "frames": 2897,
+   "p50": 16.7,
+   "p95": 16.7,
+   "p99": 16.8,
+   "max": 66.7,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 23.4,
+   "sprite": {
+    "strips": 189,
+    "frames": 1317,
+    "ms": 1245.1000002622604,
+    "maxFrameMs": 21.399999976158142
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 67,
+     "sinceStart": 48382,
+     "sinceBell": 42882,
+     "sinceEnd": 6582
+    },
+    {
+     "d": 50,
+     "sinceStart": 48449,
+     "sinceBell": 42949,
+     "sinceEnd": 6649
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 75,
+   "load": 77
+  }
+ },
+ "v3-mobile-cpu4-7": {
+  "url": "http://localhost:3792",
+  "preset": "mobile",
+  "throttle": 4,
+  "battle": {
+   "number": 115,
+   "durationMs": 32200,
+   "fighters": [
+    "Gasket Gale (ranger LEGENDARY)",
+    "Axle Axel (ranger EPIC)",
+    "Sprocket Sue (ranger LEGENDARY)",
+    "Torque Tina (ranger RARE)",
+    "Kettle Kit (mage RARE)",
+    "Piston Pete (ranger EPIC)",
+    "Furnace Finn (tank EPIC)",
+    "Nozzle Nia (mage EPIC)"
+   ]
+  },
+  "perf": {
+   "frames": 2640,
+   "p50": 16.7,
+   "p95": 16.7,
+   "p99": 16.8,
+   "max": 100,
+   "longTasks": 1,
+   "longTaskMs": 50,
+   "heapMB": 23.4,
+   "sprite": {
+    "strips": 107,
+    "frames": 692,
+    "ms": 2897.3999990820885,
+    "maxFrameMs": 38.30000001192093
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 83,
+     "sinceStart": 44,
+     "sinceBell": -5456,
+     "sinceEnd": -37656
+    },
+    {
+     "d": 100,
+     "sinceStart": 43925,
+     "sinceBell": 38425,
+     "sinceEnd": 6225
+    },
+    {
+     "d": 50,
+     "sinceStart": 44242,
+     "sinceBell": 38742,
+     "sinceEnd": 6542
+    },
+    {
+     "d": 50,
+     "sinceStart": 44292,
+     "sinceBell": 38792,
+     "sinceEnd": 6592
+    },
+    {
+     "d": 50,
+     "sinceStart": 44342,
+     "sinceBell": 38842,
+     "sinceEnd": 6642
+    }
+   ],
+   "longsAt": [
+    {
+     "d": 50,
+     "sinceStart": 43944,
+     "sinceBell": 38444,
+     "sinceEnd": 6244
+    }
+   ]
+  },
+  "nav": {
+   "domContentLoaded": 210,
+   "load": 210
+  }
+ },
+ "v3-mobile-cpu4-8": {
+  "url": "http://localhost:3792",
+  "preset": "mobile",
+  "throttle": 4,
+  "battle": {
+   "number": 117,
+   "durationMs": 39200,
+   "fighters": [
+    "Boltcutter (tank RARE)",
+    "Brass Bruno (warrior COMMON)",
+    "Chisel Chen (mage RARE)",
+    "Ember Ellis (warrior COMMON)",
+    "Lathe Lars (tank COMMON)",
+    "Forge Fay (ranger LEGENDARY)",
+    "Soldier Sol (mage RARE)",
+    "Hinge Hugo (cleric EPIC)"
+   ]
+  },
+  "perf": {
+   "frames": 3057,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 16.8,
+   "max": 66.7,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 28,
+   "sprite": {
+    "strips": 131,
+    "frames": 894,
+    "ms": 3713.7999995946884,
+    "maxFrameMs": 45.80000001192093
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 67,
+     "sinceStart": 42,
+     "sinceBell": -5458,
+     "sinceEnd": -44658
+    },
+    {
+     "d": 67,
+     "sinceStart": 50940,
+     "sinceBell": 45440,
+     "sinceEnd": 6240
+    },
+    {
+     "d": 50,
+     "sinceStart": 51240,
+     "sinceBell": 45740,
+     "sinceEnd": 6540
+    },
+    {
+     "d": 50,
+     "sinceStart": 51290,
+     "sinceBell": 45790,
+     "sinceEnd": 6590
+    },
+    {
+     "d": 50,
+     "sinceStart": 51340,
+     "sinceBell": 45840,
+     "sinceEnd": 6640
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 67,
+   "load": 146
+  }
+ },
+ "v3-mobile-cpu4-9": {
+  "url": "http://localhost:3792",
+  "preset": "mobile",
+  "throttle": 4,
+  "battle": {
+   "number": 146,
+   "durationMs": 50100,
+   "fighters": [
+    "Furnace Finn (tank EPIC)",
+    "Vice Vera (cleric COMMON)",
+    "Grease Monkey (cleric EPIC)",
+    "Flywheel (rogue RARE)",
+    "Gantry Gil (ranger RARE)",
+    "Ratchet Rex (rogue EPIC)",
+    "Jack Jolt (cleric RARE)",
+    "Gearbox Gus (tank RARE)"
+   ]
+  },
+  "perf": {
+   "frames": 3713,
+   "p50": 16.7,
+   "p95": 16.7,
+   "p99": 16.8,
+   "max": 100,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 19.6,
+   "sprite": {
+    "strips": 128,
+    "frames": 857,
+    "ms": 3600.999998688698,
+    "maxFrameMs": 43.200000047683716
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 83,
+     "sinceStart": 46,
+     "sinceBell": -5454,
+     "sinceEnd": -55554
+    },
+    {
+     "d": 100,
+     "sinceStart": 61827,
+     "sinceBell": 56327,
+     "sinceEnd": 6227
+    },
+    {
+     "d": 50,
+     "sinceStart": 62143,
+     "sinceBell": 56643,
+     "sinceEnd": 6543
+    },
+    {
+     "d": 50,
+     "sinceStart": 62193,
+     "sinceBell": 56693,
+     "sinceEnd": 6593
+    },
+    {
+     "d": 50,
+     "sinceStart": 62243,
+     "sinceBell": 56743,
+     "sinceEnd": 6643
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 74,
+   "load": 158
+  }
+ },
+ "v3-mobile-cpu4-10": {
+  "url": "http://localhost:3792",
+  "preset": "mobile",
+  "throttle": 4,
+  "battle": {
+   "number": 148,
+   "durationMs": 20300,
+   "fighters": [
+    "Chisel Chen (mage RARE)",
+    "Axle Axel (ranger EPIC)",
+    "Sprocket Sue (ranger LEGENDARY)",
+    "Torque Tina (ranger RARE)",
+    "Brass Bruno (warrior COMMON)",
+    "Anvil Ada (ranger LEGENDARY)",
+    "Lathe Lars (tank COMMON)",
+    "Gasket Gale (ranger LEGENDARY)"
+   ]
+  },
+  "perf": {
+   "frames": 1925,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 16.8,
+   "max": 116.8,
+   "longTasks": 1,
+   "longTaskMs": 59,
+   "heapMB": 17.4,
+   "sprite": {
+    "strips": 139,
+    "frames": 912,
+    "ms": 3764.399999976158,
+    "maxFrameMs": 43.5
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 100,
+     "sinceStart": 41,
+     "sinceBell": -5459,
+     "sinceEnd": -25759
+    },
+    {
+     "d": 117,
+     "sinceStart": 32057,
+     "sinceBell": 26557,
+     "sinceEnd": 6257
+    },
+    {
+     "d": 67,
+     "sinceStart": 32340,
+     "sinceBell": 26840,
+     "sinceEnd": 6540
+    },
+    {
+     "d": 50,
+     "sinceStart": 32407,
+     "sinceBell": 26907,
+     "sinceEnd": 6607
+    },
+    {
+     "d": 50,
+     "sinceStart": 32457,
+     "sinceBell": 26957,
+     "sinceEnd": 6657
+    }
+   ],
+   "longsAt": [
+    {
+     "d": 59,
+     "sinceStart": 32070,
+     "sinceBell": 26570,
+     "sinceEnd": 6270
+    }
+   ]
+  },
+  "nav": {
+   "domContentLoaded": 71,
+   "load": 152
+  }
+ },
+ "v3-desktop": {
+  "url": "http://localhost:3792",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 142,
+   "durationMs": 29500,
+   "fighters": [
+    "Hammer Hana (warrior LEGENDARY)",
+    "Sprocket Sue (ranger LEGENDARY)",
+    "Bellows Bo (warrior RARE)",
+    "Nozzle Nia (mage EPIC)",
+    "Axle Axel (ranger EPIC)",
+    "Lever Lou (mage COMMON)",
+    "Lady Lathe (warrior EPIC)",
+    "Boltcutter (tank RARE)"
+   ]
+  },
+  "perf": {
+   "frames": 2379,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 33.4,
+   "max": 50,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 23.4,
+   "sprite": {
+    "strips": 189,
+    "frames": 1342,
+    "ms": 1238.3000009059906,
+    "maxFrameMs": 13.5
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 50,
+     "sinceStart": 1507,
+     "sinceBell": -3993,
+     "sinceEnd": -33493
+    },
+    {
+     "d": 50,
+     "sinceStart": 33206,
+     "sinceBell": 27706,
+     "sinceEnd": -1794
+    },
+    {
+     "d": 50,
+     "sinceStart": 35256,
+     "sinceBell": 29756,
+     "sinceEnd": 256
+    },
+    {
+     "d": 50,
+     "sinceStart": 35906,
+     "sinceBell": 30406,
+     "sinceEnd": 906
+    },
+    {
+     "d": 50,
+     "sinceStart": 36539,
+     "sinceBell": 31039,
+     "sinceEnd": 1539
+    },
+    {
+     "d": 50,
+     "sinceStart": 38405,
+     "sinceBell": 32905,
+     "sinceEnd": 3405
+    },
+    {
+     "d": 50,
+     "sinceStart": 38639,
+     "sinceBell": 33139,
+     "sinceEnd": 3639
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 139,
+   "load": 221
+  }
+ },
+ "v3-mobile": {
+  "url": "http://localhost:3792",
+  "preset": "mobile",
+  "throttle": 1,
+  "battle": {
+   "number": 144,
+   "durationMs": 41700,
+   "fighters": [
+    "Furnace Finn (tank EPIC)",
+    "Ratchet Rex (rogue EPIC)",
+    "Pinion Pia (warrior COMMON)",
+    "Forge Fay (ranger LEGENDARY)",
+    "Gasket Gale (ranger LEGENDARY)",
+    "Soldier Sol (mage RARE)",
+    "Jack Jolt (cleric RARE)",
+    "Welder Wren (tank COMMON)"
+   ]
+  },
+  "perf": {
+   "frames": 3230,
+   "p50": 16.7,
+   "p95": 16.7,
+   "p99": 16.8,
+   "max": 16.8,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 48.1,
+   "sprite": {
+    "strips": 188,
+    "frames": 1379,
+    "ms": 1239.6999994516373,
+    "maxFrameMs": 21.69999998807907
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 56,
+   "load": 86
+  }
+ },
+ "perf-v2-desktop": {
+  "url": "http://localhost:3793",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 88,
+   "durationMs": 39700,
+   "fighters": [
+    "Welder Wren (tank COMMON)",
+    "Sprocket Sue (ranger LEGENDARY)",
+    "Pinion Pia (warrior COMMON)",
+    "Brass Bruno (warrior COMMON)",
+    "Gearbox Gus (tank RARE)",
+    "Flywheel (rogue RARE)",
+    "Boltcutter (tank RARE)",
+    "Soldier Sol (mage RARE)"
+   ]
+  },
+  "perf": {
+   "frames": 3028,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 33.4,
+   "max": 66.7,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 19.6,
+   "sprite": null,
+   "spriteRequests": 17,
+   "spriteBytes": 8008723,
+   "spriteDecodedBytes": 11085437,
+   "spikesAt": [
+    {
+     "d": 50,
+     "sinceStart": 41734,
+     "sinceBell": 36234,
+     "sinceEnd": -3466
+    },
+    {
+     "d": 50,
+     "sinceStart": 46750,
+     "sinceBell": 41250,
+     "sinceEnd": 1550
+    },
+    {
+     "d": 67,
+     "sinceStart": 51783,
+     "sinceBell": 46283,
+     "sinceEnd": 6583
+    },
+    {
+     "d": 50,
+     "sinceStart": 51850,
+     "sinceBell": 46350,
+     "sinceEnd": 6650
+    },
+    {
+     "d": 67,
+     "sinceStart": 51900,
+     "sinceBell": 46400,
+     "sinceEnd": 6700
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 135,
+   "load": 139
+  }
+ },
+ "perf-v2-mobile": {
+  "url": "http://localhost:3793",
+  "preset": "mobile",
+  "throttle": 1,
+  "battle": {
+   "number": 90,
+   "durationMs": 56600,
+   "fighters": [
+    "Forge Fay (ranger LEGENDARY)",
+    "Axle Axel (ranger EPIC)",
+    "Bellows Bo (warrior RARE)",
+    "Steamfitter (tank EPIC)",
+    "Turbine Tess (warrior RARE)",
+    "Mallet Mae (tank RARE)",
+    "Ironclad Ivy (ranger COMMON)",
+    "Chisel Chen (mage RARE)"
+   ]
+  },
+  "perf": {
+   "frames": 4115,
+   "p50": 16.7,
+   "p95": 16.7,
+   "p99": 16.8,
+   "max": 50.1,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 19.6,
+   "sprite": null,
+   "spriteRequests": 18,
+   "spriteBytes": 8638134,
+   "spriteDecodedBytes": 11714548,
+   "spikesAt": [
+    {
+     "d": 50,
+     "sinceStart": 68648,
+     "sinceBell": 63148,
+     "sinceEnd": 6548
+    },
+    {
+     "d": 50,
+     "sinceStart": 68698,
+     "sinceBell": 63198,
+     "sinceEnd": 6598
+    },
+    {
+     "d": 50,
+     "sinceStart": 68748,
+     "sinceBell": 63248,
+     "sinceEnd": 6648
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 74,
+   "load": 77
+  }
+ },
+ "v2-mobile-cpu4-1": {
+  "url": "http://localhost:3793",
+  "preset": "mobile",
+  "throttle": 4,
+  "battle": {
+   "number": 75,
+   "durationMs": 28800,
+   "fighters": [
+    "Piston Pete (ranger EPIC)",
+    "Brass Bruno (warrior COMMON)",
+    "Flywheel (rogue RARE)",
+    "Clutch (warrior LEGENDARY)",
+    "Lady Lathe (warrior EPIC)",
+    "Kettle Kit (mage RARE)",
+    "Cog Cadet (cleric LEGENDARY)",
+    "Grease Monkey (cleric EPIC)"
+   ]
+  },
+  "perf": {
+   "frames": 2429,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 16.8,
+   "max": 116.7,
+   "longTasks": 1,
+   "longTaskMs": 66,
+   "heapMB": 19.6,
+   "sprite": null,
+   "spriteRequests": 19,
+   "spriteBytes": 9023627,
+   "spriteDecodedBytes": 12099741,
+   "spikesAt": [
+    {
+     "d": 100,
+     "sinceStart": 41,
+     "sinceBell": -5459,
+     "sinceEnd": -34259
+    },
+    {
+     "d": 84,
+     "sinceStart": 174,
+     "sinceBell": -5326,
+     "sinceEnd": -34126
+    },
+    {
+     "d": 117,
+     "sinceStart": 40556,
+     "sinceBell": 35056,
+     "sinceEnd": 6256
+    },
+    {
+     "d": 67,
+     "sinceStart": 40706,
+     "sinceBell": 35206,
+     "sinceEnd": 6406
+    },
+    {
+     "d": 67,
+     "sinceStart": 40856,
+     "sinceBell": 35356,
+     "sinceEnd": 6556
+    },
+    {
+     "d": 50,
+     "sinceStart": 40922,
+     "sinceBell": 35422,
+     "sinceEnd": 6622
+    },
+    {
+     "d": 50,
+     "sinceStart": 40972,
+     "sinceBell": 35472,
+     "sinceEnd": 6672
+    }
+   ],
+   "longsAt": [
+    {
+     "d": 66,
+     "sinceStart": 40559,
+     "sinceBell": 35059,
+     "sinceEnd": 6259
+    }
+   ]
+  },
+  "nav": {
+   "domContentLoaded": 488,
+   "load": 489
+  }
+ },
+ "v2-mobile-cpu4-2": {
+  "url": "http://localhost:3793",
+  "preset": "mobile",
+  "throttle": 4,
+  "battle": {
+   "number": 77,
+   "durationMs": 39300,
+   "fighters": [
+    "Anvil Ada (ranger LEGENDARY)",
+    "Soldier Sol (mage RARE)",
+    "Torque Tina (ranger RARE)",
+    "Jack Jolt (cleric RARE)",
+    "Pinion Pia (warrior COMMON)",
+    "Welder Wren (tank COMMON)",
+    "Gantry Gil (ranger RARE)",
+    "Steamfitter (tank EPIC)"
+   ]
+  },
+  "perf": {
+   "frames": 3062,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 16.8,
+   "max": 100,
+   "longTasks": 2,
+   "longTaskMs": 102,
+   "heapMB": 19.6,
+   "sprite": null,
+   "spriteRequests": 18,
+   "spriteBytes": 8638134,
+   "spriteDecodedBytes": 11714548,
+   "spikesAt": [
+    {
+     "d": 117,
+     "sinceStart": 27,
+     "sinceBell": -5473,
+     "sinceEnd": -44773
+    },
+    {
+     "d": 67,
+     "sinceStart": 160,
+     "sinceBell": -5340,
+     "sinceEnd": -44640
+    },
+    {
+     "d": 100,
+     "sinceStart": 51025,
+     "sinceBell": 45525,
+     "sinceEnd": 6225
+    },
+    {
+     "d": 67,
+     "sinceStart": 51158,
+     "sinceBell": 45658,
+     "sinceEnd": 6358
+    },
+    {
+     "d": 67,
+     "sinceStart": 51341,
+     "sinceBell": 45841,
+     "sinceEnd": 6541
+    },
+    {
+     "d": 50,
+     "sinceStart": 51408,
+     "sinceBell": 45908,
+     "sinceEnd": 6608
+    },
+    {
+     "d": 50,
+     "sinceStart": 51458,
+     "sinceBell": 45958,
+     "sinceEnd": 6658
+    }
+   ],
+   "longsAt": [
+    {
+     "d": 52,
+     "sinceStart": 43,
+     "sinceBell": -5457,
+     "sinceEnd": -44757
+    },
+    {
+     "d": 50,
+     "sinceStart": 51042,
+     "sinceBell": 45542,
+     "sinceEnd": 6242
+    }
+   ]
+  },
+  "nav": {
+   "domContentLoaded": 76,
+   "load": 147
+  }
+ },
+ "v2-desktop": {
+  "url": "http://localhost:3793",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 26,
+   "durationMs": 32500,
+   "fighters": [
+    "Gasket Gale (ranger LEGENDARY)",
+    "Hammer Hana (warrior LEGENDARY)",
+    "Furnace Finn (tank EPIC)",
+    "Copper Cleo (mage LEGENDARY)",
+    "Kettle Kit (mage RARE)",
+    "Turbine Tess (warrior RARE)",
+    "Jack Jolt (cleric RARE)",
+    "Lathe Lars (tank COMMON)"
+   ]
+  },
+  "perf": {
+   "frames": 2566,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 33.4,
+   "max": 50.1,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 19.6,
+   "sprite": null,
+   "spriteRequests": 17,
+   "spriteBytes": 8036317,
+   "spriteDecodedBytes": 11113031
+  },
+  "nav": {
+   "domContentLoaded": 327,
+   "load": 327
+  }
+ },
+ "v2-mobile": {
+  "url": "http://localhost:3793",
+  "preset": "mobile",
+  "throttle": 1,
+  "battle": {
+   "number": 31,
+   "durationMs": 28700,
+   "fighters": [
+    "Turbine Tess (warrior RARE)",
+    "Forge Fay (ranger LEGENDARY)",
+    "Piston Pete (ranger EPIC)",
+    "Hinge Hugo (cleric EPIC)",
+    "Hammer Hana (warrior LEGENDARY)",
+    "Brass Bruno (warrior COMMON)",
+    "Axle Axel (ranger EPIC)",
+    "Boltcutter (tank RARE)"
+   ]
+  },
+  "perf": {
+   "frames": 2450,
+   "p50": 16.7,
+   "p95": 16.7,
+   "p99": 16.8,
+   "max": 16.8,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 19.6,
+   "sprite": null,
+   "spriteRequests": 18,
+   "spriteBytes": 8656296,
+   "spriteDecodedBytes": 11732710
+  },
+  "nav": {
+   "domContentLoaded": 286,
+   "load": 286
+  }
+ },
+ "duel-ranger-vs-warrior": {
+  "url": "http://localhost:3792",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 156,
+   "durationMs": 16300,
+   "fighters": [
+    "Bellows Bo (warrior RARE)",
+    "Torque Tina (ranger RARE)"
+   ]
+  },
+  "perf": {
+   "frames": 1609,
+   "p50": 16.7,
+   "p95": 33.3,
+   "p99": 33.4,
+   "max": 50.1,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 15.4,
+   "sprite": {
+    "strips": 252,
+    "frames": 1827,
+    "ms": 1612,
+    "maxFrameMs": 22
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 50,
+     "sinceStart": 23799,
+     "sinceBell": 18299,
+     "sinceEnd": 1999
+    },
+    {
+     "d": 50,
+     "sinceStart": 25199,
+     "sinceBell": 19699,
+     "sinceEnd": 3399
+    },
+    {
+     "d": 50,
+     "sinceStart": 25398,
+     "sinceBell": 19898,
+     "sinceEnd": 3598
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 81,
+   "load": 81
+  }
+ },
+ "duel-tank-vs-mage": {
+  "url": "http://localhost:3792",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 160,
+   "durationMs": 33200,
+   "fighters": [
+    "Copper Cleo (mage LEGENDARY)",
+    "Crankshaft Kai (tank LEGENDARY)"
+   ]
+  },
+  "perf": {
+   "frames": 2615,
+   "p50": 16.7,
+   "p95": 16.8,
+   "p99": 33.4,
+   "max": 50.1,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 13.6,
+   "sprite": {
+    "strips": 45,
+    "frames": 297,
+    "ms": 286.09999972581863,
+    "maxFrameMs": 10.799999952316284
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 50,
+     "sinceStart": 1503,
+     "sinceBell": -3997,
+     "sinceEnd": -37197
+    },
+    {
+     "d": 50,
+     "sinceStart": 3903,
+     "sinceBell": -1597,
+     "sinceEnd": -34797
+    },
+    {
+     "d": 50,
+     "sinceStart": 8103,
+     "sinceBell": 2603,
+     "sinceEnd": -30597
+    },
+    {
+     "d": 50,
+     "sinceStart": 11503,
+     "sinceBell": 6003,
+     "sinceEnd": -27197
+    },
+    {
+     "d": 50,
+     "sinceStart": 16503,
+     "sinceBell": 11003,
+     "sinceEnd": -22197
+    },
+    {
+     "d": 50,
+     "sinceStart": 39602,
+     "sinceBell": 34102,
+     "sinceEnd": 902
+    },
+    {
+     "d": 50,
+     "sinceStart": 40319,
+     "sinceBell": 34819,
+     "sinceEnd": 1619
+    },
+    {
+     "d": 50,
+     "sinceStart": 42118,
+     "sinceBell": 36618,
+     "sinceEnd": 3418
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 43,
+   "load": 71
+  }
+ },
+ "duel-rogue-vs-cleric": {
+  "url": "http://localhost:3792",
+  "preset": "desktop",
+  "throttle": 1,
+  "battle": {
+   "number": 164,
+   "durationMs": 20900,
+   "fighters": [
+    "Ratchet Rex (rogue EPIC)",
+    "Hinge Hugo (cleric EPIC)"
+   ]
+  },
+  "perf": {
+   "frames": 1880,
+   "p50": 16.7,
+   "p95": 33.2,
+   "p99": 33.4,
+   "max": 50,
+   "longTasks": 0,
+   "longTaskMs": 0,
+   "heapMB": 12.1,
+   "sprite": {
+    "strips": 42,
+    "frames": 294,
+    "ms": 294.09999960660934,
+    "maxFrameMs": 12.200000047683716
+   },
+   "spriteRequests": 0,
+   "spriteBytes": 0,
+   "spriteDecodedBytes": 0,
+   "spikesAt": [
+    {
+     "d": 50,
+     "sinceStart": 8107,
+     "sinceBell": 2607,
+     "sinceEnd": -18293
+    },
+    {
+     "d": 50,
+     "sinceStart": 16506,
+     "sinceBell": 11006,
+     "sinceEnd": -9894
+    },
+    {
+     "d": 50,
+     "sinceStart": 27306,
+     "sinceBell": 21806,
+     "sinceEnd": 906
+    },
+    {
+     "d": 50,
+     "sinceStart": 29806,
+     "sinceBell": 24306,
+     "sinceEnd": 3406
+    }
+   ],
+   "longsAt": []
+  },
+  "nav": {
+   "domContentLoaded": 42,
+   "load": 71
+  }
+ }
+}

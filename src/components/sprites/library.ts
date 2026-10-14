@@ -1,4 +1,5 @@
 import { safeParseManifest } from "@/domain/sprites/spec";
+import { V3_SET, V3_SET_ID, v3Manifest } from "@/domain/sprites/v3/set";
 
 import type { AtlasStatus, SpriteSource } from "./compositor";
 
@@ -21,8 +22,49 @@ export const SPRITE_RETRY_MS = [1500, 4000, 10_000, 30_000] as const;
 const IMAGE_TRIES = 3;
 const attempts = new Map<string, number>();
 
-/** Hero renderer v2 (`clank-dev-v1` stays shipped and selectable: the same layer ids, so any hero draws in either). */
+/**
+ * The set a page draws with until the server has said which one is live (`visuals.spriteSet`, see `announceSpriteSet`): the set that was live
+ * before hero renderer v3, so shipping v3's code changes nothing on screen until the setting itself is switched. Every set stays shipped and
+ * selectable (`clank-v3`, `clank-dev-v2`, `clank-dev-v1`): the same stored looks draw in any of them.
+ */
 export const DEFAULT_SPRITE_SET = "clank-dev-v2";
+
+const ACTIVE_KEY = "clank.spriteSet";
+const SET_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
+let active: string | null = null;
+const activeListeners = new Set<() => void>();
+
+/**
+ * The sprite set the server says is live, as last heard on this device (the Arena state carries it; a hero page's look carries it too) —
+ * remembered across pages, so a portrait on a page that does not load the settings draws in the same set as the Arena.
+ */
+export function activeSpriteSet(): string {
+  if (active !== null) return active;
+  let stored: string | null = null;
+  try {
+    stored = typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_KEY) : null;
+  } catch {
+    stored = null; // storage blocked: the default until the server says otherwise
+  }
+  return (active = stored && SET_ID.test(stored) ? stored : DEFAULT_SPRITE_SET);
+}
+
+/** The server said which set is live (`visuals.spriteSet`): every portrait that does not name a set follows it from now on. */
+export function announceSpriteSet(id: string | null | undefined): void {
+  if (!id || !SET_ID.test(id) || id === activeSpriteSet()) return;
+  active = id;
+  try {
+    localStorage.setItem(ACTIVE_KEY, id);
+  } catch {
+    // not remembered across pages; this page still follows it
+  }
+  for (const fn of activeListeners) fn();
+}
+
+export function subscribeActiveSpriteSet(fn: () => void): () => void {
+  activeListeners.add(fn);
+  return () => activeListeners.delete(fn);
+}
 
 export type LibraryStatus = "idle" | "loading" | "ready" | "failed";
 
@@ -115,6 +157,13 @@ export function ensureSpriteSet(id: string, deps: LibraryDeps = {}): Promise<Lib
   const inflight = loading.get(id);
   if (inflight) return inflight;
 
+  if (id === V3_SET_ID) {
+    // the procedural set draws itself: ready at once, nothing to download (a hero's strips are generated on first use)
+    const source: SpriteSource = { manifest: v3Manifest(), images: {}, factory: deps.factory ?? browserCanvas, procedural: V3_SET };
+    const state: LibraryState = { id, status: "ready", source, error: null, failedAtlases: [], rev: 0 };
+    set(id, state);
+    return Promise.resolve(state);
+  }
   const base = deps.base ?? `/sprites/${id}`;
   const p = (async (): Promise<LibraryState> => {
     set(id, { ...IDLE(id), status: "loading" });
@@ -229,6 +278,7 @@ export function retrySpriteSetNow(id: string, deps: LibraryDeps = {}): void {
 
 /** Test hook. */
 export function resetSpriteLibrary(): void {
+  active = null;
   pageRetries.clear();
   states.clear();
   idles.clear();

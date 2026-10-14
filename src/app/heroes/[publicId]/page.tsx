@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { HeroActions } from "@/components/hero/HeroActions";
 import { HeroCard } from "@/components/hero/HeroCard";
+import { LiveSpriteSet } from "@/components/sprites/LiveSpriteSet";
 import { cardKey, heroSocialMeta } from "@/domain/hero/card";
 import { heroCardImagePath, heroUrl, isPublicHeroId } from "@/domain/hero/publicId";
 import { demoHeroesAllowed, getEnv } from "@/server/env";
@@ -50,6 +51,7 @@ export default async function PublicHeroPage({ params }: { params: Promise<{ pub
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-3 py-6 sm:px-6">
+      <LiveSpriteSet id={ctx.settings.visuals.spriteSet} />
       <p className="mb-4 text-sm"><Link href="/heroes" className="text-clank-300 hover:text-clank-200">← All heroes</Link></p>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,440px)_minmax(0,1fr)]">
         <div className="min-w-0">

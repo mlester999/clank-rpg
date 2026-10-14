@@ -1,5 +1,10 @@
 # Hero sprites — engine, procedural looks, and the production-art spec
 
+> **Hero renderer v3 (`clank-v3`)** — a procedural pixel character engine that draws every hero from its stored look without atlases — is
+> documented in [SPRITES_V3.md](SPRITES_V3.md). It is the default for fresh settings, but a live deployment keeps its current
+> `visuals.spriteSet` (`clank-dev-v2`) until migration `20261014002600_hero_renderer_v3.sql` is applied. Everything below describes the
+> atlas engine and the v1/v2 sets, which v3 leaves untouched and selectable.
+
 > **The art that ships today is generated placeholder art**, built by `pnpm sprites:build` and labelled
 > `status: "dev-placeholder"` in its manifests: **`clank-dev-v2` — hero renderer v2, the default** — and
 > `clank-dev-v1`, the original set, kept and still selectable. They exist so the engine could be built,
