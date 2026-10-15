@@ -19,7 +19,7 @@ export default function HeroProfiles() {
         A new season never touches the hero itself: its rarity, class, stats, PWR, look, public page and link all stay exactly as they were. Only the competitive record starts again.
       </Callout>
       <p>
-        While Clank RPG is still being built, the Arena runs <strong>development test battles</strong>. They are clearly labelled, they are not an official record, and none of their wins or Picks carry into Season 1.
+        Before Season 1 launches, the Arena runs <strong>pre-season practice battles</strong>. They are clearly labelled, they are not an official record, and none of their wins or Picks carry into Season 1.
       </p>
 
       <DocH2 id="the-hero-card">The hero card</DocH2>

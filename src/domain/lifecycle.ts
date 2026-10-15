@@ -90,10 +90,18 @@ export function seasonChipLabel(s: SeasonLabelInput): string {
   return s.kind === "COMPETITIVE" && s.number !== null ? `Season ${s.number}` : "Development";
 }
 
-/** What a public record is called: the official season, or the test run (never confused with it). */
+/**
+ * The PUBLIC name of a season: "Season 1", or — for the run that exists before the official launch — "Pre-season". (Admin screens keep the precise word
+ * "Development"; nothing public says development, test or beta.)
+ */
+export function publicSeasonLabel(s: SeasonLabelInput): string {
+  return s.kind === "COMPETITIVE" && s.number !== null ? `Season ${s.number}` : "Pre-season";
+}
+
+/** What a public record is called: the official season, or the pre-season (never confused with it). */
 export function recordsLabel(s: SeasonLabelInput | null): string {
   if (!s) return "Records";
-  return s.kind === "COMPETITIVE" && s.number !== null ? `Season ${s.number}` : "Development run";
+  return publicSeasonLabel(s);
 }
 
 /** The ladder tier shown for a hero with no battles this season: "Unranked" — whatever the lowest tier of the ladder is called. */

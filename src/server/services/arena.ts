@@ -581,7 +581,7 @@ async function stepArena(tx: Queryable, ctx: ArenaCtx): Promise<StepResult> {
   if (!scheduled && !pausing && preparedAhead.length < AHEAD_TARGET && onStage.length <= 1) {
     const [last] = simulated.length
       ? [simulated[simulated.length - 1] as BattleRow]
-      : await tx.query<BattleRow>(`select ${cols} from public.arena_battles where status = 'SETTLED' order by sequence desc limit 1`);
+      : await tx.query<BattleRow>(`select ${cols} from public.arena_battles where status = 'SETTLED' and season_id = (select id from public.seasons where status = 'ACTIVE' limit 1) order by sequence desc limit 1`); // THIS season's last battle: the first battle of a new season is never anchored to one of the archived run's
     let startsAt = last?.slot_ends_at ? new Date(ms(last.slot_ends_at)) : now;
     if (nowMs - startsAt.getTime() > settings.arena.staleAnchorMs) startsAt = now; // re-anchor after an outage
     const seasonId = await activeSeasonId(tx);

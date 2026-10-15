@@ -165,9 +165,20 @@ describe("the whole flow over HTTP: launch → start → pause → resume → (l
   it("LAUNCH leaves the Arena NOT_STARTED; START is a separate request; the public state follows; every step is audited", async () => {
     await seedHeroes(db, 24);
     const a = await admin();
+    // The launch needs a verified backup attestation (the app cannot inspect a backup; it records who says there is one). Without it: refused by name, nothing changes.
+    const refused = await a.post(["game", "launch"], { confirmation: "LAUNCH SEASON 1" });
+    expect(refused.status).toBe(409);
+    expect(await body(refused)).toMatchObject({ ok: false, error: "PREFLIGHT_BACKUP" });
+    expect((await db.query<{ phase: string }>("select phase from public.game_state"))[0]!.phase).toBe("DEVELOPMENT");
+    expect((await a.post(["game", "backup-attestation"], { reference: "scratch dump sha256:test", verified: true })).status).toBe(200);
     const launch = await a.post(["game", "launch"], { confirmation: "LAUNCH SEASON 1" });
     expect(launch.status).toBe(200);
-    expect(await body(launch)).toMatchObject({ ok: true, seasonNumber: 1 });
+    expect(await body(launch)).toMatchObject({ ok: true, seasonNumber: 1, alreadyLaunched: false });
+    // a second request (double click, retry) is told about the same launch and resets nothing
+    const replay = await a.post(["game", "launch"], { confirmation: "LAUNCH SEASON 1" });
+    expect(replay.status).toBe(200);
+    expect(await body(replay)).toMatchObject({ ok: true, seasonNumber: 1, alreadyLaunched: true });
+    expect(await count(db, "seasons", "kind = 'COMPETITIVE'")).toBe(1);
     expect(((await body(await a.get("game"))) as { phase: string; arena: { status: string } })).toMatchObject({ phase: "LIVE", arena: { status: "NOT_STARTED" } });
 
     // the PUBLIC state, as a viewer's browser asks for it: live, waiting
@@ -176,8 +187,8 @@ describe("the whole flow over HTTP: launch → start → pause → resume → (l
     expect(pub.state).toMatchObject({ status: "NOT_STARTED", phase: "LIVE", season: { label: "Season 1" }, current: null, upcoming: null });
     expect(await count(db, "arena_battles")).toBe(0); // the request that advances the Arena found it NOT_STARTED and did nothing
 
-    // a second launch: refused
-    expect((await a.post(["game", "launch"], { confirmation: "LAUNCH SEASON 1" })).status).toBe(409);
+    // a second launch (even much later): the same launch is reported again; nothing is reset
+    expect(await body(await a.post(["game", "launch"], { confirmation: "LAUNCH SEASON 1" }))).toMatchObject({ ok: true, alreadyLaunched: true });
 
     const start = await a.post(["game", "start"]);
     expect(start.status).toBe(200);
@@ -197,7 +208,7 @@ describe("the whole flow over HTTP: launch → start → pause → resume → (l
     expect((await a.post(["game", "resume"])).status).toBe(200);
 
     const actions = (await db.query<{ action: string; actor: string }>("select action, actor from public.admin_audit_log order by id")).map((r) => `${r.action}`);
-    expect(actions).toEqual(["GAME_LAUNCH", "ARENA_START", "ARENA_PAUSE_REQUEST", "ARENA_RESUME"]);
+    expect(actions).toEqual(["LAUNCH_BACKUP_ATTESTED", "GAME_LAUNCH", "ARENA_START", "ARENA_PAUSE_REQUEST", "ARENA_RESUME"]); // the replayed launch wrote nothing
     const [launchAudit] = await db.query<{ actor: string; detail: unknown }>("select actor, detail from public.admin_audit_log where action = 'GAME_LAUNCH'");
     expect(launchAudit!.actor).toBe("admin");
     expect(JSON.stringify(launchAudit)).not.toMatch(/ADMIN_ACCESS_KEY|SESSION_SECRET|admin-access-key/);

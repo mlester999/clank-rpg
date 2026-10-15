@@ -4,7 +4,7 @@ import { startPositionFor } from "@/domain/combat/engine";
 import { FRAME_STRIDE, type EventTuple } from "@/domain/combat/types";
 import { DEFAULT_ACHIEVEMENTS } from "@/domain/content";
 import { isRetiredAchievement } from "@/domain/content/achievements";
-import { seasonChipLabel, type ArenaRuntimeStatus, type GamePhase, type SeasonKind } from "@/domain/lifecycle";
+import { publicSeasonLabel, type ArenaRuntimeStatus, type GamePhase, type SeasonKind } from "@/domain/lifecycle";
 import { seasonRankView, type SeasonRankView } from "@/domain/progression/seasonRecord";
 import { PICKS_REWARD_OFF, type PicksRewardDto } from "@/domain/rewards/picksDto";
 import type { ClassDef, Ruleset } from "@/domain/rules";
@@ -410,7 +410,7 @@ export async function getArenaState(q: Queryable, nowMs: number, settings: GameS
     eligibleHeroes,
     groupSize: settings.arena.groupSize,
     heroThreshold: settings.telegram.qualifyingThreshold,
-    season: season ? { id: season.id, kind: season.kind, number: season.number, name: season.name, label: seasonChipLabel(season) } : null,
+    season: season ? { id: season.id, kind: season.kind, number: season.number, name: season.name, label: publicSeasonLabel(season) } : null,
     current,
     upcoming,
     next,

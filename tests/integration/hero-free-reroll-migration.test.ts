@@ -43,7 +43,7 @@ describe("migration 2500 — placement and shape", () => {
     const all = (await readMigrations()).map((m) => m.version);
     expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
     // only hero renderer v3 (one settings value, migration 2600) follows it
-    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW, "20261014002600"]);
+    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW, "20261014002600", "20261015002700"]);
     const sql = await readFile(path.join(MIGRATIONS_DIR, FILE), "utf8");
     expect(sql.trimEnd().endsWith("select public.clank_harden_schema();")).toBe(true);
   });

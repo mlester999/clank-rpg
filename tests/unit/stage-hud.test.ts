@@ -50,10 +50,10 @@ describe("no public combat timer, battle number or queue detail", () => {
     expect(text(renderToStaticMarkup(createElement(ArenaHeader, { status: { label: "Paused", tone: "wait" }, season: null, phase: "LIVE", online: false, demo: true })))).toBe("Global Idle Arena Paused Reconnecting… Demo heroes");
   });
 
-  it("a DEVELOPMENT run is always labelled as test battles, never as a season", () => {
+  it("a pre-season run is always labelled PRE-SEASON, never as a season and never as development / test battles", () => {
     const t = text(renderToStaticMarkup(createElement(ArenaHeader, { status: LIVE, season: { kind: "DEVELOPMENT", label: "Development" }, phase: "DEVELOPMENT", online: true, demo: false })));
-    expect(t).toBe("Global Idle Arena Live Development · test battles");
-    expect(t).not.toMatch(/Season/);
+    expect(t).toBe("Global Idle Arena Live Pre-season");
+    expect(t).not.toMatch(/Season \d|development|test|beta/i);
   });
 
   it("a real connection failure with nothing to show says Reconnecting… once, and no status chip", () => {

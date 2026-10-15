@@ -21,6 +21,12 @@ export function useAdminData<T>(path: string) {
   return { data, error: error ? (serverMessage ?? friendly(error.error)) : null, reload: async () => reload() };
 }
 
+/** Like `useAdminData`, but only asks when `enabled` (a panel that exists only in one lifecycle phase must not hit its endpoint in the other). Disabled = `null`. */
+export function useAdminDataWhen<T>(path: string, enabled: boolean) {
+  const { data, error, reload } = useRemote<T | null>(() => (enabled ? api<T>(path) : Promise.resolve({ ok: true as const, data: null })), `${path}#${enabled}`);
+  return { data: enabled ? data : null, error: enabled && error ? friendly(error.error) : null, reload: async () => reload() };
+}
+
 export async function act(path: string, method: string, json?: unknown, reload?: () => void | Promise<void>, setMsg?: (m: string) => void) {
   const r = await api(path, { method, ...(json !== undefined ? { json } : {}) });
   setMsg?.(r.ok ? "Done." : `Failed: ${r.error}`);

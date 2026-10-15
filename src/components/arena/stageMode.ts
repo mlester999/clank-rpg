@@ -12,7 +12,7 @@ export type StageMode =
   | "STAGE" // battles are made and fought: the arena canvas plays
   | "LOADING" // the first state has not arrived yet
   | "RECONNECTING" // a REAL failure to reach the server, with nothing to show
-  | "DEVELOPMENT_IDLE" // phase DEVELOPMENT and the Arena is not running: test battles are not on
+  | "DEVELOPMENT_IDLE" // phase DEVELOPMENT (pre-season) and the Arena is not running: practice battles are not on
   | "NOT_STARTED" // phase LIVE, Season launched, nobody pressed START ARENA yet
   | "PREPARING" // START was pressed: the first battle is being made ready
   | "PAUSED" // paused by the team
@@ -51,7 +51,7 @@ export function stageCopy(mode: Exclude<StageMode, "STAGE" | "LOADING" | "GATHER
     case "NOT_STARTED":
       return { title: "Arena preparing", lines: [`${season ?? "Season 1"} battles will begin soon.`, "The Arena has not started yet."] };
     case "DEVELOPMENT_IDLE":
-      return { title: "Arena in development", lines: ["Clank RPG is still being built — test battles are not running right now.", "Nothing here is an official record. Season 1 has not started."] };
+      return { title: "Pre-season", lines: ["Practice battles are not running right now.", "Season 1 is coming soon. Nothing here is an official record yet."] };
     case "PREPARING":
       return { title: "Preparing arena", lines: ["The first battle is being made ready.", "Heroes are taking their places…"] };
     case "PAUSED":

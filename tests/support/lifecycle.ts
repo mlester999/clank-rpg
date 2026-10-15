@@ -5,7 +5,7 @@ import type { Db, Queryable } from "@/server/db/types";
 import { arenaCtx, factoryArenaState, type FakeClock } from "./db";
 
 /** Admin deps for the lifecycle service, driven by the test's fake clock. */
-export const adminDeps = (clock: FakeClock, over: Partial<LifecycleDeps> = {}): LifecycleDeps => ({ actor: "test-admin", allowDemo: true, now: clock.now, ...over });
+export const adminDeps = (clock: FakeClock, over: Partial<LifecycleDeps> = {}): LifecycleDeps => ({ actor: "test-admin", allowDemo: true, now: clock.now, requireBackup: false, ...over });
 
 /** A development database in the state a freshly migrated one has: the Arena NOT_STARTED, nothing ever advanced. (resetDb leaves it RUNNING for the older suites.) */
 export async function freshDevelopment(db: Db): Promise<void> {

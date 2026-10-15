@@ -60,7 +60,7 @@ export default async function SoonPage({ params }: { params: Promise<{ feature: 
             </div>
             {f.teaser && (
               <div className="rounded-lg border border-dashed border-white/15 p-4">
-                <h2 className="label flex items-center gap-2"><LockIcon size={13} /> {f.teaser.title} — not in the Beta</h2>
+                <h2 className="label flex items-center gap-2"><LockIcon size={13} /> {f.teaser.title} — coming later</h2>
                 <p className="mt-2 text-sm text-steel-300">{f.teaser.body}</p>
               </div>
             )}

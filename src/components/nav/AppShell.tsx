@@ -5,22 +5,25 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useTokenConfig } from "@/components/leaderboard/useTokenConfig";
-import { ArenaIcon, BagIcon, BookIcon, HeroesIcon, MoreIcon, TrophyIcon, UserIcon } from "@/components/ui/Icons";
+import { ArenaIcon, BagIcon, BookIcon, CalendarIcon, HeroesIcon, MoreIcon, TrophyIcon, UserIcon } from "@/components/ui/Icons";
+import { footerNote, stageBadge } from "@/domain/publicPresentation";
 import { BUY_LABEL, CLANK_TRADE_URL } from "@/domain/rewards/buyLink";
 
 import { AccountControl, resolveAccount, type AccountViewer } from "./AccountControl";
 import { Logo } from "./Logo";
+import { usePublicSeason } from "./usePublicSeason";
 
 const PRIMARY = [
   { href: "/", label: "Arena", Icon: ArenaIcon },
   { href: "/character", label: "Character", Icon: UserIcon },
   { href: "/inventory", label: "Inventory", Icon: BagIcon },
   { href: "/leaderboard", label: "Leaderboard", Icon: TrophyIcon },
+  { href: "/events", label: "Events", Icon: CalendarIcon },
   { href: "/heroes", label: "Heroes", Icon: HeroesIcon },
   { href: "/docs", label: "Docs", Icon: BookIcon },
 ] as const;
-// The phone bottom bar keeps five equal slots (a sixth would not fit a 320 px label): Heroes and Docs live in "More" there.
-const BOTTOM = PRIMARY.filter((p) => p.href !== "/heroes" && p.href !== "/docs");
+// The phone bottom bar keeps five equal slots (a sixth would not fit a 320 px label): Events, Heroes and Docs live in "More" there.
+const BOTTOM = PRIMARY.filter((p) => p.href !== "/heroes" && p.href !== "/docs" && p.href !== "/events");
 
 function isActive(path: string, href: string) {
   return href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
@@ -42,6 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // BUY $CLANKRPG: the server decides the link (https://clank.trade/ until the official contract address is configured, then https://clank.trade/<address>);
   // until it answers the plain site link is used, so the button is never dead and never points anywhere invented.
   const buyUrl = useTokenConfig()?.buyUrl ?? CLANK_TRADE_URL;
+  // "Pre-season" before the launch, "Season 1" after it — from the persisted game phase, never from the environment.
+  const season = usePublicSeason();
+  const badge = stageBadge(season);
 
   useEffect(() => {
     if (isAdmin) return;
@@ -78,7 +84,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Below 440 px only the emblem shows, so the BUY button and the sign-in / account control both fit without overlap or sideways scrolling (the name is also in the page title and the aria-label). */}
             <Logo wordmarkClass="hidden min-[440px]:inline" />
           </Link>
-          <span className="chip hidden border-clank-500/40 bg-clank-500/10 text-clank-300 sm:inline-flex lg:hidden 2xl:inline-flex">Beta</span>
+          {badge && (
+            <span className={`chip hidden uppercase sm:inline-flex lg:hidden 2xl:inline-flex ${badge.tone === "live" ? "border-teal/40 bg-teal/10 text-teal" : "border-clank-500/40 bg-clank-500/10 text-clank-300"}`} data-testid="stage-badge">{badge.text}</span>
+          )}
 
           <nav aria-label="Main" className="ml-2 hidden min-w-0 flex-1 items-center gap-1 lg:flex">
             {PRIMARY.map(({ href, label }) => (
@@ -121,8 +129,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/docs/rarity" className="text-steel-300 hover:text-paper">Rarity &amp; power</Link>
           <Link href="/heroes" className="text-steel-300 hover:text-paper">Heroes</Link>
           <Link href="/leaderboard" className="text-steel-300 hover:text-paper">Leaderboard</Link>
+          <Link href="/events" className="text-steel-300 hover:text-paper">Events</Link>
         </nav>
-        Clank RPG is an independent community game for the Clank.trade ecosystem. Off-chain Clank Gold has no cash value. Beta — heroes, balance and rewards will change.
+        <span data-testid="footer-note">{footerNote(season)}</span>
       </footer>
 
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-ink-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
@@ -140,7 +149,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </li>
           ))}
           <li>
-            <button type="button" onClick={() => setMoreAt((v) => (v === path ? null : path))} aria-expanded={more} data-testid="nav-more" className={`flex h-16 w-full min-w-0 flex-col items-center justify-center gap-1 text-[0.56rem] font-bold tracking-normal uppercase min-[360px]:text-[0.62rem] min-[360px]:tracking-wider ${more || isActive(path, "/heroes") ? "text-clank-300" : "text-steel-400"}`}>
+            <button type="button" onClick={() => setMoreAt((v) => (v === path ? null : path))} aria-expanded={more} data-testid="nav-more" className={`flex h-16 w-full min-w-0 flex-col items-center justify-center gap-1 text-[0.56rem] font-bold tracking-normal uppercase min-[360px]:text-[0.62rem] min-[360px]:tracking-wider ${more || isActive(path, "/heroes") || isActive(path, "/events") || isActive(path, "/docs") ? "text-clank-300" : "text-steel-400"}`}>
               <MoreIcon size={22} />
               More
             </button>
@@ -148,6 +157,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </ul>
         {more && (
           <div className="slide-up absolute inset-x-3 bottom-[4.4rem] plate plate-flat p-2">
+            <Link href="/events" aria-current={isActive(path, "/events") ? "page" : undefined} className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold text-paper active:bg-white/5" data-testid="nav-events-mobile">
+              <CalendarIcon size={16} className="text-clank-300" />
+              Events
+              <span className="chip ml-auto">Champions</span>
+            </Link>
             <Link href="/heroes" aria-current={isActive(path, "/heroes") ? "page" : undefined} className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold text-paper active:bg-white/5" data-testid="nav-heroes-mobile">
               <HeroesIcon size={16} className="text-clank-300" />
               Heroes

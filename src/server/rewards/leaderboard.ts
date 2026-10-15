@@ -81,6 +81,12 @@ const scoreColumn = (kind: PeriodKind): string => (kind === "DAILY" ? "s.utc_dat
  * `period_season` per score row (which itself scans the scores of the period: quadratic in the number of picks, on every request).
  */
 export const COUNTING_SEASON_SCORE = "s.season_id in (select z.id from public.seasons z where public.season_counts(z.id))";
+/**
+ * The same test for a FINALIZED board (`arena_leaderboards.season_id`): a board is public history only when the season that owned it counts — an official season, or the
+ * one being played. Boards of an archived development run (and any old board that has no owner) are never listed and never readable by date, so the pre-season's winners
+ * cannot reappear as official history after the Season 1 launch.
+ */
+export const COUNTING_SEASON_BOARD = "l.season_id in (select z.id from public.seasons z where public.season_counts(z.id))";
 
 /**
  * The season whose picks a period's board ranks: the season of the LAST COUNTING pick scored in it (see `public.period_season`). A pick of an archived
@@ -303,7 +309,8 @@ const publicBonus = (s: FrozenRow["bonus_status"]): BonusPublicStatus => (s === 
 /** A FINALIZED period, read from its frozen rows (never recomputed). Null when that period has not been finalized. */
 export async function getFinalBoard(q: Queryable, kind: PeriodKind, start: string, ctx: { nowMs: number; viewerId?: number | null; limit?: number }): Promise<{ board: BoardDto; me: BoardMeDto | null } | null> {
   const [w] = await q.query<{ prize_pool_micro: string; prize_split_bps: number[]; minimum_picks: number; points_per_correct_pick: number; holder_bonus_tiers: Array<{ minimum: string; bonusBps: number }>; participants: number; eligible_participants: number; finalized_at: Date }>(
-    "select prize_pool_micro::text, prize_split_bps, minimum_picks, points_per_correct_pick, holder_bonus_tiers, participants, eligible_participants, finalized_at from public.arena_leaderboards where kind = $1 and period_start = $2::date",
+    `select l.prize_pool_micro::text, l.prize_split_bps, l.minimum_picks, l.points_per_correct_pick, l.holder_bonus_tiers, l.participants, l.eligible_participants, l.finalized_at
+       from public.arena_leaderboards l where l.kind = $1 and l.period_start = $2::date and ${COUNTING_SEASON_BOARD}`,
     [kind, start],
   );
   if (!w) return null;
@@ -383,7 +390,7 @@ export async function getFinalBoard(q: Queryable, kind: PeriodKind, start: strin
 /** Finalized periods of one kind, newest first — the history selector. */
 export async function listFinalizedPeriods(q: Queryable, kind: PeriodKind, limit = 30): Promise<PeriodListItem[]> {
   const rows = await q.query<{ period_start: string; participants: number; prize_pool_micro: string }>(
-    "select period_start::text, participants, prize_pool_micro::text from public.arena_leaderboards where kind = $1 order by period_start desc limit $2",
+    `select l.period_start::text, l.participants, l.prize_pool_micro::text from public.arena_leaderboards l where l.kind = $1 and ${COUNTING_SEASON_BOARD} order by l.period_start desc limit $2`,
     [kind, Math.min(Math.max(limit, 1), 120)],
   );
   return rows.map((r) => ({ start: r.period_start, participants: Number(r.participants), prizePool: formatTokenAmount(BigInt(r.prize_pool_micro), LOGICAL_DECIMALS) }));

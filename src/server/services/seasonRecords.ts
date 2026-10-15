@@ -1,4 +1,4 @@
-import { seasonChipLabel, type SeasonKind } from "@/domain/lifecycle";
+import { publicSeasonLabel, type SeasonKind } from "@/domain/lifecycle";
 
 import type { Queryable } from "../db/types";
 
@@ -39,7 +39,7 @@ export async function activeSeasonRecord(q: Queryable, characterId: string): Pro
   );
   if (!r) return { season: null, battles: 0, wins: 0, top2: 0, eliminations: 0, damage: 0, points: 0 };
   return {
-    season: { id: r.id, kind: r.kind, number: r.number, name: r.name, label: seasonChipLabel(r) },
+    season: { id: r.id, kind: r.kind, number: r.number, name: r.name, label: publicSeasonLabel(r) },
     battles: Number(r.battles ?? 0),
     wins: Number(r.wins ?? 0),
     top2: Number(r.top2 ?? 0),

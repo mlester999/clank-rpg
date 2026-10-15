@@ -32,7 +32,7 @@ interface Props {
 /** The panel's calm line while there is no battle to pick on — never an empty 8-slot skeleton that looks broken. */
 const IDLE_NOTE: Partial<Record<StageMode, { chip: string; text: string }>> = {
   NOT_STARTED: { chip: "Opens with the Arena", text: "Picks open as soon as the first battle is announced." },
-  DEVELOPMENT_IDLE: { chip: "Not running", text: "No test battles are running right now." },
+  DEVELOPMENT_IDLE: { chip: "Not running", text: "No practice battles are running right now. Season 1 is coming soon." },
   PREPARING: { chip: "Preparing first fight", text: "The first roster is being made ready. Picks open as soon as it is announced." },
   PAUSED: { chip: "Arena paused", text: "Picks are paused with the Arena and open again when battles resume." },
   RECONNECTING: { chip: "Offline", text: "Waiting to reach the Arena…" },

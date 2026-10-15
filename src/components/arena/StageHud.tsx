@@ -96,8 +96,8 @@ export function PhaseBanner({ phase, sinceCombatStartMs }: { phase: ArenaPhase; 
 }
 
 /**
- * The public page header: nothing about queues, cycles, rounds or scheduling. While the game is in DEVELOPMENT it says so, always — a development run's
- * battles are test data and must never be mistaken for an official Season. "Reconnecting…" is only for a REAL failure to reach the server.
+ * The public page header: nothing about queues, cycles, rounds or scheduling. While the game is still pre-season it says so, always — a pre-season run's
+ * battles are practice and must never be mistaken for an official Season. "Reconnecting…" is only for a REAL failure to reach the server.
  */
 export function ArenaHeader({ status, season, phase, online, connection, demo }: { status: HeaderStatus; season: { kind: "DEVELOPMENT" | "COMPETITIVE"; label: string } | null; phase: "DEVELOPMENT" | "LIVE" | undefined; online: boolean; connection?: "live" | "syncing" | "reconnecting"; demo: boolean }) {
   const tone = status.tone === "live" ? "border-teal/30 bg-teal/10 text-teal" : status.tone === "warn" ? "border-danger/40 bg-danger/10 text-danger" : "border-clank-400/40 bg-clank-500/10 text-clank-300";
@@ -112,8 +112,8 @@ export function ArenaHeader({ status, season, phase, online, connection, demo }:
         </span>
       )}
       {phase === "DEVELOPMENT" ? (
-        <span className="chip border-gold/40 bg-gold/10 text-gold uppercase" data-testid="arena-phase-chip" title="Test battles — not official records. Season 1 has not started.">
-          Development · test battles
+        <span className="chip border-gold/40 bg-gold/10 text-gold uppercase" data-testid="arena-phase-chip" title="Pre-season battles are practice — not official records. Season 1 is coming soon.">
+          Pre-season
         </span>
       ) : (
         season && <span className="chip uppercase" data-testid="arena-season-chip">{season.label}</span>

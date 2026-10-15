@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { ArenaPicksBoard } from "@/components/leaderboard/ArenaPicksBoard";
@@ -7,7 +8,9 @@ import { HeroArenaBoard, HeroRecordsBoard } from "@/components/leaderboard/HeroB
 import { PicksSeasonBoard } from "@/components/leaderboard/PicksSeasonBoard";
 import { Chip } from "@/components/leaderboard/boardParts";
 import { HALL_METRICS, HALL_SECTIONS, hallQuery, scopesOf, type HallMetric, type HallScope, type HallSection, type HallState } from "@/components/leaderboard/hallModel";
+import { usePublicSeason } from "@/components/nav/usePublicSeason";
 import { PageHeader } from "@/components/ui/bits";
+import { leaderboardsTitle, publicStage } from "@/domain/publicPresentation";
 import type { RecordMetric } from "@/domain/heroArena";
 
 /**
@@ -25,12 +28,24 @@ export function HallOfChampions({ initial }: { initial: HallState }) {
     // Shareable without navigating: the address bar always describes what is on screen.
     if (typeof window !== "undefined") window.history.replaceState(null, "", `/leaderboard${hallQuery(next)}`);
   };
+  const season = usePublicSeason();
+  const stage = publicStage(season);
   const scopes = scopesOf(state);
   const scope = state.scope;
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-3 py-6 sm:px-6" data-testid="hall-of-champions" data-section={state.section} data-scope={state.scope}>
-      <PageHeader title="Hall of" accent="Champions" subtitle="Ranked by what players predict and what heroes do — never by how much money is in a wallet." right={undefined} />
+      <PageHeader
+        title="Hall of"
+        accent="Champions"
+        subtitle="Ranked by what players predict and what heroes do — never by how much money is in a wallet."
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            {season && <span className={`chip uppercase ${stage === "SEASON_LIVE" ? "border-teal/40 bg-teal/10 text-teal" : "border-clank-400/40 bg-clank-500/10 text-clank-300"}`} data-testid="hall-season-label">{leaderboardsTitle(season)}</span>}
+            <Link href="/events" className="btn btn-ghost btn-sm" data-testid="hall-events-link">Past champions</Link>
+          </div>
+        }
+      />
 
       <nav role="tablist" aria-label="Hall of Champions" className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 sm:gap-2" data-testid="hall-sections">
         {HALL_SECTIONS.map((s) => {

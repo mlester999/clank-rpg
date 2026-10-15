@@ -91,8 +91,8 @@ export default function Leaderboards() {
       <DocH2 id="seasons">Seasons</DocH2>
       <p>
         Every board belongs to a season. When a new season begins, <strong>every Season board starts at zero</strong> and so do the Daily and Weekly boards — wins and Picks from an earlier season are never mixed in.
-        Past seasons stay on record and can be browsed from the season selector once there is more than one. While Clank RPG is being built, boards are labelled <strong>Development / Beta</strong>: they are test
-        results, not an official record.
+        Past seasons stay on record and can be browsed from the season selector once there is more than one. Before Season 1 launches, boards are labelled <strong>Pre-season</strong>: they are practice
+        results, not an official record, and none of them carry into Season 1 — the Events page only ever shows the winners of official seasons.
       </p>
     </>
   );

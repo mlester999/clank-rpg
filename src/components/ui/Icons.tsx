@@ -237,6 +237,12 @@ export const SendIcon = ({ size, ...p }: P) => (
     <path d="m21.854 2.147-10.94 10.939" />
   </svg>
 );
+/** A calendar with a check: dated results (Events). */
+export const CalendarIcon = ({ size, ...p }: P) => (
+  <svg {...base(size)} {...p}>
+    <path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M9 15l2 2 4-4" />
+  </svg>
+);
 /** A stopwatch (Lucide "timer"): reset countdowns. */
 export const TimerIcon = ({ size, ...p }: P) => (
   <svg {...base(size)} {...p}>

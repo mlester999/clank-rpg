@@ -115,11 +115,14 @@ describe.skipIf(!url)("the game lifecycle with REAL parallel connections", () =>
     expect(errors, "no deadlock / serialization failure / step error").toEqual([]);
   };
 
-  it("LAUNCH vs LAUNCH (×10): exactly one Season 1, one audit entry, the rest are refused", async () => {
+  it("LAUNCH vs LAUNCH (×10): exactly one Season 1, one audit entry; the other nine are told about that same launch and reset nothing", async () => {
     await fresh(16);
-    const rs = await Promise.all(Array.from({ length: 10 }, () => code(launchSeason1(db, deps(), LAUNCH))));
-    expect(rs.filter((r) => r === "OK")).toHaveLength(1);
-    expect(rs.filter((r) => r === "ALREADY_LIVE")).toHaveLength(9);
+    const results = await Promise.all(Array.from({ length: 10 }, () => launchSeason1(db, deps(), LAUNCH).catch((e) => ({ error: (e as Error).message }))));
+    expect(results.filter((r) => "error" in r)).toEqual([]);
+    const done = results as Array<{ alreadyLaunched: boolean; seasonId: string }>;
+    expect(done.filter((r) => !r.alreadyLaunched)).toHaveLength(1);
+    expect(done.filter((r) => r.alreadyLaunched)).toHaveLength(9);
+    expect(new Set(done.map((r) => r.seasonId)).size).toBe(1);
     expect(await count(db, "seasons", "kind = 'COMPETITIVE' and number = 1")).toBe(1);
     expect(await count(db, "admin_audit_log", "action = 'GAME_LAUNCH'")).toBe(1);
     expect(await gamePhase(db)).toBe("LIVE");
@@ -138,8 +141,9 @@ describe.skipIf(!url)("the game lifecycle with REAL parallel connections", () =>
     const identity = await heroIdentityHash(db);
     const fingerprint = await heroFingerprint(db);
     const ledgerBefore = await count(db, "currency_ledger");
-    const rs = await Promise.all(Array.from({ length: 8 }, () => code(launchSeason1(db, deps(), LAUNCH))));
-    expect(rs.filter((r) => r === "OK")).toHaveLength(1);
+    const rs = await Promise.all(Array.from({ length: 8 }, () => launchSeason1(db, deps(), LAUNCH).catch((e) => ({ error: (e as Error).message }))));
+    expect(rs.filter((r) => "error" in r)).toEqual([]);
+    expect((rs as Array<{ alreadyLaunched: boolean }>).filter((r) => !r.alreadyLaunched)).toHaveLength(1); // one launch did the work; the other seven were told about it
     expect(await count(db, "currency_ledger", "reason = 'season_launch_reset'")).toBe(6); // one offset per account — never two
     expect(await count(db, "currency_ledger")).toBe(ledgerBefore + 6);
     expect(await count(db, "currency_accounts", "balance <> 0")).toBe(0);
@@ -205,8 +209,8 @@ describe.skipIf(!url)("the game lifecycle with REAL parallel connections", () =>
         ...Array.from({ length: 3 }, () => code(launchSeason1(db, deps(), LAUNCH))),
         ...Array.from({ length: 3 }, () => code(resetDevelopment(db, deps(), RESET))),
       ]);
-      expect(rs.filter((r) => r === "ALREADY_LIVE" || r === "OK").length).toBeGreaterThanOrEqual(1);
-      expect(new Set(rs.filter((r) => r !== "OK"))).toSatisfy((s: Set<string>) => [...s].every((c) => ["ALREADY_LIVE", "LIVE_RESET_FORBIDDEN"].includes(c)));
+      expect(rs.filter((r) => r === "OK").length).toBeGreaterThanOrEqual(1);
+      expect(new Set(rs.filter((r) => r !== "OK"))).toSatisfy((s: Set<string>) => [...s].every((c) => ["LIVE_RESET_FORBIDDEN"].includes(c))); // a launch that finds the game LIVE just reports it
       const launches = await count(db, "admin_audit_log", "action = 'GAME_LAUNCH'");
       expect(launches).toBeLessThanOrEqual(1);
       expect(await gamePhase(db)).toBe(launches === 1 ? "LIVE" : "DEVELOPMENT");

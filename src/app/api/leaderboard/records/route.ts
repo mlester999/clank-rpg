@@ -3,6 +3,7 @@ import type { HeroRecordsPayload } from "@/domain/heroArenaDto";
 import { demoHeroesAllowed } from "@/server/env";
 import { fail, guarded, ok } from "@/server/http/guards";
 import { getClassVisuals, getReadyDb, getSettings } from "@/server/runtime";
+import { activeSeasonKey } from "@/server/services/seasonKey";
 import { getHeroRecordsPayload } from "@/server/services/heroBoards";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +25,10 @@ async function handleGET(req: Request) {
   if (!isHeroScope(scope)) return fail("INVALID_SCOPE", 400, "Choose daily, weekly or season.");
   const season = url.searchParams.get("season");
   const nowMs = Date.now();
-  const key = `${metric}:${metric === "PWR" ? "" : scope}:${season ?? ""}`;
+  const db = await getReadyDb();
+  const key = `${await activeSeasonKey(db)}:${metric}:${metric === "PWR" ? "" : scope}:${season ?? ""}`; // season-scoped: a launch can never be answered from a board computed before it
   const hit = memo.get(key);
   if (hit && nowMs - hit.at < MEMO_MS) return ok({ ...hit.payload, board: { ...hit.payload.board, serverNow: nowMs } }, { cache: "no-store" });
-  const db = await getReadyDb();
   const payload = await getHeroRecordsPayload(db, metric as RecordMetric, scope as HeroScope, { nowMs, settings: await getSettings(), allowDemo: demoHeroesAllowed(), classes: await getClassVisuals(), seasonId: season, limit: 50 });
   memo.set(key, { at: nowMs, payload });
   if (memo.size > 60) memo.delete(memo.keys().next().value as string);

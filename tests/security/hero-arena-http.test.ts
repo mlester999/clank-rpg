@@ -119,7 +119,7 @@ describe("public routes", () => {
   it("the Daily / Weekly Picks payload now names the season (so the page can say DEVELOPMENT / BETA)", async () => {
     const { GET } = await import("@/app/api/leaderboard/picks/route");
     const body = (await (await call(GET, get("/api/leaderboard/picks?period=daily"))).json()) as { season: { label: string; kind: string } | null };
-    expect(body.season).toMatchObject({ kind: "DEVELOPMENT", label: "Development" });
+    expect(body.season).toMatchObject({ kind: "DEVELOPMENT", label: "Pre-season" });
   });
 
   it("NO identity leaks: no Telegram id, owner, wallet, internal id column or SQL in any Hall of Champions payload — even for a finalized board with credited prizes", async () => {

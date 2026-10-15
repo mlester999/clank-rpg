@@ -45,7 +45,7 @@ function expectNoBrokenLooks(html: string, opts: { allowCounter?: boolean } = {}
 }
 
 describe("DEVELOPMENT, the Arena not running", () => {
-  it("says the Arena is in development — never a season, never 'reconnecting', never '0 / 8 heroes'", async () => {
+  it("says it is PRE-SEASON — never a season, never development / test wording, never 'reconnecting', never '0 / 8 heroes'", async () => {
     await seedHeroes(db, 3); // fewer than a battle needs: the old screen would have shown "0 / 8"-style counters
     const s = await state();
     expect(s).toMatchObject({ status: "NOT_STARTED", phase: "DEVELOPMENT", current: null, upcoming: null, next: null });
@@ -53,23 +53,25 @@ describe("DEVELOPMENT, the Arena not running", () => {
     const html = page(s);
     const t = visible(html);
     expect(html).toContain('data-mode="DEVELOPMENT_IDLE"');
-    expect(t).toMatch(/Arena in development/i);
+    expect(t).toMatch(/Pre-season/);
+    expect(t).toMatch(/Season 1 is coming soon/i);
     expect(t).toMatch(/not an official record|Nothing here is an official record/i);
-    expect(t).toMatch(/Development · test battles/);
+    expect(t).not.toMatch(/development|test battles|beta|local mode/i);
     expect(html).not.toContain('data-testid="arena-season-chip"'); // a development run is not a season chip
     expectNoBrokenLooks(html);
   });
 
-  it("while test battles RUN, the page still says they are test battles (a development run is never presented as a season)", async () => {
+  it("while pre-season battles RUN, the page still says PRE-SEASON (a pre-season run is never presented as a season, and never as 'development')", async () => {
     await seedHeroes(db, 24);
     await startArena(db, adminDeps(clock));
     await advanceArena(db, arenaCtx(clock));
     const s = await state();
-    expect(s).toMatchObject({ status: "LIVE", phase: "DEVELOPMENT", season: { kind: "DEVELOPMENT", label: "Development" } });
+    expect(s).toMatchObject({ status: "LIVE", phase: "DEVELOPMENT", season: { kind: "DEVELOPMENT", label: "Pre-season" } });
     expect(modeOf(s)).toBe("STAGE");
     const t = visible(page(s));
     expect(t).toMatch(/Live/);
-    expect(t).toMatch(/Development · test battles/);
+    expect(t).toMatch(/Pre-season/);
+    expect(t).not.toMatch(/development|test battles|beta/i);
     expect(t).not.toMatch(/Season 1/);
   });
 });

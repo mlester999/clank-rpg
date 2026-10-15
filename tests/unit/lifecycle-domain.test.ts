@@ -12,6 +12,7 @@ import {
   confirmationMatches,
   isArenaStatus,
   publicArenaMode,
+  publicSeasonLabel,
   recordsLabel,
   seasonChipLabel,
 } from "@/domain/lifecycle";
@@ -68,7 +69,9 @@ describe("the game lifecycle — pure rules", () => {
   it("labels seasons: official seasons are 'Season n'; a development run is never called a season", () => {
     expect(seasonChipLabel({ kind: "COMPETITIVE", number: 1, name: "Season 1" })).toBe("Season 1");
     expect(seasonChipLabel({ kind: "DEVELOPMENT", number: null, name: "Development / Beta" })).toBe("Development");
-    expect(recordsLabel({ kind: "DEVELOPMENT", number: null, name: "x" })).toBe("Development run");
+    expect(recordsLabel({ kind: "DEVELOPMENT", number: null, name: "x" })).toBe("Pre-season"); // the PUBLIC word: nothing public says development
+    expect(publicSeasonLabel({ kind: "DEVELOPMENT", number: null, name: "x" })).toBe("Pre-season");
+    expect(publicSeasonLabel({ kind: "COMPETITIVE", number: 3, name: "x" })).toBe("Season 3");
     expect(recordsLabel({ kind: "COMPETITIVE", number: 2, name: "x" })).toBe("Season 2");
     expect(recordsLabel(null)).toBe("Records");
   });

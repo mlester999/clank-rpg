@@ -246,12 +246,13 @@ describe("ARENA PICKS — Season standings", () => {
   });
 });
 
-describe("DEVELOPMENT / BETA is stated plainly on every board", () => {
-  it("a development run is labelled on Hero Arena, Records and Picks — Season 1 is just named", () => {
+describe("PRE-SEASON is stated plainly on every board", () => {
+  it("the pre-season run is labelled on Hero Arena, Records and Picks — Season 1 is just named, and nothing public says development / beta / test", () => {
     const html = view(payload(board()));
     expect(html).toContain('data-kind="DEVELOPMENT"');
-    expect(text(html)).toMatch(/Development \/ Beta/);
-    expect(text(view(payload(board({ season: s1 }))))).not.toMatch(/Development \/ Beta/);
+    expect(text(html)).toMatch(/Pre-season/);
+    expect(text(html)).not.toMatch(/Development|Beta|test (battles|Picks)/);
+    expect(text(view(payload(board({ season: s1 }))))).not.toMatch(/Pre-season/);
     expect(text(view(payload(board({ season: s1 }))))).toMatch(/Season 1/);
   });
 });

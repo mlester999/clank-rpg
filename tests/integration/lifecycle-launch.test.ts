@@ -85,7 +85,7 @@ describe("LAUNCH SEASON 1 — the scratch scenario", () => {
     const settings = await loadSettings(db);
     const publicA = (await getPublicHero(db, (await db.query<{ public_id: string }>("select public_id from public.characters where id = $1", [dev.a]))[0]!.public_id, await ctxFor()))!;
     expect(publicA.record).toMatchObject({ battles: 80, wins: 50 }); // the development run's record is what the hero page shows today
-    expect(publicA.season).toMatchObject({ kind: "DEVELOPMENT", label: "Development" });
+    expect(publicA.season).toMatchObject({ kind: "DEVELOPMENT", label: "Pre-season" });
 
     // ── freeze: everything that must NOT change ──────────────────────────────────────────────────────────────────────
     const identityBefore = await heroIdentityHash(db);
@@ -349,11 +349,12 @@ describe("the launch is deliberate, one-way and exactly once", () => {
     expect(await count(db, "admin_audit_log", "action = 'GAME_LAUNCH'")).toBe(0);
   });
 
-  it("two launches at once: exactly one Season 1 is created, the other is refused", async () => {
+  it("three launches at once: exactly one Season 1 is created; the others get that same launch back and reset nothing", async () => {
     await seedHeroes(db, 16);
-    const results = await Promise.all([launchSeason1(db, adminDeps(clock), LAUNCH), launchSeason1(db, adminDeps(clock), LAUNCH), launchSeason1(db, adminDeps(clock), LAUNCH)].map((p) => code(p)));
-    expect(results.filter((r) => r === "OK")).toHaveLength(1);
-    expect(results.filter((r) => r === "ALREADY_LIVE")).toHaveLength(2);
+    const outcomes = await Promise.all([launchSeason1(db, adminDeps(clock), LAUNCH), launchSeason1(db, adminDeps(clock), LAUNCH), launchSeason1(db, adminDeps(clock), LAUNCH)]);
+    expect(outcomes.filter((r) => !r.alreadyLaunched)).toHaveLength(1);
+    expect(outcomes.filter((r) => r.alreadyLaunched)).toHaveLength(2);
+    expect(new Set(outcomes.map((r) => r.seasonId)).size).toBe(1); // everyone is told about the SAME Season 1
     expect(await count(db, "seasons", "kind = 'COMPETITIVE'")).toBe(1);
     expect(await count(db, "seasons", "status = 'ACTIVE'")).toBe(1);
     expect(await count(db, "admin_audit_log", "action = 'GAME_LAUNCH'")).toBe(1);
@@ -362,7 +363,10 @@ describe("the launch is deliberate, one-way and exactly once", () => {
   it("LIVE is one-way: no code path and no SQL goes back to DEVELOPMENT, rewrites the launch, deletes or reopens a season", async () => {
     await seedHeroes(db, 16);
     await launchSeason1(db, adminDeps(clock), LAUNCH);
-    expect(await code(launchSeason1(db, adminDeps(clock), LAUNCH))).toBe("ALREADY_LIVE");
+    const again = await launchSeason1(db, adminDeps(clock), LAUNCH);
+    expect(again.alreadyLaunched).toBe(true); // a second request returns the launch that happened — it does not reset Season 1 again
+    expect(await count(db, "seasons", "kind = 'COMPETITIVE'")).toBe(1);
+    expect(await count(db, "admin_audit_log", "action = 'GAME_LAUNCH'")).toBe(1);
     expect(await code(resetDevelopment(db, adminDeps(clock), { confirmation: "RESET ARENA" }))).toBe("LIVE_RESET_FORBIDDEN");
     await expect(db.exec("update public.game_state set phase = 'DEVELOPMENT'")).rejects.toThrow(/cannot go back to DEVELOPMENT/);
     await expect(db.exec("update public.game_state set launched_at = now() - interval '1 year'")).rejects.toThrow(/launch record is permanent/);

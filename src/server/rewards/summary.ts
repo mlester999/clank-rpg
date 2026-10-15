@@ -29,7 +29,11 @@ export interface PickStats {
 
 export async function getPickStats(q: Queryable, userId: number): Promise<PickStats> {
   const rows = await q.query<{ result: "CORRECT" | "INCORRECT" }>(
-    "select result from public.arena_picks where telegram_user_id = $1 and result in ('CORRECT', 'INCORRECT') order by settled_at asc, battle_id asc limit 20000",
+    // Only Picks of a season that COUNTS (an official season, or the one being played): the archived pre-season's Picks never count, so a member who made 500 of them
+    // begins Season 1 with 0 Picks, 0 correct and no streak.
+    `select p.result from public.arena_picks p join public.arena_battles b on b.id = p.battle_id
+      where p.telegram_user_id = $1 and p.result in ('CORRECT', 'INCORRECT') and b.season_id in (select z.id from public.seasons z where public.season_counts(z.id))
+      order by p.settled_at asc, p.battle_id asc limit 20000`,
     [userId],
   );
   let best = 0;
@@ -212,7 +216,7 @@ export async function listPickHistory(q: Queryable, userId: number, limit = 25, 
        join public.characters pc on pc.id = p.character_id
        left join public.characters wc on wc.id = b.winner_id
        left join public.arena_pick_scores sc on sc.battle_id = p.battle_id and sc.telegram_user_id = p.telegram_user_id
-      where p.telegram_user_id = $1
+      where p.telegram_user_id = $1 and b.season_id in (select z.id from public.seasons z where public.season_counts(z.id))
       order by (p.result is null) desc, coalesce(p.settled_at, p.submitted_at) desc, p.battle_id desc limit $2`,
     [userId, Math.min(Math.max(limit, 1), 100)],
   );

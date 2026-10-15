@@ -329,7 +329,7 @@ function SeasonCard({ season }: { season: SeasonInfo }) {
             <Metric label="Matches" value={season.battles} />
             <Metric label="Wins" value={season.wins} />
           </dl>
-          <p className="mt-3 text-xs text-steel-300">{season.kind === "DEVELOPMENT" ? "Development run — test battles, not an official record. " : ""}Season rank is competitive status. It resets every season, so everyone — new heroes included — can climb it, and it never changes your stats.</p>
+          <p className="mt-3 text-xs text-steel-300">{season.kind === "DEVELOPMENT" ? "Pre-season — practice battles, not an official record. Records start at zero when Season 1 launches. " : ""}Season rank is competitive status. It resets every season, so everyone — new heroes included — can climb it, and it never changes your stats.</p>
         </>
       ) : (
         <p className="mt-3 text-sm text-steel-300">Season rank appears here once a season is running.</p>

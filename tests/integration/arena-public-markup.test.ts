@@ -38,10 +38,11 @@ describe("public Arena page markup", () => {
     const html = renderToStaticMarkup(createElement(ArenaScreen, { initial: state }));
     const text = visible(html);
 
-    // Header: GLOBAL IDLE ARENA · LIVE · and — because the game is still in DEVELOPMENT — an explicit "test battles" chip, never a season.
+    // Header: GLOBAL IDLE ARENA · LIVE · and — because the game is still before the launch — an explicit "Pre-season" chip, never a season and never "development / test battles".
     expect(text).toMatch(/Global\s+Idle Arena/);
     expect(text).toMatch(/Live/);
-    expect(text).toMatch(/Development · test battles/);
+    expect(text).toMatch(/Pre-season/);
+    expect(text).not.toMatch(/Development|test battles|Beta/i);
     expect(text).not.toMatch(/Season 1/);
 
     // Arena Picks lists the UPCOMING eight: every fighter, their class and PWR …

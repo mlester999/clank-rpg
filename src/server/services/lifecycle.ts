@@ -9,6 +9,8 @@ import {
   type GamePhase,
   type SeasonKind,
 } from "@/domain/lifecycle";
+import { firstPeriodOfSeason, lastCompletedPeriod } from "@/domain/events";
+import { evaluateLaunch, type LaunchPreflight } from "@/domain/launchPreflight";
 import type { ActionAvailability, Blocker, GameControl, RewardLiabilities, SeasonView } from "@/domain/lifecycleDto";
 import { json, type Db, type Queryable } from "../db/types";
 import { loadSettings } from "../config/settingsRepo";
@@ -18,6 +20,7 @@ import { arenaPopulation } from "./arenaEligibility";
 import { committedBattles } from "./arenaRuntime";
 import { archiveDevelopmentEconomy, type DevelopmentEconomyArchive } from "./developmentEconomy";
 import { audit } from "./auditLog";
+import { loadLaunchFacts } from "./launchPreflight";
 import { lockLifecycleExclusive } from "./lifecycleLock";
 
 /**
@@ -46,6 +49,11 @@ export interface LifecycleDeps {
   allowDemo: boolean;
   /** The Arena's clock (tests drive a fake one); defaults to the wall clock. */
   now?: () => Date;
+  /**
+   * Whether the Season 1 launch needs a fresh, verified backup attestation (see `recordBackupAttestation`). SECURE BY DEFAULT: only an explicit `false` skips it
+   * (the automated suites that are not about backups say so); the Admin route never sets it.
+   */
+  requireBackup?: boolean;
 }
 
 const clock = (deps: { now?: () => Date }): Date => (deps.now ? deps.now() : new Date());
@@ -393,6 +401,10 @@ interface ArchiveSummary {
   lastBattleNumber: number;
   heroesWithRecords: number;
   pickScores: number;
+  /** Picks submitted in the season, and the frozen Daily/Weekly boards it produced — archived with the run, never counted again. */
+  picksSubmitted: number;
+  finalizedPicksBoards: number;
+  finalizedHeroBoards: number;
   cyclesAborted: number;
   queueEntriesReleased: number;
 }
@@ -420,11 +432,14 @@ async function archiveSeason(tx: Queryable, season: SeasonRow, reason: ArchiveSu
     );
     released = r.length;
   }
-  const [counts] = await tx.query<{ settled: number; void: number; heroes: number; scores: number }>(
+  const [counts] = await tx.query<{ settled: number; void: number; heroes: number; scores: number; picks: number; picks_boards: number; hero_boards: number }>(
     `select (select count(*)::int from public.arena_battles where season_id = $1 and status = 'SETTLED') as settled,
             (select count(*)::int from public.arena_battles where season_id = $1 and status = 'VOID') as void,
             (select count(*)::int from public.season_character_stats where season_id = $1 and battles > 0) as heroes,
-            (select case when to_regclass('public.arena_pick_scores') is null then 0 else (select count(*)::int from public.arena_pick_scores where season_id = $1) end) as scores`,
+            (select case when to_regclass('public.arena_pick_scores') is null then 0 else (select count(*)::int from public.arena_pick_scores where season_id = $1) end) as scores,
+            (select count(*)::int from public.arena_picks p join public.arena_battles b on b.id = p.battle_id where b.season_id = $1) as picks,
+            (select case when to_regclass('public.arena_leaderboards') is null then 0 else (select count(*)::int from public.arena_leaderboards where season_id = $1) end) as picks_boards,
+            (select case when to_regclass('public.hero_arena_boards') is null then 0 else (select count(*)::int from public.hero_arena_boards where season_id = $1) end) as hero_boards`,
     [season.id],
   );
   const [counter] = await tx.query<{ n: number }>("select battle_counter::int as n from public.seasons where id = $1", [season.id]);
@@ -437,6 +452,9 @@ async function archiveSeason(tx: Queryable, season: SeasonRow, reason: ArchiveSu
     lastBattleNumber: counter?.n ?? 0,
     heroesWithRecords: counts?.heroes ?? 0,
     pickScores: counts?.scores ?? 0,
+    picksSubmitted: counts?.picks ?? 0,
+    finalizedPicksBoards: counts?.picks_boards ?? 0,
+    finalizedHeroBoards: counts?.hero_boards ?? 0,
     cyclesAborted: cycles.length,
     queueEntriesReleased: released,
   };
@@ -463,11 +481,90 @@ export interface LaunchResult {
   /** What was archived from the development economy (Gold, loot, achievements, titles, career counters). */
   economy: DevelopmentEconomyArchive;
   heroes: HeroFingerprint;
+  /**
+   * FALSE for the call that did the work. TRUE when the game was already LIVE and this call simply returned the result of the launch that happened (a double
+   * click, a network retry, a second admin, a re-sent request): nothing is reset a second time.
+   */
+  alreadyLaunched: boolean;
+  launchedAt: number;
+}
+
+/**
+ * The launch preflight: real counts of what the launch would archive and reset, and the conditions that must hold. Read-only. The SAME decision runs again inside
+ * the launch transaction, under the locks.
+ */
+async function preflightFrom(q: Queryable, deps: LifecycleDeps, control: Omit<GameControl, "now" | "actions">, actions: GameControl["actions"]): Promise<LaunchPreflight> {
+  const facts = await loadLaunchFacts(q, deps.allowDemo);
+  return evaluateLaunch(facts, {
+    phase: control.phase,
+    arenaStatus: control.arena.status,
+    actionBlockers: actions.launch.blockers,
+    warnings: actions.launch.warnings,
+    nowMs: clock(deps).getTime(),
+    requireBackup: deps.requireBackup !== false,
+  });
+}
+
+export async function getLaunchPreflight(q: Queryable, deps: LifecycleDeps): Promise<LaunchPreflight> {
+  const { control, actions } = await evaluateActions(q, deps);
+  return preflightFrom(q, deps, control, actions);
+}
+
+/** The result of the launch that already happened, rebuilt from the permanent records (the game state row and the archived development run). */
+async function existingLaunch(tx: Queryable): Promise<LaunchResult> {
+  const [g] = await tx.query<{ launched_at: Date; launch_season_id: string }>("select launched_at, launch_season_id from public.game_state where id = 1");
+  const [dev] = await tx.query<{ archive: (Partial<ArchiveSummary> & { economy?: DevelopmentEconomyArchive }) | null }>(
+    "select archive from public.seasons where kind = 'DEVELOPMENT' and ended_reason = 'LAUNCH' order by ends_at desc nulls last limit 1",
+  );
+  const { economy, ...summary } = dev?.archive ?? {};
+  return {
+    seasonId: (g as { launch_season_id: string }).launch_season_id,
+    seasonNumber: 1,
+    archived: dev?.archive ? (summary as ArchiveSummary) : null,
+    economy: economy ?? { goldAccountsReset: 0, goldReset: "0", lootArchived: 0, lootUnequipped: 0, achievementsArchived: 0, achievementHeroes: 0, titlesCleared: 0, careerCountersReset: 0 },
+    heroes: await heroFingerprint(tx),
+    alreadyLaunched: true,
+    launchedAt: ms((g as { launched_at: Date }).launched_at) as number,
+  };
+}
+
+/**
+ * The launch is NOT complete unless Season 1 really starts from nothing. Checked inside the launch transaction, after everything is written: if a single row of
+ * the pre-season is attributed to the new season, or any lifecycle / economy / isolation auditor reports a finding, the whole launch rolls back.
+ */
+async function assertSeasonOneIsClean(tx: Queryable, seasonId: string): Promise<void> {
+  const [z] = await tx.query<{ battles: number; picks: number; scores: number; stats: number; picks_boards: number; hero_boards: number }>(
+    `select (select count(*)::int from public.arena_battles where season_id = $1) as battles,
+            (select count(*)::int from public.arena_picks p join public.arena_battles b on b.id = p.battle_id where b.season_id = $1) as picks,
+            (select case when to_regclass('public.arena_pick_scores') is null then 0 else (select count(*)::int from public.arena_pick_scores where season_id = $1) end) as scores,
+            (select count(*)::int from public.season_character_stats where season_id = $1) as stats,
+            (select case when to_regclass('public.arena_leaderboards') is null then 0 else (select count(*)::int from public.arena_leaderboards where season_id = $1) end) as picks_boards,
+            (select case when to_regclass('public.hero_arena_boards') is null then 0 else (select count(*)::int from public.hero_arena_boards where season_id = $1) end) as hero_boards`,
+    [seasonId],
+  );
+  const dirty = Object.entries(z ?? {}).filter(([, v]) => Number(v) !== 0);
+  if (dirty.length) throw new AdminError("LAUNCH_NOT_CLEAN", 500, `Season 1 would not start from zero (${dirty.map(([k, v]) => `${k}=${v}`).join(", ")}). Nothing was applied.`);
+  const findings: string[] = [];
+  for (const fn of ["audit_game_lifecycle", "audit_development_economy", "audit_launch_isolation"]) {
+    // (No catch: inside a transaction a failed statement aborts it, and the preflight already proved these functions exist.)
+    const rows = await tx.query<{ problem: string; detail: string }>(`select problem, detail from public.${fn}()`);
+    for (const r of rows) findings.push(`${fn}: ${r.problem} ${r.detail}`);
+  }
+  if (findings.length) throw new AdminError("LAUNCH_AUDIT_FAILED", 500, `The post-launch audit found problems; nothing was applied. ${findings.slice(0, 5).join(" · ")}`);
 }
 
 /**
  * LAUNCH SEASON 1: archives the development run and creates a clean Season 1 — and leaves the Arena NOT STARTED. One-way (DEVELOPMENT → LIVE).
  * Heroes are untouched (fingerprinted before and after). Public records of Season 1 begin at zero because they are read from Season 1's own rows.
+ *
+ * IDEMPOTENT: once the game is LIVE, any further call (with the typed phrase) returns the existing launch result (`alreadyLaunched: true`) and resets nothing —
+ * so a double click, a retry after a timeout, or a second admin can never reset Season 1 again, nor be told the launch "failed" when it had succeeded.
+ * It is also the only code path that performs the competitive reset, and nothing but this explicit Admin action reaches it: not NODE_ENV, not a deployment, not
+ * a restart, not an environment variable.
+ *
+ * The preflight re-runs inside the transaction, under the locks (arena_state → game_state → lifecycle lock): Arena stopped, no reward owed, every settled
+ * battle's Picks scored, a verified backup attested, the schema current. After everything is written the launch verifies that Season 1 starts at zero and that
+ * every auditor is clean — and rolls back whole if not. A launch is never "completed" with a reset half done.
  */
 export async function launchSeason1(db: Db, deps: LifecycleDeps, input: { confirmation: string }): Promise<LaunchResult> {
   requirePhrase("LAUNCH", input.confirmation);
@@ -476,8 +573,12 @@ export async function launchSeason1(db: Db, deps: LifecycleDeps, input: { confir
     const game = await tx.query<{ phase: GamePhase }>("select phase from public.game_state where id = 1 for update");
     if (!game[0]) throw new AdminError("NO_GAME_STATE", 500, "The game state row is missing.");
     await lockLifecycleExclusive(tx); // reward finalizations in flight finish first; later ones wait for this action (services/lifecycleLock.ts)
-    const { actions } = await evaluateActions(tx, deps);
+    if (game[0].phase === "LIVE") return existingLaunch(tx); // already launched: report it, change nothing
+    const { control, actions } = await evaluateActions(tx, deps);
     if (!actions.launch.allowed) refuse(actions.launch);
+    const preflight = await preflightFrom(tx, deps, control, actions);
+    const blocking = preflight.checks.find((c) => c.blocking && c.status === "FAIL");
+    if (blocking) throw new AdminError(`PREFLIGHT_${blocking.id}`, 409, blocking.detail);
 
     const before = await heroFingerprint(tx);
     const dev = await activeSeason(tx, true);
@@ -497,19 +598,112 @@ export async function launchSeason1(db: Db, deps: LifecycleDeps, input: { confir
     // Development progress (arena achievements, Clank Gold, loot, career counters) is archived so nothing earned in testing carries into Season 1 (the hero itself is untouched).
     const economy = await archiveDevelopmentEconomy(tx, { launchSeasonId: seasonId, developmentSeasonId: dev?.id ?? null });
     if (dev) await tx.query("update public.seasons set archive = coalesce(archive, '{}'::jsonb) || $2::jsonb where id = $1", [dev.id, json({ economy })]);
-    await tx.query("update public.game_state set phase = 'LIVE', launched_at = now(), launch_season_id = $1, launched_by = $2 where id = 1 and phase = 'DEVELOPMENT'", [seasonId, deps.actor]);
+    const [flipped] = await tx.query<{ launched_at: Date }>("update public.game_state set phase = 'LIVE', launched_at = now(), launch_season_id = $1, launched_by = $2 where id = 1 and phase = 'DEVELOPMENT' returning launched_at", [seasonId, deps.actor]);
+    if (!flipped) throw new AdminError("INVALID_STATE", 409, "The game changed state while the launch was running; refresh and look again.");
 
     const after = await heroFingerprint(tx);
     if (!sameHeroes(before, after)) throw new AdminError("HERO_FINGERPRINT_CHANGED", 500, "Launching changed a hero. Nothing was applied.");
+    await assertSeasonOneIsClean(tx, seasonId);
     await audit(tx, deps.actor, "GAME_LAUNCH", "game", "state", {
       previous: { phase: "DEVELOPMENT", arenaStatus: arena.status, season: archived ? { label: archived.label, seasonId: archived.seasonId, lastBattleNumber: archived.lastBattleNumber } : null },
       next: { phase: "LIVE", arenaStatus: "NOT_STARTED", season: { label: "Season 1", seasonId } },
       archived,
       economy,
       heroes: { total: heroes.total, eligible: heroes.eligible, suspended: heroes.suspended, fingerprint: after.hash, versions: after.versions },
+      // The preflight the launch ran on: the real counts it archived and the backup it relied on (a reference, never a secret).
+      preflight: { counts: preflight.facts, backup: preflight.backup.latest ? { id: preflight.backup.latest.id, attestedBy: preflight.backup.latest.attestedBy, reference: preflight.backup.latest.reference } : null, backupRequired: preflight.backup.required },
     });
-    return { seasonId, seasonNumber: 1, archived, economy, heroes: after };
+    return { seasonId, seasonNumber: 1, archived, economy, heroes: after, alreadyLaunched: false, launchedAt: ms(flipped.launched_at) as number };
   });
+}
+
+/**
+ * Records that the operator took a backup and (if `verified`) confirmed it is usable. The application cannot inspect a Supabase backup; this keeps a durable,
+ * audited statement of WHO attested WHAT and WHEN, tied to the schema version it was taken at — the launch preflight requires a recent, verified one.
+ * Append-only: a newer attestation supersedes, nothing is edited.
+ */
+export async function recordBackupAttestation(db: Db, deps: LifecycleDeps, input: { reference: string; verified: boolean; notes?: string | null }): Promise<{ id: string; schemaVersion: string; attestedAt: number }> {
+  const reference = input.reference.trim();
+  if (reference.length < 3 || reference.length > 300) throw new AdminError("INVALID_REFERENCE", 422, "Say where the backup is (a restore point, a dump name and checksum…): 3–300 characters.");
+  const notes = input.notes?.trim() ? input.notes.trim().slice(0, 1000) : null;
+  return db.transaction(async (tx) => {
+    const [game] = await tx.query<{ phase: GamePhase }>("select phase from public.game_state where id = 1");
+    if (game?.phase === "LIVE") throw new AdminError("ALREADY_LIVE", 409, "The game is already LIVE: a launch backup is no longer needed.");
+    const rows = await tx.query<{ v: string | null }>("select max(version) as v from supabase_migrations.schema_migrations").catch(() => []);
+    const schemaVersion = (rows[0] as { v: string | null } | undefined)?.v;
+    if (!schemaVersion) throw new AdminError("NO_SCHEMA_VERSION", 500, "The applied schema version cannot be read.");
+    const [row] = await tx.query<{ id: string; attested_at: Date }>(
+      "insert into public.launch_backup_attestations (attested_by, reference, verified, schema_version, notes) values ($1, $2, $3, $4, $5) returning id, attested_at",
+      [deps.actor, reference, input.verified, schemaVersion, notes],
+    );
+    await audit(tx, deps.actor, "LAUNCH_BACKUP_ATTESTED", "game", (row as { id: string }).id, { reference, verified: input.verified, schemaVersion });
+    return { id: (row as { id: string }).id, schemaVersion, attestedAt: ms((row as { attested_at: Date }).attested_at) as number };
+  });
+}
+
+/** What Season 1 looks like once it is running — the Admin's "is the official season healthy?" view. Read-only. */
+export interface OfficialSeasonStatus {
+  season: { id: string; label: string; startsAt: number } | null;
+  launchedAt: number | null;
+  launchedBy: string | null;
+  officialMatches: number;
+  officialPicks: number;
+  scoredPicks: number;
+  heroesWithRecords: number;
+  boards: { picks: number; hero: number };
+  /** Completed Daily periods of the season and how many of them have a frozen board (periods with no results are not expected to). */
+  events: { completedDaily: number; completedWeekly: number; champions: { picksDaily: number; picksWeekly: number; heroDaily: number; heroWeekly: number } };
+  auditFindings: string[];
+}
+
+export async function getOfficialSeasonStatus(q: Queryable, nowMs: number): Promise<OfficialSeasonStatus> {
+  const [g] = await q.query<{ phase: GamePhase; launched_at: Date | null; launched_by: string | null }>("select phase, launched_at, launched_by from public.game_state where id = 1");
+  const [s] = await q.query<{ id: string; number: number; starts_at: Date }>("select id, number, starts_at from public.seasons where kind = 'COMPETITIVE' and status = 'ACTIVE' limit 1");
+  const out: OfficialSeasonStatus = {
+    season: s ? { id: s.id, label: `Season ${s.number}`, startsAt: ms(s.starts_at) as number } : null,
+    launchedAt: g?.phase === "LIVE" ? ms(g.launched_at) : null,
+    launchedBy: g?.phase === "LIVE" ? g.launched_by : null,
+    officialMatches: 0,
+    officialPicks: 0,
+    scoredPicks: 0,
+    heroesWithRecords: 0,
+    boards: { picks: 0, hero: 0 },
+    events: { completedDaily: 0, completedWeekly: 0, champions: { picksDaily: 0, picksWeekly: 0, heroDaily: 0, heroWeekly: 0 } },
+    auditFindings: [],
+  };
+  if (!s) return out;
+  const [c] = await q.query<{ matches: number; picks: number; scored: number; heroes: number; pb: number; hb: number }>(
+    `select (select count(*)::int from public.arena_battles where season_id = $1 and status = 'SETTLED') as matches,
+            (select count(*)::int from public.arena_picks p join public.arena_battles b on b.id = p.battle_id where b.season_id = $1) as picks,
+            (select count(*)::int from public.arena_pick_scores where season_id = $1) as scored,
+            (select count(*)::int from public.season_character_stats where season_id = $1 and battles > 0) as heroes,
+            (select count(*)::int from public.arena_leaderboards where season_id = $1) as pb,
+            (select count(*)::int from public.hero_arena_boards where season_id = $1) as hb`,
+    [s.id],
+  );
+  out.officialMatches = c?.matches ?? 0;
+  out.officialPicks = c?.picks ?? 0;
+  out.scoredPicks = c?.scored ?? 0;
+  out.heroesWithRecords = c?.heroes ?? 0;
+  out.boards = { picks: c?.pb ?? 0, hero: c?.hb ?? 0 };
+  const startsAt = ms(s.starts_at) as number;
+  const daily = lastCompletedPeriod("DAILY", nowMs, startsAt, null);
+  const weekly = lastCompletedPeriod("WEEKLY", nowMs, startsAt, null);
+  out.events.completedDaily = daily ? Math.floor((Date.parse(`${daily}T00:00:00Z`) - Date.parse(`${firstPeriodOfSeason("DAILY", startsAt)}T00:00:00Z`)) / 86_400_000) + 1 : 0;
+  out.events.completedWeekly = weekly ? Math.floor((Date.parse(`${weekly}T00:00:00Z`) - Date.parse(`${firstPeriodOfSeason("WEEKLY", startsAt)}T00:00:00Z`)) / (7 * 86_400_000)) + 1 : 0;
+  const [ch] = await q.query<{ pd: number; pw: number; hd: number; hw: number }>(
+    `select (select count(*)::int from public.arena_leaderboards where season_id = $1 and kind = 'DAILY' and eligible_participants > 0) as pd,
+            (select count(*)::int from public.arena_leaderboards where season_id = $1 and kind = 'WEEKLY' and eligible_participants > 0) as pw,
+            (select count(*)::int from public.hero_arena_boards where season_id = $1 and kind = 'DAILY' and participants > 0) as hd,
+            (select count(*)::int from public.hero_arena_boards where season_id = $1 and kind = 'WEEKLY' and participants > 0) as hw`,
+    [s.id],
+  );
+  out.events.champions = { picksDaily: ch?.pd ?? 0, picksWeekly: ch?.pw ?? 0, heroDaily: ch?.hd ?? 0, heroWeekly: ch?.hw ?? 0 };
+  for (const fn of ["audit_game_lifecycle", "audit_launch_isolation", "audit_event_champions", "audit_development_economy"]) {
+    const rows = await q.query<{ problem: string; detail: string }>(`select problem, detail from public.${fn}()`).catch(() => []);
+    for (const r of rows) out.auditFindings.push(`${r.problem}${r.detail ? ` ${r.detail}` : ""}`);
+  }
+  return out;
 }
 
 /** START ARENA: NOT_STARTED → PREPARING. The Arena then prepares Battle #1 (the next advance does it) and runs on its own — no click per battle. */

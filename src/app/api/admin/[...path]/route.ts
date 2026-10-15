@@ -19,6 +19,7 @@ import { isPeriodKind, isPeriodStart } from "@/domain/rewards/time";
 import { chatBroadcaster, chatSigner } from "@/server/chat/runtime";
 import * as chat from "@/server/chat/service";
 import * as admin from "@/server/services/admin";
+import { LAUNCH_KEEPS, LAUNCH_RESETS } from "@/domain/launchPreflight";
 import * as lifecycle from "@/server/services/lifecycle";
 import { AdminError } from "@/server/services/admin";
 import { arenaOps } from "@/server/services/arenaOps";
@@ -271,6 +272,16 @@ route("GET", "game", async (c) => {
   void ensureArenaAdvanced().catch(() => undefined);
   return ok(await lifecycle.getGameControl(c.db, { allowDemo: demoHeroesAllowed() }));
 });
+// The Season 1 launch readiness: real counts of what a launch archives and resets, the conditions that must hold, and the backup it will rely on. READ-ONLY.
+route("GET", "game/preflight", async (c) => ok({ preflight: await lifecycle.getLaunchPreflight(c.db, lifecycleDeps()), resets: LAUNCH_RESETS, keeps: LAUNCH_KEEPS }));
+// The operator's statement that a backup was taken (and verified) — required by the launch. Append-only and audited; the app cannot inspect a backup itself.
+route("POST", "game/backup-attestation", async (c) => {
+  const body = await json(c, z.strictObject({ reference: z.string().min(3).max(300), verified: z.boolean(), notes: z.string().max(1000).nullish() }), 4_096);
+  if (!body.ok) return body.response;
+  return ok({ attestation: await lifecycle.recordBackupAttestation(c.db, lifecycleDeps(), body.data) });
+});
+// Season 1 once it is running: official matches / Picks, leaderboard and Events finalization status, and the auditors' findings. READ-ONLY.
+route("GET", "game/official-season", async (c) => ok({ status: await lifecycle.getOfficialSeasonStatus(c.db, Date.now()) }));
 route("POST", "game/launch", async (c) => {
   const body = await json(c, confirmation, 400);
   if (!body.ok) return body.response;

@@ -67,7 +67,7 @@ export default async function PublicHeroPage({ params }: { params: Promise<{ pub
                 <div key={label} className="min-w-0"><dt className="label !text-[0.6rem]">{label}</dt><dd className="font-display text-xl text-paper tnum">{v}</dd></div>
               ))}
             </dl>
-            {hero.season?.kind === "DEVELOPMENT" && <p className="mt-3 text-xs text-steel-300" data-testid="hero-dev-note">Development run — test battles, not an official record.</p>}
+            {hero.season?.kind === "DEVELOPMENT" && <p className="mt-3 text-xs text-steel-300" data-testid="hero-dev-note">Pre-season — practice battles, not an official record. Season 1 starts every hero at zero.</p>}
           </section>
 
           {hero.season && (

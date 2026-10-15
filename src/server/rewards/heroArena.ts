@@ -192,7 +192,8 @@ export interface FrozenHeroBoard {
 
 export async function getFrozenHeroBoard(q: Queryable, kind: PeriodKind, start: string): Promise<FrozenHeroBoard | null> {
   const [b] = await q.query<{ season_id: string; pool_set: boolean; prize_pool_micro: string; prize_split_bps: number[]; minimum_wins: number; participants: number; eligible_participants: number; finalized_at: Date }>(
-    "select season_id, pool_set, prize_pool_micro::text, prize_split_bps, minimum_wins, participants, eligible_participants, finalized_at from public.hero_arena_boards where kind = $1 and period_start = $2::date",
+    `select l.season_id, l.pool_set, l.prize_pool_micro::text, l.prize_split_bps, l.minimum_wins, l.participants, l.eligible_participants, l.finalized_at
+       from public.hero_arena_boards l where l.kind = $1 and l.period_start = $2::date and l.season_id in (select z.id from public.seasons z where public.season_counts(z.id))`,
     [kind, start],
   );
   if (!b) return null;
@@ -212,7 +213,11 @@ export async function getFrozenHeroRows(q: Queryable, kind: PeriodKind, start: s
 
 /** Finalized periods of one kind, newest first — the history selector. */
 export async function listFinalizedHeroPeriods(q: Queryable, kind: PeriodKind, limit = 30): Promise<Array<{ start: string; participants: number }>> {
-  const rows = await q.query<{ period_start: string; participants: number }>("select period_start::text, participants from public.hero_arena_boards where kind = $1 order by period_start desc limit $2", [kind, Math.min(Math.max(limit, 1), 120)]);
+  // Only boards of a season that counts (an official season, or the one being played): the archived pre-season's boards are never listed as history.
+  const rows = await q.query<{ period_start: string; participants: number }>(
+    "select l.period_start::text, l.participants from public.hero_arena_boards l where l.kind = $1 and l.season_id in (select z.id from public.seasons z where public.season_counts(z.id)) order by l.period_start desc limit $2",
+    [kind, Math.min(Math.max(limit, 1), 120)],
+  );
   return rows.map((r) => ({ start: r.period_start, participants: Number(r.participants) }));
 }
 

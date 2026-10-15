@@ -4,10 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { CONFIRM, type ConfirmAction } from "@/domain/lifecycle";
-import type { ActionAvailability, GameControl, LifecycleActionId, SeasonView } from "@/domain/lifecycleDto";
+import { LAUNCH_KEEPS, LAUNCH_RESETS, LAUNCH_WARNING, type LaunchPreflight } from "@/domain/launchPreflight";
+import type { ActionAvailability, Blocker, GameControl, LifecycleActionId, SeasonView } from "@/domain/lifecycleDto";
+import type { OfficialSeasonStatus } from "@/server/services/lifecycle";
 import { api, friendly } from "@/lib/api";
 
-import { Card, fmtDate, useAdminData } from "./adminUi";
+import { Card, fmtDate, useAdminData, useAdminDataWhen } from "./adminUi";
+import { LaunchReadiness, type PreflightResponse } from "./LaunchReadiness";
+import { OfficialSeasonCard } from "./OfficialSeasonCard";
 
 /**
  * GAME CONTROL — the one place where the game's lifecycle is changed: the game PHASE (Development → Live, one way), the SEASON, and the Arena's runtime
@@ -22,7 +26,6 @@ type Pending =
   | { id: "launch" | "resetDevelopment" | "endSeason"; step: "explain" | "type" }
   | { id: "startArena" | "pauseArena" | "resumeArena" | "createSeason"; step: "confirm" };
 
-const PHASE_COPY = { DEVELOPMENT: "Development", LIVE: "Live" } as const;
 const STATUS_TILE: Record<GameControl["arena"]["status"], string> = { NOT_STARTED: "NOT STARTED", PREPARING: "PREPARING", RUNNING: "RUNNING", PAUSE_REQUESTED: "PAUSING…", PAUSED: "PAUSED" };
 
 const phraseAction: Record<"launch" | "resetDevelopment" | "endSeason", ConfirmAction> = { launch: "LAUNCH", resetDevelopment: "RESET", endSeason: "END_SEASON" };
@@ -58,6 +61,11 @@ function statusTone(status: GameControl["arena"]["status"]): "teal" | "gold" | "
 
 export function GameControlPanel() {
   const { data, error, reload } = useAdminData<GameControl>("/api/admin/game");
+  // The launch readiness (pre-season only) and the official-season status (once live) are separate, heavier reads: asked less often than the 3 s Arena poll.
+  const preSeason = data?.phase === "DEVELOPMENT";
+  const live0 = data?.phase === "LIVE";
+  const pre = useAdminDataWhen<PreflightResponse>("/api/admin/game/preflight", preSeason);
+  const official = useAdminDataWhen<{ status: OfficialSeasonStatus }>("/api/admin/game/official-season", live0);
   const [pending, setPending] = useState<Pending | null>(null);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,12 +73,18 @@ export function GameControlPanel() {
 
   // The Arena changes state on its own (PREPARING → RUNNING once Battle #1 is ready, PAUSE_REQUESTED → PAUSED once the last battle is done): keep looking.
   const reloadRef = useRef(reload);
+  const heavyRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     reloadRef.current = reload;
+    heavyRef.current = () => void (live0 ? official.reload() : preSeason ? pre.reload() : undefined);
   });
   useEffect(() => {
     const t = setInterval(() => void reloadRef.current(), 3000);
-    return () => clearInterval(t);
+    const heavy = setInterval(() => heavyRef.current(), 12_000);
+    return () => {
+      clearInterval(t);
+      clearInterval(heavy);
+    };
   }, []);
 
   if (error) return <p className="text-danger" role="alert">{error}</p>;
@@ -96,9 +110,10 @@ export function GameControlPanel() {
     const r = await api(`/api/admin/game/${endpoint[id]}`, { method: "POST", ...(phrase !== undefined ? { json: { confirmation: phrase } } : {}) });
     setBusy(false);
     close();
-    if (r.ok) setMsg({ tone: "ok", text: ACTION_DONE[id] });
+    if (r.ok) setMsg({ tone: "ok", text: id === "launch" && (r.data as { alreadyLaunched?: boolean }).alreadyLaunched ? "Season 1 was already launched. This request changed nothing — the existing launch is unchanged." : ACTION_DONE[id] });
     else setMsg({ tone: "err", text: String((r.detail as { message?: string } | undefined)?.message ?? friendly(r.error)) });
     await reload();
+    void pre.reload();
   };
 
   const statusLine =
@@ -109,9 +124,9 @@ export function GameControlPanel() {
 
   return (
     <>
-      <Card title="Game control" actions={<span className={`chip ${live ? "border-teal/40 bg-teal/10 text-teal" : "border-clank-400/40 bg-clank-500/10 text-clank-300"}`} data-testid="phase-chip">{PHASE_COPY[g.phase]}</span>}>
+      <Card title="Game control" actions={<span className={`chip uppercase ${live ? "border-teal/40 bg-teal/10 text-teal" : "border-clank-400/40 bg-clank-500/10 text-clank-300"}`} data-testid="phase-chip">{live ? (g.season ? `${g.season.label} active` : "Live") : "Pre-season"}</span>}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" data-testid="game-tiles">
-          <Tile label="Game phase" value={PHASE_COPY[g.phase]} sub={live ? `Launched ${fmtDate(g.launchedAt)}` : "Testing before the official launch"} tone={live ? "teal" : "clank"} testId="tile-phase" />
+          <Tile label="Current season state" value={live ? (g.season ? `${g.season.label} active`.toUpperCase() : "BETWEEN SEASONS") : "PRE-SEASON"} sub={live ? `Launched ${fmtDate(g.launchedAt)}` : "Practice before the official launch — nothing here is official"} tone={live ? "teal" : "clank"} testId="tile-phase" />
           <Tile label="Current season" value={seasonLabel} sub={g.season ? `${g.season.kind === "COMPETITIVE" ? "Official" : "Test run"} · started ${fmtDate(g.season.startsAt)}` : "Between seasons"} testId="tile-season" />
           <Tile label="Arena status" value={STATUS_TILE[arena.status]} sub={`since ${fmtDate(arena.statusChangedAt)}${arena.lastAdvanceAt && arena.status !== "NOT_STARTED" && arena.status !== "PAUSED" ? ` · last advance ${agoLabel(g.now - arena.lastAdvanceAt)}` : ""}`} tone={statusTone(arena.status)} testId="tile-arena" />
           <Tile label="Total heroes" value={g.heroes.total.toLocaleString()} sub="every hero that exists" testId="tile-total" />
@@ -132,7 +147,7 @@ export function GameControlPanel() {
             <ActionBox
               title="Launch Season 1"
               body="Archives the development run, creates a clean Season 1 and leaves the Arena NOT STARTED. Every hero stays exactly as it is. One way: there is no going back to Development."
-              a={g.actions.launch}
+              a={gateLaunch(g.actions.launch, pre.data?.preflight ?? null)}
               label="Launch Season 1"
               tone="primary"
               testId="action-launch"
@@ -159,6 +174,9 @@ export function GameControlPanel() {
           )}
         </div>
       </Card>
+
+      {!live && <LaunchReadiness data={pre.data ?? null} onChanged={pre.reload} />}
+      {live && <OfficialSeasonCard status={official.data?.status ?? null} />}
 
       {g.rewards.checked && (
         <Card title="Reward obligations">
@@ -251,15 +269,13 @@ const CONFIRM_COPY: Record<"startArena" | "pauseArena" | "resumeArena" | "create
 const EXPLAIN_COPY: Record<"launch" | "resetDevelopment" | "endSeason", { title: string; intro: string; bullets: (g: GameControl) => string[] }> = {
   launch: {
     title: "Launch Season 1?",
-    intro: "This is an official, one-way step. It should not be done casually.",
+    intro: LAUNCH_WARNING,
     bullets: (g) => [
-      "archive the current development Arena run",
-      "create Season 1",
-      "reset public competitive records for the new season",
-      "reset the displayed Battle number to #1",
-      "archive development progress: arena achievements, Clank Gold (balances go to 0 through an audited ledger entry), loot and career counters — Season 1 starts clean (nothing is deleted; community and admin-granted achievements are kept)",
+      "archive the pre-season Arena run (nothing is deleted; every battle, snapshot and hash stays replayable)",
+      "create Season 1 and leave the Arena NOT STARTED — START ARENA is a separate step",
+      ...LAUNCH_RESETS.map((r) => `reset — ${r}`),
       `preserve every hero exactly (${g.heroes.total} total, ${g.heroes.eligible} Arena-eligible)`,
-      "leave the Arena NOT STARTED",
+      ...LAUNCH_KEEPS.slice(1).map((r) => `keep — ${r}`),
     ],
   },
   resetDevelopment: {
@@ -296,6 +312,11 @@ function TypedConfirm({ action, phrase, typed, setTyped, busy, onCancel, onConfi
   const finalLabel = action === "launch" ? "CONFIRM SEASON 1 LAUNCH" : action === "resetDevelopment" ? "CONFIRM RESET" : "CONFIRM END SEASON";
   return (
     <Modal title={action === "launch" ? "Launch Season 1?" : action === "resetDevelopment" ? "Reset current competitive state?" : "End the season?"} onClose={onCancel} tone="danger">
+      {action === "launch" && (
+        <p className="mb-3 rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-paper" data-testid="launch-warning">
+          <b className="font-display tracking-wider text-danger uppercase">Warning.</b> {LAUNCH_WARNING}
+        </p>
+      )}
       <label htmlFor="typed-confirmation" className="text-sm text-steel-300">
         Type <b className="font-display tracking-wider text-paper select-all">{phrase}</b> to confirm.
       </label>
@@ -338,4 +359,12 @@ function SeasonsTable({ seasons }: { seasons: SeasonView[] }) {
       </tbody>
     </table>
   );
+}
+
+/** The launch button obeys the preflight too (backup, pending settlements, schema…): the server re-checks all of it, this only keeps a doomed click from being offered. */
+function gateLaunch(a: ActionAvailability, pf: LaunchPreflight | null): ActionAvailability {
+  if (!pf) return a.allowed ? { ...a, allowed: false, blockers: [{ code: "PREFLIGHT_PENDING", message: "Checking launch readiness…" }] } : a;
+  const covered = new Set(["PHASE", "ARENA_STOPPED", "REWARDS"]); // already represented by the action's own blockers
+  const extra: Blocker[] = pf.checks.filter((c) => c.blocking && c.status === "FAIL" && !covered.has(c.id)).map((c) => ({ code: `PREFLIGHT_${c.id}`, message: c.detail }));
+  return extra.length ? { ...a, allowed: false, blockers: [...a.blockers, ...extra] } : a;
 }

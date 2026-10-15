@@ -219,7 +219,8 @@ describe("docs content states CURRENT product truth, from the shared rules", () 
     expect(x).toMatch(/Hero Records are statistics/);
     expect(x).toMatch(/They carry no prizes/);
     expect(x).toMatch(/every Season board starts at zero/);
-    expect(x).toMatch(/Development \/ Beta/);
+    expect(x).toMatch(/Pre-season/);
+    expect(x).not.toMatch(/Development \/ Beta|test results/);
     // the Hero Arena pools are a decision of the team: no amount of them is written anywhere
     expect(Object.keys(r.heroArena)).not.toContain("dailyPrizePool");
     const rewards = t("rewards");

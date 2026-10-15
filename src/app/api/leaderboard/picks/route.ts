@@ -3,6 +3,7 @@ import { fail, getViewer, ok, guarded } from "@/server/http/guards";
 import { boardRules, findFinalizingPeriod, getFinalBoard, getLiveBoard, listFinalizedPeriods, type BoardDto, type BoardMeDto, type BoardPayload } from "@/server/rewards/leaderboard";
 import { rewardsReady } from "@/server/rewards/pool";
 import { getReadyDb, getSettings } from "@/server/runtime";
+import { activeSeasonKey } from "@/server/services/seasonKey";
 import { getPicksSeasonPayload, listLeaderboardSeasons, pickSeason } from "@/server/services/heroBoards";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,7 @@ async function handleGET(req: Request) {
   let board: BoardDto;
   let me: BoardMeDto | null;
   if (start === null || start === current.start) {
-    const key = `${kind}:${current.start}`;
+    const key = `${await activeSeasonKey(db)}:${kind}:${current.start}`; // season-scoped: a launch can never be answered from a board computed before it
     const cached = memo.get(key);
     if (cached && nowMs - cached.at < MEMO_MS && viewerId === null) {
       board = { ...cached.board, serverNow: nowMs };

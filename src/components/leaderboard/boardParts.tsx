@@ -24,10 +24,10 @@ export function StatusChip({ rewarded, scope, stats }: { rewarded: boolean; scop
   return <span className="chip uppercase" data-testid="status-standings" title={scope === "SEASON" ? "Season standings pay nothing: the Daily and Weekly boards are the rewarded ones" : undefined}>Standings only</span>;
 }
 
-/** DEVELOPMENT / BETA is said plainly on every board while the game is a development run: those records are not official Season records. */
+/** PRE-SEASON is said plainly on every board before Season 1 launches: those records are practice, not official Season records. */
 export function SeasonChip({ season }: { season: { label: string; kind: "DEVELOPMENT" | "COMPETITIVE" } | null | undefined }) {
   if (!season) return null;
-  if (season.kind === "DEVELOPMENT") return <span className="chip border-gold/40 bg-gold/10 text-gold uppercase" data-testid="season-chip" data-kind="DEVELOPMENT" title="Test battles and test Picks — not official Season records. Season 1 starts clean.">Development / Beta</span>;
+  if (season.kind === "DEVELOPMENT") return <span className="chip border-gold/40 bg-gold/10 text-gold uppercase" data-testid="season-chip" data-kind="DEVELOPMENT" title="Practice battles and Picks — not official Season records. Season 1 starts every hero at zero.">Pre-season</span>;
   return <span className="chip uppercase" data-testid="season-chip" data-kind="COMPETITIVE">{season.label}</span>;
 }
 

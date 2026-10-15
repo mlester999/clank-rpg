@@ -100,7 +100,7 @@ describe("the brief's scenario: ranked by Arena Wins in the period AND the seaso
     expect(board).toMatchObject({ scope: "SEASON", rewarded: false, state: "SEASON", rules: null });
     expect(board.rows.slice(0, 3).map((r) => [r.name, r.rank, r.wins, r.matches])).toEqual([["Hero B", 1, 28, 28], ["Hero A", 2, 25, 25], ["Hero C", 3, 20, 20]]);
     expect(board.rows.every((r) => r.prize === "0" && r.prizeStatus === "NONE")).toBe(true);
-    expect(board.season).toMatchObject({ kind: "DEVELOPMENT", current: true, label: "Development" }); // clearly the development run, not a Season record
+    expect(board.season).toMatchObject({ kind: "DEVELOPMENT", current: true, label: "Pre-season" }); // clearly the pre-season run, not a Season record (the public label never says development)
   });
 
   it("the rewarded boards never rank by PWR, rarity, wallet or Telegram activity: changing them reorders nothing", async () => {

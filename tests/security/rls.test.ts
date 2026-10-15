@@ -109,7 +109,7 @@ describe("unauthorized mutation paths are closed at the database layer", () => {
     const tables = (await db.query<{ tablename: string }>("select tablename from pg_tables where schemaname = 'public' order by 1")).map((t) => t.tablename);
     expect(tables.filter((t) => /^bet_|wager|escrow|deposit|withdraw|custody|odds|pool/.test(t))).toEqual([]);
     expect(tables.filter((t) => /^arena_(reward|pick|holder|points|wallet|daily|leaderboard)/.test(t))).toEqual([
-      "arena_holder_observations", "arena_holder_status", "arena_holder_tier_history", "arena_leaderboard_results", "arena_leaderboards", "arena_pick_scores", "arena_pick_settlements", "arena_picks", "arena_points_ledger",
+      "arena_holder_observations", "arena_holder_status", "arena_holder_tier_history", "arena_leaderboard_result_snapshots", "arena_leaderboard_results", "arena_leaderboards", "arena_pick_scores", "arena_pick_settlements", "arena_picks", "arena_points_ledger",
       "arena_reward_accounts", "arena_reward_claims", "arena_reward_ledger", "arena_reward_token", "arena_reward_wallet_attempts", "arena_reward_wallet_history", "arena_wallet_challenges",
     ]);
     // Per-battle token rewards left no table behind either: the old per-battle outcome table and the weekly-only tables are gone.

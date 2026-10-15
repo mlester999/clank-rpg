@@ -6,7 +6,7 @@ import { seasonRankFor } from "@/domain/progression/seasonRank";
 import { accuracyPercent, rankBoard } from "@/domain/rewards/leaderboard";
 import { isPeriodStart, periodWindow, periodWindowOf, type PeriodKind } from "@/domain/rewards/time";
 import { formatTokenAmount, LOGICAL_DECIMALS } from "@/domain/rewards/tokens";
-import { seasonChipLabel } from "@/domain/lifecycle";
+import { publicSeasonLabel } from "@/domain/lifecycle";
 import type { GameSettings, SeasonRankTier } from "@/domain/settings";
 import type { ClassVisual } from "@/lib/dto";
 
@@ -49,7 +49,7 @@ export async function listLeaderboardSeasons(q: Queryable, nowMs: number = Date.
     const endsAt = s.ends_at ? new Date(s.ends_at).getTime() : null;
     return {
       id: s.id,
-      label: seasonChipLabel({ kind: s.kind, number: s.number, name: s.name }),
+      label: publicSeasonLabel({ kind: s.kind, number: s.number, name: s.name }),
       kind: s.kind,
       status: s.status,
       current: s.status === "ACTIVE",

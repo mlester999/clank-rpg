@@ -1,7 +1,9 @@
 # Game lifecycle, seasons and the Arena's runtime state
 
 > **Status: built and verified on scratch databases only. Nothing here has been applied, launched or deployed on LIVE.** The migrations are `supabase/migrations/20261006002000_game_lifecycle_seasons.sql` and
-> `20261006002100_development_economy_archive.sql` (both pending; the approved hashes are in [`RELEASE_PLAN.md`](./RELEASE_PLAN.md) §9). Launching Season 1 is a separate, deliberate Admin action that happens after final approval — see §9.
+> `20261006002100_development_economy_archive.sql` (both pending; the approved hashes are in [`RELEASE_PLAN.md`](./RELEASE_PLAN.md) §9), plus `20261015002700_event_champion_snapshots.sql` (the launch backup attestation, the champion snapshots and two auditors — see [`EVENTS.md`](./EVENTS.md)). Launching Season 1 is a separate, deliberate Admin action that happens after final approval — see §9.
+>
+> **Launch hardening (migration 2700 + code).** The launch now (1) is **idempotent** — once the game is LIVE any further launch request, with the typed phrase, returns the existing launch (`alreadyLaunched: true`) and resets nothing; (2) runs a **preflight** with real counts and refuses on a failing blocking condition (§3b); (3) needs a recent **verified backup attestation** (§3b); (4) **verifies Season 1 starts at zero** inside its own transaction (no battle, Pick, score, hero record or board attributed to it, and `audit_game_lifecycle` / `audit_development_economy` / `audit_launch_isolation` all clean) and rolls back whole otherwise. Public read paths that were not season-scoped are fixed (§6a).
 
 Clank RPG is still in **development**: the Arena and the heroes are being used for testing, so today's battle numbers, wins and Picks are test data. When the game launches there must be **one
 deliberate, audited action** that starts a clean **Season 1** — with every hero exactly as it was — and the Arena must then **stay stopped until an operator presses START**. This document is how
@@ -42,7 +44,7 @@ same transaction with the previous and the new state (never a secret).
 | **START ARENA** | Arena `NOT_STARTED`, an active season, ≥ 8 Arena-eligible heroes | `NOT_STARTED → PREPARING`; the next advance prepares **Battle #1** (the same fairness rules as everywhere; no hero is special-cased), then `RUNNING`. Battles then continue by themselves — no click per fight. | `ARENA_START` |
 | **PAUSE ARENA** | `RUNNING` / `PREPARING` | If nothing is committed → `PAUSED` at once. Otherwise → `PAUSE_REQUESTED` ("Pausing…"): **no new roster is made**; the battle on stage, the announced upcoming battle (players may have picked on it) and the prepared one all play out and settle **exactly as planned**; nothing visible is ever cancelled. `PAUSED` is declared only when none is left **and the last battle's own results screen has finished** — viewers are never cut off. | `ARENA_PAUSE_REQUEST`, then `ARENA_PAUSED` (by `system`) |
 | **RESUME ARENA** | `PAUSED` or `PAUSE_REQUESTED` (cancels the pause) | Continues the **same** season: after Battle #25 comes **#26**, never #1; the persisted queue, hero season records and the Picks lifecycle carry on. | `ARENA_RESUME` |
-| **LAUNCH SEASON 1** | phase `DEVELOPMENT`, Arena stopped (`NOT_STARTED`/`PAUSED`), **no reward liability** | See §3. Typed phrase **`LAUNCH SEASON 1`** (two-step dialog; the server checks the phrase again). One-way. | `GAME_LAUNCH` |
+| **LAUNCH SEASON 1** | phase `DEVELOPMENT`, Arena stopped (`NOT_STARTED`/`PAUSED`), **no reward liability**, preflight green (§3b) | See §3. Typed phrase **`LAUNCH SEASON 1`** (two-step dialog; the server checks the phrase again). One-way. **Idempotent:** when already LIVE it returns the existing launch and changes nothing. | `GAME_LAUNCH` |
 | **RESET ARENA** (development run) | phase `DEVELOPMENT`, Arena stopped, no reward liability | Archives the test run and starts the next one (`Development run 2` …): battle numbers from #1, records at zero. Heroes and history untouched. Typed phrase **`RESET ARENA`**. **Refused once LIVE** — a live season is ended, never reset. | `SEASON_RESET` |
 | **END SEASON** | phase `LIVE`, Arena stopped, nothing committed, **every Daily/Weekly board of the season finalized** | Archives the season (battles, snapshots, hashes, results stay replayable), leaves the game between seasons with the Arena `NOT_STARTED`. Typed phrase **`END SEASON`**. | `SEASON_END` |
 | **CREATE NEXT SEASON** | phase `LIVE`, no active season | Season N+1: battle numbers from #1, every hero's record at zero, Arena `NOT_STARTED`. | `SEASON_CREATE` |
@@ -73,6 +75,25 @@ Weekly boards, the queue/cycle. The development run's Arena queue, cycle, carrie
 **What a launch refuses:** a running Arena; an existing LIVE phase; and **real reward liabilities** — any prize credited, reserved, claimed, pending/sent claim or held prize. Those are obligations the archive
 would orphan; reverse them with the audited adjustment tool in Admin → Arena Picks first. (While testing, run with prizes paused: a finalized development board credits prizes and would block the launch.
 Game control warns about this.)
+
+## 3b. The launch preflight and the backup attestation
+
+`GET /api/admin/game/preflight` (Admin → Game control → *Season 1 launch readiness*) reads **real counts** — heroes, hero versions, pre-season battles (settled / void / open), Picks, scored rows, frozen boards and results, hero records, Gold accounts, loot, battle achievements, pending settlements, active jobs — and the conditions below. The **same decision re-runs inside the launch transaction**, under the locks, and a failing *blocking* condition refuses the launch with the check's name (`PREFLIGHT_<ID>`).
+
+| Check | Blocking | Meaning |
+|---|---|---|
+| `PHASE` | yes | the game is still pre-season |
+| `SCHEMA` | yes | latest applied migration ≥ the version this code needs (`REQUIRED_SCHEMA_VERSION`, pinned by a test to the newest file) and every required object exists |
+| `ARENA_STOPPED` | yes | Arena `NOT_STARTED`/`PAUSED`: the database itself refuses to schedule a battle then, so no worker can write into the pre-season |
+| `REWARDS` | yes | nothing credited / reserved / claimed / held (existing rule) |
+| `PICK_SETTLEMENTS` | yes | every **settled** battle's eligible Picks have been scored |
+| `NO_COMPETING_ACTION` | yes | the lifecycle advisory lock is free (no launch / reset / finalization in flight) |
+| `BACKUP` | yes (in production) | a **verified** backup attestation from the last 24 h, taken at the **current** schema version |
+| `OPEN_BATTLES`, void settlements, unfinalized periods, eligible heroes, policy notes | advisory | informational; open battles are voided by the launch as designed |
+
+**The backup attestation.** The application cannot look inside a Supabase backup, so it does not pretend to: *Record attestation* stores who said a backup exists, what it is called and when, whether it was verified, and the schema version it was taken at (`launch_backup_attestations`, append-only, audited as `LAUNCH_BACKUP_ATTESTED`). A migration applied after the backup makes it stale. The requirement is on by default (`LifecycleDeps.requireBackup !== false`); only the automated suites switch it off.
+
+**Policy flags the owner must confirm (not decided silently):** Gold that was paid by *permanent* achievements (community / chain / admin-granted) is reset along with all other pre-season Gold, and those achievements will not pay it again; loot that was not a battle drop (e.g. an admin grant) is archived with the rest. The preflight prints both numbers when non-zero.
 
 ## 3a. Development progress does not carry into Season 1 (the development economy)
 
@@ -128,14 +149,23 @@ launch *would* archive today.
 * Finalization and the lifecycle actions are separated by an **advisory lock** (shared for finalizations, exclusive for launch / reset / end season), *not* by the Arena's row lock — a finalization writes a result
   row per participant and must never stall battles at midnight UTC. A prize is therefore either credited **before** a launch looks (and the launch refuses) or archived **by** it — never both (tested ×12 on real Postgres).
 
+## 6a. Read paths that were NOT season-scoped, and are now
+
+A full audit of the public read paths found these leaks (all fixed, each with a test; the pre-season rows were never deleted — they are simply no longer read as official):
+
+* **Finalized Daily / Weekly boards** (`listFinalizedPeriods`, `getFinalBoard`, Hero Arena `listFinalizedHeroPeriods`, `getFrozenHeroBoard`) listed and served *every* frozen board — including the pre-season's — and by date. They are now filtered to seasons that count (an official season, or the one being played).
+* **A member's own Picks record** (`getPickStats`: total / correct / accuracy / streak) and **Pick history** (`listPickHistory`) read all `arena_picks` ever — a member with 500 pre-season Picks would have started Season 1 with them. Now scoped through the battle's season.
+* **The boards' in-process memos** (Picks, Hero Arena, Hero Records, 4 s) were keyed by period only, so for a few seconds after the launch a board computed before it could still be served (reproduced by a test, which fails without the fix). The key now includes the active season.
+* **The scheduler's "previous battle" anchor** read the last settled battle of *any* season; it now reads this season's, so the first official battle is never anchored to an archived one.
+
 ## 7. The public screens (and the one real error)
 
 Each is a designed screen in the Clank RPG style, derived from the **persisted** status — never from a process's memory:
 
 | State | Screen |
 |---|---|
-| Phase DEVELOPMENT, Arena not running | **ARENA IN DEVELOPMENT** — test battles are not running, nothing here is an official record |
-| Phase DEVELOPMENT, running | the arena, with a permanent **"Development · test battles"** chip (a development run is never shown as a season) |
+| Phase DEVELOPMENT, Arena not running | **PRE-SEASON** — practice battles are not running, Season 1 is coming soon, nothing here is an official record |
+| Phase DEVELOPMENT, running | the arena, with a permanent **"Pre-season"** chip (a pre-season run is never shown as a season; nothing public says development, test or beta) |
 | Phase LIVE, `NOT_STARTED` | **ARENA PREPARING** — "Season 1 battles will begin soon. The Arena has not started yet." |
 | `PREPARING` | **PREPARING ARENA** — the first battle is being made ready |
 | `RUNNING` | the arena + Arena Picks; **"Pausing after this battle"** while a pause drains |
@@ -161,7 +191,7 @@ it changes **no hero, hero version, battle result, snapshot, hash, queue row or 
 
 **Launching Season 1 (later, only after explicit approval — NOT part of this release).** Checklist (`pnpm release:audit` prints the same list read-only):
 
-1. Every migration through 2100 is applied and the matching code is deployed; exactly one Arena worker is running.
+1. Every migration through **2700** is applied and the matching code is deployed; exactly one Arena worker is running. Take a backup, verify it, and **record the attestation** (Admin → Game control → Backup readiness).
 2. Final data review: hero counts (total / eligible / suspended), rarities, PWR; the BBOT-style exclusions are blocked in Admin → Telegram.
 3. No reward liabilities (Admin → Game control → *Reward obligations* says "clear"); prizes paused while testing.
 4. Admin → Game control → **Pause Arena**; wait until it says **PAUSED** (the committed battles finish first).
@@ -177,7 +207,7 @@ it changes **no hero, hero version, battle result, snapshot, hash, queue row or 
 
 ## 11. Admin API (all admin-session + same-origin; all audited)
 
-`GET /api/admin/game` · `POST /api/admin/game/{launch|reset|end-season}` (body `{confirmation}`) · `POST /api/admin/game/{start|pause|resume|create-season}` · `GET /api/admin/seasons` (read-only) ·
+`GET /api/admin/game` · `GET /api/admin/game/preflight` · `GET /api/admin/game/official-season` · `POST /api/admin/game/backup-attestation` (body `{reference, verified, notes?}`) · `POST /api/admin/game/{launch|reset|end-season}` (body `{confirmation}`) · `POST /api/admin/game/{start|pause|resume|create-season}` · `GET /api/admin/seasons` (read-only) ·
 `POST /api/admin/arena {action}` (legacy: pause / resume route through the lifecycle; void_unsettled / abort_cycle are the emergency tools). Public: `GET /api/arena/state` carries `status`, `phase`,
 `pausing`, `season`, season-scoped battle numbers and nothing about queues or cycles.
 
