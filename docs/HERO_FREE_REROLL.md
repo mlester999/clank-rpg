@@ -4,6 +4,8 @@
 > and on the owner's explicit go-ahead the feature flag `hero.free_reroll` was created and **switched ON** (audit-logged as `flag.set`): every claimed member with an eligible hero has one free reroll per UTC day. **Kill switch:** Admin → Feature flags → `hero.free_reroll` off
 > (instant; rerolls already made stay made). The owner enabled it knowing the long-run effect in [§ 4](#4-fairness-what-one-free-reroll-a-day-does-to-the-game) (a daily reroll is a ratchet toward Legendary); the safeguards listed there remain open options.
 
+> **Need another roll the same day?** A member who has used today's free reroll can pay $CLANKRPG for another — see [`HERO_PAID_REROLL.md`](HERO_PAID_REROLL.md) (built, shipped off). The paid reroll deliberately removes the one-per-day brake for those who pay, which makes the § 4 fairness discussion matter more.
+
 One free reroll per member per **UTC calendar day**. The reroll replaces the member's hero's *generated state* (class, rarity, stats / PWR, look) with a fresh roll from the **same generator that creates
 every hero** — same class odds, same rarity weights, same PWR bands. The hero keeps its id, owner, claim, Gold, items, achievements, record, Picks and rewards; the old state stays in the version history.
 

@@ -69,7 +69,7 @@ export async function freeRerollReady(q: Queryable): Promise<boolean> {
   return Boolean(row?.ready);
 }
 
-interface MemberHero {
+export interface MemberHero {
   id: string;
   kind: "COMMUNITY" | "SPECIAL_CHARACTER";
   status: string;
@@ -85,7 +85,7 @@ interface MemberHero {
   claimed: boolean;
 }
 
-const HERO_SQL = `select c.id, c.kind, c.status, c.is_demo, c.public_id, coalesce(c.name_override, c.name) as name, c.telegram_user_id, c.current_hero_version_id,
+export const HERO_SQL = `select c.id, c.kind, c.status, c.is_demo, c.public_id, coalesce(c.name_override, c.name) as name, c.telegram_user_id, c.current_hero_version_id,
                          tu.status as member_status, tu.display_name, tu.activity_score, tu.behavior, (cl.character_id is not null) as claimed
                     from public.characters c
                     join public.telegram_users tu on tu.telegram_user_id = c.telegram_user_id
@@ -93,7 +93,7 @@ const HERO_SQL = `select c.id, c.kind, c.status, c.is_demo, c.public_id, coalesc
                    where c.telegram_user_id = $1`;
 
 /** Why this member's hero cannot be rerolled right now, from facts about the hero only (the Arena roster is checked separately). */
-function unavailableReason(h: MemberHero, allowDemo: boolean): FreeRerollBlock | null {
+export function unavailableReason(h: MemberHero, allowDemo: boolean): FreeRerollBlock | null {
   if (h.kind !== "COMMUNITY") return "HERO_UNAVAILABLE";
   if (h.member_status === "BANNED" || h.member_status === "FLAGGED") return "HERO_UNAVAILABLE";
   if (h.status !== "ACTIVE") return "HERO_UNAVAILABLE";
@@ -114,13 +114,22 @@ interface AllowanceRow {
 
 const ALLOWANCE_COLUMNS = "telegram_user_id, utc_day::text as utc_day, character_id, request_id, hero_version_id, previous_version_id, created_at";
 
-/** Today's reroll as the result screen shows it, built from the TWO STORED VERSIONS (so a retry or a refresh shows the same pair, never a mixture). */
-async function resultFromAllowance(q: Queryable, a: AllowanceRow, deps: FreeRerollDeps, alreadyApplied: boolean): Promise<FreeRerollResultDto> {
-  const [next, prev] = await Promise.all([loadVersion(q, a.character_id, a.hero_version_id), loadVersion(q, a.character_id, a.previous_version_id)]);
+/** A reroll as the result screen shows it, built from the TWO STORED VERSIONS (so a retry or a refresh shows the same pair, never a mixture). */
+export async function buildRerollResult(
+  q: Queryable,
+  r: { characterId: string; requestId: string; versionId: string; previousVersionId: string; at: Date },
+  deps: FreeRerollDeps,
+  alreadyApplied: boolean,
+): Promise<FreeRerollResultDto> {
+  const [next, prev] = await Promise.all([loadVersion(q, r.characterId, r.versionId), loadVersion(q, r.characterId, r.previousVersionId)]);
   if (!next || !prev) throw new FreeRerollError("INVALID_ROLL", 500, "The reroll's versions are missing.");
-  const [before, after] = [await heroCardFor(q, a.character_id, deps, rowToState(prev)), await heroCardFor(q, a.character_id, deps, rowToState(next))];
-  return { requestId: a.request_id, alreadyApplied, rerolledAt: new Date(a.created_at).getTime(), before, after, comparison: compareRerolled(before, after) };
+  const [before, after] = [await heroCardFor(q, r.characterId, deps, rowToState(prev)), await heroCardFor(q, r.characterId, deps, rowToState(next))];
+  return { requestId: r.requestId, alreadyApplied, rerolledAt: new Date(r.at).getTime(), before, after, comparison: compareRerolled(before, after) };
 }
+
+/** Today's free reroll as the result screen shows it. */
+const resultFromAllowance = (q: Queryable, a: AllowanceRow, deps: FreeRerollDeps, alreadyApplied: boolean): Promise<FreeRerollResultDto> =>
+  buildRerollResult(q, { characterId: a.character_id, requestId: a.request_id, versionId: a.hero_version_id, previousVersionId: a.previous_version_id, at: a.created_at }, deps, alreadyApplied);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // STATUS (read-only)
@@ -163,7 +172,41 @@ export async function getFreeRerollStatus(q: Queryable, memberId: number, enable
 // REROLL
 // ---------------------------------------------------------------------------------------------------------------------
 
-const constraintOf = (error: unknown): string | null => {
+/**
+ * THE ROLL, shared by the free and the paid reroll: a brand-new hero state from the existing generator (same class odds, rarity weights and PWR bands as every hero,
+ * a server-chosen 128-bit nonce), VALIDATED before it can become a version, appended as a REROLL version with the pointer and projection moved in the same
+ * transaction. The caller holds the hero's row lock and has already decided the member may roll (allowance or payment) and that the hero is not in a committed
+ * Arena roster. A bad roll throws `INVALID_ROLL` and the caller's transaction rolls back — nothing is consumed.
+ */
+export async function rollNewHeroVersion(tx: Queryable, hero: MemberHero, requestId: string, actor: string, deps: FreeRerollDeps) {
+  const previous = await loadCurrentVersion(tx, hero.id);
+  if (!previous) throw new FreeRerollError("NO_HERO", 409, "This hero has no version history.");
+  const nonce = deps.nonce ? deps.nonce() : secureSeed(16);
+  const generated = (deps.generate ?? generateCharacter)({
+    telegramUserId: Number(hero.telegram_user_id),
+    displayName: hero.name,
+    behavior: hero.behavior,
+    activityScore: Number(hero.activity_score),
+    classes: deps.classes,
+    settings: deps.settings,
+    secret: deps.secret,
+    seedSalt: nonce,
+  });
+  const classDef = deps.classes.find((c) => c.id === generated.classId);
+  if (!classDef) throw new FreeRerollError("INVALID_ROLL", 500, "The rolled class is not available.");
+  let state;
+  try {
+    state = versionStateFromGenerated(generated, classDef, deps.settings.character, deps.settings.visuals.spriteSet);
+  } catch (error) {
+    throw new FreeRerollError("INVALID_ROLL", 500, error instanceof Error ? error.message : "The roll was invalid.");
+  }
+  const problem = rolledStateProblem(state, deps.classes, deps.settings.character);
+  if (problem) throw new FreeRerollError("INVALID_ROLL", 500, problem);
+  return appendAndProject(tx, hero, { action: "REROLL", state, requestId, actor }, deps);
+}
+
+/** The constraint a database error names (postgres.js / PGlite shapes), if any. */
+export const constraintOf = (error: unknown): string | null => {
   const e = error as { constraint?: unknown; constraint_name?: unknown; cause?: unknown; message?: unknown };
   const direct = e?.constraint ?? e?.constraint_name;
   if (typeof direct === "string") return direct;
@@ -211,33 +254,7 @@ export async function rerollOwnHero(db: Db, memberId: number, requestId: string,
         throw e;
       }
 
-      const previous = await loadCurrentVersion(tx, hero.id);
-      if (!previous) throw new FreeRerollError("NO_HERO", 409, "This hero has no version history.");
-
-      // The roll: the existing generator, a server-chosen nonce, validated before it can become a version.
-      const nonce = deps.nonce ? deps.nonce() : secureSeed(16);
-      const generated = (deps.generate ?? generateCharacter)({
-        telegramUserId: Number(hero.telegram_user_id),
-        displayName: hero.name,
-        behavior: hero.behavior,
-        activityScore: Number(hero.activity_score),
-        classes: deps.classes,
-        settings: deps.settings,
-        secret: deps.secret,
-        seedSalt: nonce,
-      });
-      const classDef = deps.classes.find((c) => c.id === generated.classId);
-      if (!classDef) throw new FreeRerollError("INVALID_ROLL", 500, "The rolled class is not available.");
-      let state;
-      try {
-        state = versionStateFromGenerated(generated, classDef, deps.settings.character, deps.settings.visuals.spriteSet);
-      } catch (error) {
-        throw new FreeRerollError("INVALID_ROLL", 500, error instanceof Error ? error.message : "The roll was invalid.");
-      }
-      const problem = rolledStateProblem(state, deps.classes, deps.settings.character);
-      if (problem) throw new FreeRerollError("INVALID_ROLL", 500, problem);
-
-      const { row, previous: replaced } = await appendAndProject(tx, hero, { action: "REROLL", state, requestId, actor: memberActor(memberId) }, deps);
+      const { row, previous: replaced } = await rollNewHeroVersion(tx, hero, requestId, memberActor(memberId), deps);
       await tx.query(
         `insert into public.hero_free_rerolls (telegram_user_id, utc_day, character_id, request_id, hero_version_id, previous_version_id,
                                                from_class_id, from_rarity, from_power, to_class_id, to_rarity, to_power, created_at)

@@ -191,7 +191,7 @@ it changes **no hero, hero version, battle result, snapshot, hash, queue row or 
 
 **Launching Season 1 (later, only after explicit approval — NOT part of this release).** Checklist (`pnpm release:audit` prints the same list read-only):
 
-1. Every migration through **2700** is applied and the matching code is deployed; exactly one Arena worker is running. Take a backup, verify it, and **record the attestation** (Admin → Game control → Backup readiness).
+1. Every migration through **3000** is applied (`REQUIRED_SCHEMA_VERSION` — 2800 prize pools, 2900 achievement Gold/titles, 3000 paid reroll were added after 2700; see [`EVENTS.md`](./EVENTS.md) §9) and the matching code is deployed; exactly one Arena worker is running. Take a backup, verify it, and **record the attestation** (Admin → Game control → Backup readiness).
 2. Final data review: hero counts (total / eligible / suspended), rarities, PWR; the BBOT-style exclusions are blocked in Admin → Telegram.
 3. No reward liabilities (Admin → Game control → *Reward obligations* says "clear"); prizes paused while testing.
 4. Admin → Game control → **Pause Arena**; wait until it says **PAUSED** (the committed battles finish first).

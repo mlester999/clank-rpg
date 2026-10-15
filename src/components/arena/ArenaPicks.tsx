@@ -302,6 +302,7 @@ const PickRow = memo(function PickRow({ f, visual, disabled, selected, pending, 
       <Link href={`/heroes/${f.publicId}`} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md hover:brightness-125" aria-label={`${f.name}, ${rarity.toLowerCase()} ${visual?.name ?? "hero"}${f.power !== null ? `, PWR ${f.power.toLocaleString()}` : ""}`}>
         <HeroAvatar avatarUrl={f.avatarUrl} look={look} size={48} label={f.name} className="rounded-md" eager />
         <span className="min-w-0 flex-1">
+          {f.title ? <span className="block truncate text-[0.6rem] leading-tight font-bold tracking-[0.12em] text-gold uppercase" title={f.title} data-testid="fighter-title">{f.title}</span> : null}
           <span className="block truncate text-[0.82rem] leading-tight font-bold text-paper" title={f.name}>{f.name}</span>
           <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.7rem] leading-tight">
             <RarityBadge rarity={rarity} size="xs" />

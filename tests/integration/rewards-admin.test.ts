@@ -29,7 +29,8 @@ const funded = (): SimulatedChainReader => {
   c.setBalance(TREASURY, chainTokens(1_000_000)); // the optional, read-only reward wallet
   return c;
 };
-const overview = async (reader: SimulatedChainReader | null = funded(), nowMs = Date.now(), token: TokenStatus = tokenStatus(), settings = DEFAULT_SETTINGS) =>
+// The fixture pools (100,000 / 500,000) the arithmetic below is written against — see FIXTURE_POOLS. The SHIPPED defaults have their own test.
+const overview = async (reader: SimulatedChainReader | null = funded(), nowMs = Date.now(), token: TokenStatus = tokenStatus(), settings = settingsWith()) =>
   rewardsOverview(db, { settings, tokenDecimals: reader ? DECIMALS : null, token, reader, nowMs });
 
 describe("admin: the LEADERBOARD ECONOMY — what the rules can cost at most", () => {
@@ -39,7 +40,14 @@ describe("admin: the LEADERBOARD ECONOMY — what the rules can cost at most", (
     expect(o.economy.weekly).toEqual({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
     expect(o.economy.maxBonusPercent).toBe(25);
   });
-  it("SEASON 1 PLAN: 84 days × 100,000 + 12 weeks × 500,000 = 14,400,000 base; 18,000,000 with every bonus at 25%; inside a 20,000,000 allocation with a 2,000,000 buffer — a planning metric only", async () => {
+  it("the SHIPPED defaults (Daily 500,000 / Weekly 1,000,000) plan 54,000,000 base and 67,500,000 with every bonus — more than the 20,000,000 planning allocation, which the console reports as a warning (the owner sets the allocation to the real reserve)", async () => {
+    const o = await overview(undefined, Date.now(), tokenStatus(), DEFAULT_SETTINGS);
+    expect(o.economy.daily).toEqual({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.weekly).toEqual({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
+    expect(o.economy.season).toEqual({ weeks: 12, days: 84, dailyBaseTotal: "42,000,000", weeklyBaseTotal: "12,000,000", baseMaximum: "54,000,000", maximumWithBonuses: "67,500,000", allocation: "20,000,000", buffer: "-47,500,000", fits: false });
+    expect(o.warnings.join(" ")).toMatch(/Season plan: the maximum payout with every holder bonus \(67,500,000\) exceeds the reward allocation \(20,000,000\)/);
+  });
+  it("SEASON PLAN at the fixture pools: 84 days × 100,000 + 12 weeks × 500,000 = 14,400,000 base; 18,000,000 with every bonus at 25%; inside a 20,000,000 allocation with a 2,000,000 buffer — a planning metric only", async () => {
     const { season } = (await overview()).economy;
     expect(season).toEqual({ weeks: 12, days: 84, dailyBaseTotal: "8,400,000", weeklyBaseTotal: "6,000,000", baseMaximum: "14,400,000", maximumWithBonuses: "18,000,000", allocation: "20,000,000", buffer: "2,000,000", fits: true });
     expect((await overview()).warnings.join(" ")).not.toMatch(/Season plan/);

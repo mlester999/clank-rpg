@@ -9,7 +9,7 @@ import { resetRuntimeCaches } from "@/server/runtime";
 import { createTestDb, resetDb } from "../support/db";
 import { giveWins, seedHeroOwners } from "../support/heroArena";
 import { freshDevelopment } from "../support/lifecycle";
-import { utc } from "../support/rewards";
+import { pinFixturePools, utc } from "../support/rewards";
 
 /**
  * THE HALL OF CHAMPIONS OVER HTTP: public, read-only, validated, leak-free — and Admin: authenticated, same-origin, audited, with the two programs' pools independent.
@@ -53,6 +53,7 @@ afterAll(async () => {
 let cast: { A: string; B: string; F: [string, string] };
 beforeEach(async () => {
   await resetDb(db);
+  await pinFixturePools(db); // the fixture pools (100,000 / 500,000) these assertions are written against; the shipped defaults are pinned in the unit tests
   await freshDevelopment(db);
   resetRuntimeCaches();
   const heroes = await seedHeroOwners(db, [{ user: OWNER_A, name: "Hero A", claimed: true }, { user: OWNER_B, name: "Hero B" }, { user: 880_001, name: "Filler One" }, { user: 880_002, name: "Filler Two" }]);

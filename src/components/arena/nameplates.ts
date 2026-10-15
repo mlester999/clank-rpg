@@ -308,6 +308,8 @@ export interface PlateMetrics {
   maxChars: number;
   /** The widest a name may be drawn, in layout units. */
   maxNameW: number;
+  /** Whether a hero's TITLE (its chosen achievement title) is also shown on the compact plate: only on a stage wide enough to spare the extra line. (Full plates always show it.) */
+  titleInCompact: boolean;
   /** Convert css px → layout units. */
   u: (cssPx: number) => number;
 }
@@ -326,6 +328,7 @@ export function plateMetrics(cssW: number, layoutW: number): PlateMetrics {
     subFs: u(nameCss * 0.74),
     maxChars: cssW < 400 ? 10 : cssW < 560 ? 12 : 16,
     maxNameW: u(cssW < 560 ? Math.min(cssW * 0.3, 118) : Math.min(cssW * 0.22, 190)),
+    titleInCompact: cssW >= 560,
     u,
   };
 }
@@ -344,16 +347,23 @@ export function fitPlateName(name: string, maxChars: number, maxWidth: number, m
 /**
  * The four plate sizes of one hero (layout units) from its drawn name and class label widths. compact: name + HP bar. full: + the class line.
  * tag: the bare name (outlined, no box) over a thin HP line. bar: the HP bar alone.
+ *
+ * `titleW` (0 = the hero shows no title) is the width of the hero's TITLE line, drawn ABOVE the name: always on the full plate, and on the compact plate when
+ * the stage is wide enough (`m.titleInCompact`). The tag and bar modes never carry it, so a crowd that squeezes plates still leaves every name on screen.
  */
-export function plateSizes(m: PlateMetrics, nameW: number, classW: number): PlateSizes {
+export function plateSizes(m: PlateMetrics, nameW: number, classW: number, titleW = 0): PlateSizes {
   const { u } = m;
   const padX = u(5);
   const markW = u(7);
-  const compactW = Math.max(u(44), nameW + 2 * padX + markW);
-  const compactH = m.nameFs * 1.1 + u(11);
+  const titleH = titleW > 0 ? m.subFs * 1.15 : 0;
+  const titleBoxW = titleW > 0 ? titleW + 2 * padX + markW : 0;
+  const baseW = Math.max(u(44), nameW + 2 * padX + markW);
+  const compactW = m.titleInCompact ? Math.max(baseW, titleBoxW) : baseW;
+  const baseH = m.nameFs * 1.1 + u(11);
+  const compactH = baseH + (m.titleInCompact ? titleH : 0);
   return {
     compact: { w: compactW, h: compactH },
-    full: { w: Math.max(u(60), compactW, classW + 2 * padX + markW), h: compactH + m.subFs * 1.15 },
+    full: { w: Math.max(u(60), baseW, classW + 2 * padX + markW, titleBoxW), h: baseH + titleH + m.subFs * 1.15 },
     tag: { w: nameW + u(4), h: m.nameFs * 1.05 + u(4) },
     bar: { w: u(34), h: u(5) },
   };

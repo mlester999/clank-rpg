@@ -14,3 +14,4 @@ export type {
 } from "@/server/services/views";
 export type { LeaderboardRow } from "@/server/services/leaderboard";
 export type { InventoryItemView } from "@/server/services/inventory";
+export type { ShopItemView } from "@/server/services/shop";

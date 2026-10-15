@@ -25,7 +25,17 @@ export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
 export const utc = (y: number, m: number, d: number, h = 0, min = 0, s = 0): number => Date.UTC(y, m - 1, d, h, min, s);
 
-export const settingsWith = (over: Partial<GameSettings["arena_picks"]> = {}): GameSettings => ({ ...DEFAULT_SETTINGS, arena_picks: { ...DEFAULT_SETTINGS.arena_picks, ...over } });
+/**
+ * The pool sizes the reward tests' arithmetic is written against (Daily 100,000 · Weekly 500,000: the 30,000 / 20,000 / 15,000 … ladder of a 100,000 pool). They are TEST
+ * INPUTS, deliberately independent of the product's current default pools (`DEFAULT_ARENA_PICKS`, which the owner retunes — 500,000 / 1,000,000 today): the ladder, tie,
+ * minimum and holder-bonus rules are the same at any pool size. What the shipped defaults are is pinned where it belongs (tests/unit/rewards-*.test.ts).
+ */
+export const FIXTURE_POOLS = { dailyPrizePool: "100000", weeklyPrizePool: "500000" } as const;
+/** Writes the fixture pools into the STORED `arena_picks` row, for the suites that read settings through the routes / services (the database is seeded with the shipped defaults). */
+export async function pinFixturePools(db: Db): Promise<void> {
+  await db.query("update public.game_settings set value = value || $1::jsonb where key = 'arena_picks'", [JSON.stringify(FIXTURE_POOLS)]);
+}
+export const settingsWith = (over: Partial<GameSettings["arena_picks"]> = {}): GameSettings => ({ ...DEFAULT_SETTINGS, arena_picks: { ...DEFAULT_SETTINGS.arena_picks, ...FIXTURE_POOLS, ...over } });
 
 export const TOKEN = "0x00000000000000000000000000000000000c1a4c";
 export const TREASURY = "0x0000000000000000000000000000000000007ea5";

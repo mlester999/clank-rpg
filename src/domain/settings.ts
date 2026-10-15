@@ -352,6 +352,56 @@ export const heroArenaSettingsSchema = z.strictObject({
 export type HeroArenaSettings = z.infer<typeof heroArenaSettingsSchema>;
 
 /**
+ * THE GEAR SHOP — what Clank Gold is FOR. A hero can BUY gear for Gold and SELL spare gear back, so Gold earned in the Arena (battle rewards, correct Picks, achievements)
+ * has somewhere to go and the bag does not fill up with duplicates. It is an off-chain, Gold-only economy: no token, no wallet, no real money.
+ *
+ * Prices are SETTINGS (Admin → Settings → shop). `buy.<rarity> = null` means that rarity is never sold: Legendary gear is earned, not bought. Every `sell` price must be
+ * BELOW the `buy` price of the same rarity, so buying something and selling it straight back is always a loss — the shop can only ever remove Gold from the economy.
+ * Gear is the same small flat bonus whether it was dropped or bought (see `RARITY_BUDGET`), and a hero's POWER never includes gear.
+ */
+const goldPrice = z.number().int().min(1).max(10_000_000);
+export const shopSettingsSchema = z
+  .strictObject({
+    /** The shop (buying) and selling spare gear. Off = both closed; nothing else in the game changes. */
+    enabled: z.boolean(),
+    /** Gold to BUY one item of each rarity (`null` = not sold). */
+    buy: z.strictObject({ COMMON: goldPrice.nullable(), UNCOMMON: goldPrice.nullable(), RARE: goldPrice.nullable(), EPIC: goldPrice.nullable(), LEGENDARY: goldPrice.nullable() }),
+    /** Gold paid when SELLING a spare item of each rarity (always below that rarity's buy price). */
+    sell: z.strictObject({ COMMON: goldPrice, UNCOMMON: goldPrice, RARE: goldPrice, EPIC: goldPrice, LEGENDARY: goldPrice }),
+  })
+  .superRefine((v, ctx) => {
+    for (const rarity of ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"] as const) {
+      const buy = v.buy[rarity];
+      if (buy !== null && v.sell[rarity] >= buy) ctx.addIssue({ code: "custom", path: ["sell", rarity], message: `the ${rarity} sell price must be below its buy price (buying and selling back may never be a profit)` });
+    }
+  });
+export type ShopSettings = z.infer<typeof shopSettingsSchema>;
+
+/**
+ * THE PAID HERO REROLL — a member who has used today's free reroll can pay $CLANKRPG for another. The price is a decimal string of WHOLE tokens (the server converts it with the
+ * token contract's own `decimals()`; a JavaScript number never touches a token amount). It is paid with a normal ERC-20 transfer to the reward treasury, which the server
+ * verifies on-chain, read-only — the app holds no key and moves nothing. The feature itself is switched on by the feature flag `hero.paid_reroll` (off by default).
+ */
+export const heroRerollSettingsSchema = z.strictObject({
+  /** Whole $CLANKRPG one paid reroll costs. */
+  paidPrice: tokenAmount,
+  /** How many paid rerolls one member may use per UTC day (the free one is not counted). A brake on churning for a top rarity — a paid reroll is exactly as random as a free one. */
+  paidMaxPerDay: z.number().int().min(1).max(100),
+  /** Blocks on top of the payment's own before the reroll is applied (a payment that is not confirmed yet is simply waited for). */
+  paymentConfirmations: z.number().int().min(1).max(64),
+});
+export type HeroRerollSettings = z.infer<typeof heroRerollSettingsSchema>;
+
+export const DEFAULT_SHOP: ShopSettings = {
+  enabled: true,
+  // Tuned against what a hero earns: ~10 Gold per Arena fight on average (participation 2 + placement bonus + 2 per elimination), plus correct Picks and achievements.
+  buy: { COMMON: 200, UNCOMMON: 500, RARE: 1500, EPIC: 5000, LEGENDARY: null },
+  sell: { COMMON: 40, UNCOMMON: 100, RARE: 300, EPIC: 1000, LEGENDARY: 2500 },
+};
+
+export const DEFAULT_HERO_REROLL: HeroRerollSettings = { paidPrice: "100000", paidMaxPerDay: 10, paymentConfirmations: 2 };
+
+/**
  * Rules 3.1.0 engagement, as shipped (durations before `pace.time`; see `engagementSchema`). Tuned with `scripts/engagement-sim.ts` against rules 3.0.0
  * on the same seeded fights (free-for-alls, 1v1 duels and ranged-vs-melee final duels) — numbers and reasoning in docs/COMBAT.md.
  */
@@ -578,6 +628,8 @@ export const settingsSchemas = {
   picks: picksSettingsSchema,
   arena_picks: arenaPicksSettingsSchema,
   hero_arena: heroArenaSettingsSchema,
+  shop: shopSettingsSchema,
+  hero_reroll: heroRerollSettingsSchema,
   visuals: visualSettingsSchema,
 } as const;
 
@@ -606,6 +658,8 @@ export interface GameSettings {
   picks: PicksSettings;
   arena_picks: ArenaPicksSettings;
   hero_arena: HeroArenaSettings;
+  shop: ShopSettings;
+  hero_reroll: HeroRerollSettings;
   visuals: VisualSettings;
 }
 
@@ -614,8 +668,8 @@ export const DEFAULT_ARENA_PICKS: z.output<typeof arenaPicksBaseSchema> = {
   enabled: true,
   minimumClaim: "10000",
   pointsPerCorrectPick: 10,
-  dailyPrizePool: "100000",
-  weeklyPrizePool: "500000",
+  dailyPrizePool: "500000",
+  weeklyPrizePool: "1000000",
   // #1 30% · #2 20% · #3 15% · #4 10% · #5 8% · #6 6% · #7 4% · #8 3% · #9 2% · #10 2%
   prizeSplitBps: [3000, 2000, 1500, 1000, 800, 600, 400, 300, 200, 200],
   dailyMinimumPicks: 20,
@@ -766,6 +820,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   picks: { rewardGold: 2 },
   arena_picks: DEFAULT_ARENA_PICKS,
   hero_arena: DEFAULT_HERO_ARENA,
+  shop: DEFAULT_SHOP,
+  hero_reroll: DEFAULT_HERO_REROLL,
   visuals: { spriteSet: "clank-v3", disabledCosmetics: [] },
 };
 

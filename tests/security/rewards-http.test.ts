@@ -14,7 +14,7 @@ import { settleBattleRewards } from "@/server/rewards/settlement";
 import { resetRuntimeCaches } from "@/server/runtime";
 
 import { createTestDb, resetDb, seedEligibleMember, seedHeroes } from "../support/db";
-import { balanceOf, CHAIN_ID, credit, loser, newChain, pickAs, seedScores, settingsWith, stageNext, TOKEN, tokens, WALLET_A, WALLET_B, chainTokens } from "../support/rewards";
+import { balanceOf, CHAIN_ID, credit, loser, newChain, pickAs, pinFixturePools, seedScores, settingsWith, stageNext, TOKEN, tokens, WALLET_A, WALLET_B, chainTokens } from "../support/rewards";
 import { finishBattle, stageBattle } from "../support/stage";
 
 /** HTTP-level guarantees of Arena Picks rewards: who may do what, what the browser can and cannot say, and what is (not) exposed. */
@@ -60,6 +60,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await resetDb(db);
+  await pinFixturePools(db); // the fixture pools (100,000 / 500,000) these assertions are written against; the shipped defaults are pinned in the unit tests
   resetRuntimeCaches();
   resetRewardsReadyCache();
   chain = newChain();

@@ -112,9 +112,11 @@ describe("on a database in the state LIVE is in today (…001300 applied, old se
     expect(row).toMatchObject({ version: 2, updated_by: `migration:${NEW}` });
     for (const gone of ["rewardPerBattle", "dailyEmissionCap", "holderTiers", "holderTierActivationHours", "weeklyScoredPicksPerDay", "weeklyPrizeSplitBps", "scoredPicksPerDay", "dailyMinimumScoredPicks", "weeklyMinimumScoredPicks"]) expect(row!.value).not.toHaveProperty(gone);
     expect(row!.value).toMatchObject({ dailyPrizePool: "100000", weeklyPrizePool: "500000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100, holderWeeklyQualifyHours: 168, holderDailyQualifyHours: 24 });
-    // The SQL rewrite and the application's own reader agree: strict validation accepts the stored row as-is.
-    expect(parseSettings("arena_picks", row!.value)).toEqual(DEFAULT_SETTINGS.arena_picks);
-    expect((await loadSettings(db)).arena_picks).toEqual(DEFAULT_SETTINGS.arena_picks);
+    // The SQL rewrite and the application's own reader agree: strict validation accepts the stored row as-is. (Migration 1400 is frozen history: it writes the pools of ITS
+    // time, 100,000 / 500,000; migration 2800 later moves them to the current defaults — tests/integration/pools-and-achievements-migration.test.ts.)
+    const atThatTime = { ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: "100000", weeklyPrizePool: "500000" };
+    expect(parseSettings("arena_picks", row!.value)).toEqual(atThatTime);
+    expect((await loadSettings(db)).arena_picks).toEqual(atThatTime);
     expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]); // re-running touches nothing (version stays 2)
     expect((await db.query<{ version: number }>("select version from public.game_settings where key = 'arena_picks'"))[0]!.version).toBe(2);
   });
@@ -140,7 +142,7 @@ describe("on a database in the state LIVE is in today (…001300 applied, old se
     const db = await liveToday();
     resetRewardsReadyCache();
     const settings = await loadSettings(db);
-    expect(settings.arena_picks).toMatchObject({ dailyPrizePool: "100000", weeklyPrizePool: "500000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100 });
+    expect(settings.arena_picks).toMatchObject({ dailyPrizePool: "500000", weeklyPrizePool: "1000000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100 }); // the CURRENT final defaults
     expect(settings.arena_picks).not.toHaveProperty("scoredPicksPerDay");
     expect((await db.query<{ version: number }>("select version from public.game_settings where key = 'arena_picks'"))[0]!.version).toBe(1);
     // …and the sweep is a quiet no-op until the migration exists: no errors, nothing touched.
@@ -197,7 +199,7 @@ describe("on a database in the state LIVE is in today (…001300 applied, old se
     await migrate(db, undefined, { upTo: NEW });
     const settings = await loadSettings(db); // must not throw on the unknown stored key
     expect(settings).not.toHaveProperty("betting");
-    expect(settings.arena_picks).toEqual(DEFAULT_SETTINGS.arena_picks);
+    expect(settings.arena_picks).toEqual({ ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: "100000", weeklyPrizePool: "500000" }); // migration 1400's own pools (2800 moves them later)
   });
 });
 

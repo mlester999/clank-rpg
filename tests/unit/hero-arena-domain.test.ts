@@ -99,8 +99,8 @@ describe("the hero_arena setting: separate from Arena Picks, and NO amount inven
   it("both pools default to null = REWARD POOL NOT SET — the 100k / 500k of Arena Picks are NOT copied", () => {
     expect(DEFAULT_SETTINGS.hero_arena.dailyPrizePool).toBeNull();
     expect(DEFAULT_SETTINGS.hero_arena.weeklyPrizePool).toBeNull();
-    expect(DEFAULT_SETTINGS.arena_picks.dailyPrizePool).toBe("100000"); // Arena Picks is untouched
-    expect(DEFAULT_SETTINGS.arena_picks.weeklyPrizePool).toBe("500000");
+    expect(DEFAULT_SETTINGS.arena_picks.dailyPrizePool).toBe("500000"); // Arena Picks keeps its own pools
+    expect(DEFAULT_SETTINGS.arena_picks.weeklyPrizePool).toBe("1000000");
     expect(poolIsSet(null)).toBe(false);
     expect(poolIsSet("")).toBe(false);
     expect(poolIsSet("250000")).toBe(true);

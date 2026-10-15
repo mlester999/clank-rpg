@@ -500,7 +500,7 @@ export interface CharacterDto {
   } | null;
   community: { qualifyingMessages: number; activeDays: number; activityScore: number } | null;
   wallet: { linked: boolean; bondedCoinsHeld: number; diamondDays: number };
-  achievements: Array<{ id: string; name: string; description: string; category: string; unlocked: boolean; unlockedAt: Date | null; badge: string; title?: string }>;
+  achievements: Array<{ id: string; name: string; description: string; category: string; unlocked: boolean; unlockedAt: Date | null; badge: string; title?: string; gold?: number }>;
   recentBattles: Array<{ battleId: string; placement: number; eliminations: number; gold: number; at: Date | null }>;
   special: { role: string; bio: string } | null;
 }
@@ -529,7 +529,7 @@ export async function getCharacterDto(q: Queryable, id: string, settings: GameSe
     [id],
   );
   const unlocked = await q.query<{ achievement_id: string; unlocked_at: Date }>("select achievement_id, unlocked_at from public.character_achievements where character_id = $1 and archived_at is null", [id]);
-  const defs = await q.query<{ id: string; name: string; description: string; category: string; reward: { badge: string; title?: string }; hidden: boolean; criteria: unknown }>(
+  const defs = await q.query<{ id: string; name: string; description: string; category: string; reward: { badge: string; title?: string; gold?: number }; hidden: boolean; criteria: unknown }>(
     "select id, name, description, category, reward, hidden, criteria from public.achievements where enabled order by sort_order",
   );
   const have = new Map(unlocked.map((u) => [u.achievement_id, u.unlocked_at]));
@@ -556,7 +556,7 @@ export async function getCharacterDto(q: Queryable, id: string, settings: GameSe
     wallet: { linked: c.wallet_linked, bondedCoinsHeld: bonded?.n ?? 0, diamondDays: bonded?.days ?? 0 },
     achievements: defs
       .filter((d) => !isRetiredAchievement(d.criteria) && (!d.hidden || have.has(d.id)))
-      .map((d) => ({ id: d.id, name: d.name, description: d.description, category: d.category, unlocked: have.has(d.id), unlockedAt: have.get(d.id) ?? null, badge: d.reward.badge, ...(d.reward.title ? { title: d.reward.title } : {}) })),
+      .map((d) => ({ id: d.id, name: d.name, description: d.description, category: d.category, unlocked: have.has(d.id), unlockedAt: have.get(d.id) ?? null, badge: d.reward.badge, ...(d.reward.title ? { title: d.reward.title } : {}), ...(d.reward.gold ? { gold: d.reward.gold } : {}) })),
     recentBattles: recent.map((r) => ({ battleId: r.battle_id, placement: r.placement, eliminations: r.eliminations, gold: r.gold_awarded, at: r.settled_at })),
     special: c.role !== null ? { role: c.role, bio: c.bio ?? "" } : null,
   };

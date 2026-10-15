@@ -121,6 +121,8 @@ interface UnitState {
   plateRect: Rect | null;
   plateShown: PlateMode;
   plateName: string;
+  /** The hero's chosen title as drawn above its name ("" = none), fitted like the name. */
+  plateTitle: string;
   plateSizes: PlateSizes | null;
   plateSizesKey: string;
 }
@@ -286,7 +288,7 @@ export class ArenaRenderer {
               hp: f.maxHp ?? 1, maxHp: f.maxHp ?? 1, hpShown: f.maxHp ?? 1, hpTrail: f.maxHp ?? 1,
               alive: true, flags: FRAME_FLAG.ALIVE, target: 0, attackAt: -1e9, castAt: -1e9, hurtAt: -1e9, deadAt: -1, textAt: -1e9,
               facing, spawnFacing: facing, moving: false, vx: 0, landed: false, hurtDir: 1, dashAt: -1e9, dashFrom: [sp[0], sp[1]], shieldAt: -1e9, numbers: 0, ox: 0, moveClock: slot * 137, speed: 0, running: false, blockAt: -1e9, turnAt: -1e9, drawnFacing: 0, plateTop: Number.NaN, feetAt: -1e9, feetRow: 0, faceSlot: -1, faceUntil: -1e9, flashAt: -1e9,
-              sheet: null, sheetSrc: null, damage: 0, kills: 0, plate: newPlateState(), plateRect: null, plateShown: "full", plateName: "", plateSizes: null, plateSizesKey: "",
+              sheet: null, sheetSrc: null, damage: 0, kills: 0, plate: newPlateState(), plateRect: null, plateShown: "full", plateName: "", plateTitle: "", plateSizes: null, plateSizesKey: "",
             } satisfies UnitState;
           });
         this.plateStates = new Map(this.units.map((u) => [u.slot, u.plate]));
@@ -1708,13 +1710,16 @@ export class ArenaRenderer {
       const ay = p.y - (this.headTop(u) + PLATE_GAP) * p.s - (u.alive ? 0 : dead * 20);
       ends.set(u.slot, { dead, ay, ax: p.x });
       if (!u.alive) continue; // a fallen hero's plate is no obstacle: it only fades where it stood
-      const key = `${this.cssW}|${u.fighter.name}`;
+      const key = `${this.cssW}|${u.fighter.name}|${u.fighter.title ?? ""}`;
       if (u.plateSizesKey !== key) {
         u.plateSizesKey = key;
         u.plateName = this.tagName(ctx, u.fighter.name, m.maxChars, m.maxNameW, nameFont);
         const nameW = this.textWidth(ctx, nameFont, u.plateName);
         const classW = this.textWidth(ctx, subFont, (u.visual?.name ?? "Hero").toUpperCase());
-        u.plateSizes = plateSizes(m, nameW, classW);
+        // The title (an achievement the member chose to show) hangs above the name in small capitals, shortened like a name when it is long.
+        u.plateTitle = u.fighter.title ? this.tagName(ctx, u.fighter.title.toUpperCase(), m.maxChars + 8, m.maxNameW * 1.2, subFont) : "";
+        const titleW = u.plateTitle ? this.textWidth(ctx, subFont, u.plateTitle) : 0;
+        u.plateSizes = plateSizes(m, nameW, classW, titleW);
       }
       const focus = this.focusSlot === u.slot;
       const winner = decided && clock.winnerSlot === u.slot;
@@ -1815,15 +1820,23 @@ export class ArenaRenderer {
     ctx.lineWidth = px(gold ? 1.8 : 1.3);
     ctx.stroke();
     // text sits in the area above the HP bar; the bar is the plate's floor
-    const textTop = y + px(2.4);
+    let textTop = y + px(2.4);
+    const textX = x + (w - px(7)) / 2 + px(0.5);
+    if (u.plateTitle && (mode === "full" || m.titleInCompact)) {
+      // The hero's chosen title, ABOVE its name: small capitals in gold.
+      ctx.font = `700 ${m.subFs}px ${this.fontFamily}`;
+      ctx.fillStyle = u.alive ? (gold ? "#ffe08a" : "#e9c46a") : "#6b6454";
+      ctx.fillText(u.plateTitle, textX, textTop + m.subFs * 0.6);
+      textTop += m.subFs * 1.15;
+    }
     ctx.font = `600 ${nfs}px ${this.fontFamily}`;
     ctx.fillStyle = u.alive ? "#f1f5fb" : "#8b97ab";
-    ctx.fillText(name, x + (w - px(7)) / 2 + px(0.5), textTop + nfs * 0.55);
+    ctx.fillText(name, textX, textTop + nfs * 0.55);
     if (mode === "full") {
       // Heroes have no level, so the class (in its accent colour) is the second line.
       ctx.font = `700 ${m.subFs}px ${this.fontFamily}`;
       ctx.fillStyle = u.alive ? accent : "#5d6a7d";
-      ctx.fillText((u.visual?.name ?? "Hero").toUpperCase(), x + (w - px(7)) / 2 + px(0.5), textTop + nfs * 1.1 + m.subFs * 0.6);
+      ctx.fillText((u.visual?.name ?? "Hero").toUpperCase(), textX, textTop + nfs * 1.1 + m.subFs * 0.6);
     }
     // The rarity shows on the plate as an EDGE and a small tier SHAPE (dot · diamond · star · crown) — never as text in the stage.
     if (rv.tier > 0 && u.alive) {

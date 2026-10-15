@@ -17,7 +17,7 @@ FULL RESULTS          the final Top 10 of any period (a dialog; also a stable li
 
 There was no Events page before this work (the nearest thing is the Hall of Champions at `/leaderboard`, which keeps the **live** boards and now links here with *Past champions*). It is a new route, not a rename.
 
-**Everything shown is a frozen result of an official season.** Before Season 1 there is nothing to show and the page says **SEASON 1 COMING SOON**; after the launch, until the first period closes, **NO CHAMPIONS YET — the first Season 1 winners will appear after the first eligible day is finalized.** Pre-season (development) boards are never listed, backfilled, or reachable by guessing a date.
+**Everything shown is a frozen result of an official season.** Before Season 1 there is nothing to show and the page says **NO WINNERS YET — Season 1 is coming soon**; after the launch, until the first period closes, **NO WINNERS YET — the first Season 1 winners will appear after the first eligible day is finalized.** Pre-season (development) boards are never listed, backfilled, or reachable by guessing a date.
 
 ## 2. Who is a champion — the existing rules, not new ones
 
@@ -92,6 +92,10 @@ Tests (all scratch): `events-domain`, `events-ui`, `launch-ui`, `public-wording`
 
 1. **Merge the code and the migration together; apply nothing yet.** The new code tolerates a missing 2700 (Events shows nothing; the old app ignores the new tables).
 2. Apply the pending lifecycle migrations through **2600** per `RELEASE_PLAN.md` (2000 → 2100 → 2200 → 2300 → 2400 → 2500 → 2600), then **2700** (`pnpm db:migrate -- --up-to 20261015002700`). 2700 is additive: no hero, version, battle, board, result, reward row or setting changes (tested byte-for-byte), nothing is backfilled, nothing is launched.
+2b. **Three more migrations, applied after 2700 (added 2026-10-15; `REQUIRED_SCHEMA_VERSION` is now `20261015003000`, so a backup attested before they are applied no longer satisfies the launch preflight — take it after):**
+    * `…002800_prize_pools_500k_1m` — settings only: Daily 100,000 → **500,000**, Weekly 500,000 → **1,000,000**, each only while it still holds the previous shipped default (a retuned pool is left alone). Frozen finished boards are untouched.
+    * `…002900_achievement_titles_and_gold` — data only: every achievement gets a title and Gold (guarded per row), and members who already unlocked something are paid the Gold it now carries, once. **Order matters for Season 1:** the launch resets *all* pre-season Gold (§7 decision 1). Apply 2900 **before** the launch and that backfilled Gold is reset with the rest; apply it **after** the launch and it is kept. Decide which you want.
+    * `…003000_hero_paid_reroll` — the payment record for the paid reroll ([`HERO_PAID_REROLL.md`](./HERO_PAID_REROLL.md)); additive; the feature flag ships off.
 3. Deploy the matching app version (pre-season wording, Events, the hardened lifecycle). Exactly one Arena worker.
 4. Verify read-only: `select * from audit_event_champions()`, `audit_launch_isolation()`, `audit_game_lifecycle()` (all empty), Admin → Game control → *Season 1 launch readiness*.
 5. When you decide to launch: pause the Arena, **take and verify a backup, record the attestation**, resolve the policy flags above, then **Launch Season 1** (typed phrase). Verify Phase LIVE, Season 1, 0 official matches, hero counts unchanged, `Season 1 status → Audit clean`.

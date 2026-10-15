@@ -40,7 +40,7 @@ describe("the file", () => {
   it("comes right after the development-economy migration, and nothing at or below 2100 was edited", async () => {
     const all = (await readMigrations()).map((m) => m.version);
     expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
-    expect(all.filter((v) => v > NEW)).toEqual(["20261007002300", "20261008002400", "20261009002500", "20261014002600", "20261015002700"]); // only combat 3.1.0 + hero renderer v2 (settings rows), the Arena Chat (its own tables), the free reroll allowance (its own table + guards) and hero renderer v3 (one settings value) follow it
+    expect(all.filter((v) => v > NEW)).toEqual(["20261007002300", "20261008002400", "20261009002500", "20261014002600", "20261015002700", "20261015002800", "20261015002900", "20261015003000"]); // only combat 3.1.0 + hero renderer v2 (settings rows), the Arena Chat (its own tables), the free reroll allowance (its own table + guards) and hero renderer v3 (one settings value) follow it
   });
 
   it("is additive: it deletes nothing, rewrites no row, never touches a hero, the Arena Picks tables, combat or a season", () => {

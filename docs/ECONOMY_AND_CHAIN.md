@@ -4,7 +4,20 @@
 
 Not a blockchain token and not redeemable for anything. Every change is an **append-only `currency_ledger` row** with a unique `idempotency_key`; balances are maintained by database triggers (BEFORE: lock the account, reject overdrafts; AFTER: apply the delta), so there is exactly one mutation path and replaying a request is a no-op. `audit_currency_ledger()` returns any account whose balance ≠ Σ ledger (must be empty; tested). Updates/deletes on the ledger are rejected by trigger.
 
-Beta earn rates are conservative and configurable (`progression`): participation 2 + placement bonus (#1 +25, #2 +15, #3 +8, #4 +4) + 2 per elimination. Achievements can grant tiny one-off amounts. There are no sinks yet; unclaimed heroes accumulate Gold but only claimed owners manage anything.
+Beta earn rates are conservative and configurable (`progression`): participation 2 + placement bonus (#1 +25, #2 +15, #3 +8, #4 +4) + 2 per elimination (≈ 10 Gold per fight on average), plus a little for correct Picks (`picks.rewardGold`). **Every achievement pays a one-off Gold reward** (10 … 500, scaled to its difficulty; `domain/content/achievements.ts`), whether it unlocks by a metric or an admin grants it — idempotent per unlock row (`achv:<hero>:<achievement>:<unlock id>`), so a replay or the one-off backfill in migration `…002900` can never pay twice. Unclaimed heroes accumulate Gold but only claimed owners manage anything.
+
+### What Gold is for — the Gear Shop (`services/shop.ts`, `shop` settings)
+
+Gold now has sinks. A **claimed** hero's owner can, from the Inventory screen (which also answers "What is Clank Gold for?" in words):
+
+* **Buy** gear for the hero's class (weapons, armor and the class-free trinkets) at the `shop.buy` prices — default **Common 200 · Uncommon 500 · Rare 1,500 · Epic 5,000**; **Legendary is never sold** (`null`: it is earned in the Arena). Only enabled templates with the `ARENA_DROP` source tag are sold (coin-themed / boss items arrive with their own sources).
+* **Sell** spare, unequipped gear at the `shop.sell` prices — default **40 · 100 · 300 · 1,000 · Legendary 2,500**. Every sell price must be **below** its rarity's buy price (the settings schema refuses anything else), so buying and selling back is always a loss: the shop can only remove Gold from the economy. A sold item is **archived** (`archived_at`), not deleted — an Arena result may still reference it as the drop it produced.
+
+Both are single ledger transactions: lock the hero, debit/credit with an idempotency key (a purchase is keyed by the browser's request id, a sale by the item id), insert/archive the item. The overdraft trigger refuses an empty purse, so parallel purchases cannot spend the same Gold twice (verified with real parallel connections). Bought gear is identical to dropped gear (same small flat bonus, class restrictions, one item per slot) and — like all gear — never changes POWER. `shop.enabled = false` closes both buying and selling; nothing else in the game changes. The season launch archives development loot and Gold like any other, so pre-season shopping resets with the rest.
+
+### Achievement titles
+
+Every achievement also unlocks a **title**. A member chooses **one** unlocked title to show above their hero's name (hero page → Achievements → *Show this title*; `POST /api/me/title { achievementId | null }`). The text always comes from the achievement's own reward, only an unlocked, non-archived achievement can be chosen, and only the claimed owner can change their own hero. It is stored where the title always lived — `characters.title` — so every existing read path works and the Season 1 reset still clears a title that an archived achievement granted. The title shows on the Arena's name plates (always on the full plate, and on the compact plate on stages ≥ 560 px wide), in the Current Round list, the fighter strip, the results and the hero page; an Arena battle freezes it with the roster when it is scheduled, so a new title appears from the member's next fight. An unlock no longer sets a title automatically — the member chooses.
 
 ## No permanent XP or levels — seasons instead
 

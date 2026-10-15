@@ -85,6 +85,20 @@ tier opens connections constantly.
 | **HTTP** | every route handler is wrapped (`guarded`) so a database outage is `503 DB_UNAVAILABLE` + `Retry-After: 3` (arena state: `ARENA_UNAVAILABLE`), never a 500 and never the driver's words; Admin gets an actionable message ("nothing was changed — retry" / "outcome unknown — check the current state before repeating"). |
 | **Browser** | one poll loop, one request at a time, burst-coalesced look-now events, exponential back-off with jitter and `Retry-After` (`arenaPoller.ts`); `api()` has a 25 s deadline so no skeleton can outlive a hung request; Heroes / Leaderboard / Admin / Arena all end in a retry state. |
 
+## Incident 3 — "The server is taking too long to answer" on equip (and on every other page at the same time)
+
+**Symptom (2026-10-15, production).** Equipping an item left the button on "…" until the browser's 25 s deadline ("The server is taking too long to answer. Please try again in a moment."); during those minutes the Events page's
+"Recent Champions" also never loaded. Nothing was wrong with the database.
+
+**Root cause (reproduced on real Postgres, then pinned by a regression test).** `POST /api/me/equip` read the settings and the class list (`getSettings()`, `getEnabledClasses()` — cached for 2 s) from **inside** its own
+`db.transaction(...)` callback. With the production pool of **one** connection, a cold cache needs a *second* connection while the transaction holds the only one: the read queues behind the very transaction that is waiting for
+it, until the transaction timeout (120 s; 45 s in the test) fails it. An equip is rare, so the cache was almost always cold. And because the single connection is held, **every other request on that instance waits behind it** —
+measured: an unrelated `GET /api/events/champions` waited 44.7 s behind one deadlocked equip. That is why Events "just loaded".
+
+**Fix.** Everything async that goes through the shared handle (settings, classes, flags, the chain reader) is resolved **before** the transaction opens (`src/app/api/me/equip/route.ts`); the shop, title and paid-reroll
+routes follow the same rule. The rule for every route and service: **inside `db.transaction(...)` use only the `tx` you were given.** `tests/security/equip-http.test.ts` fails on the old code (503 after the transaction timeout) when run on the real
+driver — `CLANK_TEST_DRIVER=postgres CLANK_TEST_POOL=1 CLANK_TEST_PG_URL=… pnpm exec vitest run tests/security/equip-http.test.ts` — and the shop / title / paid-reroll suites are run the same way (pool 1 and 4).
+
 ## Pool sizing for serverless fan-out
 
 On a serverless host the number that matters is **not** the pool size of one process: every concurrently-warm function instance holds its **own** pool, so

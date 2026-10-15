@@ -173,21 +173,22 @@ describe("periods with no champion are said plainly — nothing is invented to f
 });
 
 describe("the empty states are truthful", () => {
-  it("before Season 1: SEASON 1 COMING SOON — no champion, no countdown, pre-season results never offered as winners", () => {
+  it("before Season 1: NO WINNERS YET, Season 1 coming soon — no champion, no countdown, pre-season results never offered as winners", () => {
     const html = render({ data: list([], { state: state({ phase: "PRE_SEASON", season: null }) }) });
     const t = text(html);
     expect(html).toContain('data-reason="PRE_SEASON"');
-    expect(t).toMatch(/Season 1 coming soon/i);
+    expect(t).toMatch(/No winners yet/i);
+    expect(t).toMatch(/Season 1 is coming soon/i);
     expect(t).toMatch(/Pre-season results are practice: they are never shown as official champions/);
     expect(t).not.toMatch(/CHAMPION\b.*#1|DAILY CHAMPION/);
     expect(html).not.toContain("events-countdown");
     expect(html).not.toContain("events-past");
     expect(t).not.toMatch(/development|beta|test battles|local/i);
   });
-  it("once Season 1 is running but nothing has closed: NO CHAMPIONS YET with the exact promise", () => {
+  it("once Season 1 is running but nothing has closed: NO WINNERS YET with the exact promise", () => {
     const html = render({ data: list([]) });
     expect(html).toContain('data-reason="NO_CHAMPIONS_YET"');
-    expect(text(html)).toMatch(/NO CHAMPIONS YET/i);
+    expect(text(html)).toMatch(/NO WINNERS YET/i);
     expect(text(html)).toMatch(/The first Season 1 winners will appear after the first eligible day is finalized/);
     expect(html).toContain("events-countdown"); // the running period's countdown stays
   });

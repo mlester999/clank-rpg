@@ -17,8 +17,8 @@
 | Arena Picks | **unlimited**, free, one pick per battle, no wager, no loss, no wallet needed | — |
 | Scoring | **every valid pick counts** toward the Daily and the Weekly board — there is **no per-day scoring limit** | — (the old `scoredPicksPerDay` key is retired and never read) |
 | Points | correct pick **+10**, wrong pick 0 | `pointsPerCorrectPick` = 10 |
-| **Daily** board | 00:00 UTC → 00:00 UTC, **100,000 $CLANKRPG**, Top 10 | `dailyPrizePool` = "100000" |
-| **Weekly** board | Monday 00:00 UTC → next Monday, **500,000 $CLANKRPG**, Top 10 | `weeklyPrizePool` = "500000" |
+| **Daily** board | 00:00 UTC → 00:00 UTC, **500,000 $CLANKRPG**, Top 10 *(was 100,000 until migration `…002800`)* | `dailyPrizePool` = "500000" |
+| **Weekly** board | Monday 00:00 UTC → next Monday, **1,000,000 $CLANKRPG**, Top 10 *(was 500,000 until migration `…002800`)* | `weeklyPrizePool` = "1000000" |
 | Payout ladder (both boards) | 30 / 20 / 15 / 10 / 8 / 6 / 4 / 3 / 2 / 2 % | `prizeSplitBps` = [3000,2000,1500,1000,800,600,400,300,200,200] |
 | Minimum to be **prize**-eligible | Daily **20 valid picks** in the UTC day · Weekly **100** in the week — a participation bar for *prizes only*, never a scoring cap (below it you still score and still rank, marked NOT YET PRIZE ELIGIBLE) | `dailyMinimumPicks` = 20, `weeklyMinimumPicks` = 100 |
 | Holder bonus tiers | FREE 0% · 100K +5% · 500K +10% · 1M +15% · 5M +20% · 10M +25% | `holderBonusTiers` |
@@ -85,18 +85,18 @@ So there is **no scoring cap**: a member who makes 80 picks in a UTC day and get
 
 **Prizes.** The pool is split by the ladder across prize **positions** filled only by **prize-eligible** members (at least 20 valid picks that day / 100 that week). Anyone below the minimum stays on the board marked **NOT YET PRIZE ELIGIBLE** (never hidden) and takes no position — so "1 pick, 1 correct, 100 %" can neither win nor win a tie-break.
 
-| Position | % | Daily (100,000) | Weekly (500,000) |
+| Position | % | Daily (500,000) | Weekly (1,000,000) |
 | --- | --- | --- | --- |
-| #1 | 30 | 30,000 | 150,000 |
-| #2 | 20 | 20,000 | 100,000 |
-| #3 | 15 | 15,000 | 75,000 |
-| #4 | 10 | 10,000 | 50,000 |
-| #5 | 8 | 8,000 | 40,000 |
-| #6 | 6 | 6,000 | 30,000 |
-| #7 | 4 | 4,000 | 20,000 |
-| #8 | 3 | 3,000 | 15,000 |
-| #9 | 2 | 2,000 | 10,000 |
-| #10 | 2 | 2,000 | 10,000 |
+| #1 | 30 | 150,000 | 300,000 |
+| #2 | 20 | 100,000 | 200,000 |
+| #3 | 15 | 75,000 | 150,000 |
+| #4 | 10 | 50,000 | 100,000 |
+| #5 | 8 | 40,000 | 80,000 |
+| #6 | 6 | 30,000 | 60,000 |
+| #7 | 4 | 20,000 | 40,000 |
+| #8 | 3 | 15,000 | 30,000 |
+| #9 | 2 | 10,000 | 20,000 |
+| #10 | 2 | 10,000 | 20,000 |
 
 **Exact ties at a prize boundary** combine the affected positions and split them equally: two exactly tied for #2 share 20,000 + 15,000 = **17,500 each**, and the next player occupies **#4** (10,000). If a tie group reaches past the last rewarded position, the whole group shares the positions that exist. Integer remainders (a few base units) go back to the reserve — never to an arbitrary member (`pool = awarded + returned`, a database CHECK; property-tested over pools, ladders and tie shapes). Unfilled positions return to the reserve — **no jackpot, no rollover**.
 
@@ -216,21 +216,21 @@ Because no token is emitted per battle, the maximum is a product of settings (`s
 
 | | Base pool | Max holder-bonus exposure (+25 % on every prize) | **Max liability** |
 | --- | --- | --- | --- |
-| Daily | 100,000 | 25,000 | **125,000** |
-| Weekly | 500,000 | 125,000 | **625,000** |
+| Daily | 500,000 | 125,000 | **625,000** |
+| Weekly | 1,000,000 | 250,000 | **1,250,000** |
 
 **Season 1 planning** (12 weeks = 84 days; a *planning metric only* — nothing is minted or reserved):
 
 | | |
 | --- | --- |
-| Daily base total | 84 × 100,000 = **8,400,000** |
-| Weekly base total | 12 × 500,000 = **6,000,000** |
-| Season 1 base maximum | **14,400,000** |
-| With +25 % bonuses everywhere | **18,000,000** |
-| Reward / dev allocation | 20,000,000 |
-| Theoretical buffer | **2,000,000** |
+| Daily base total | 84 × 500,000 = **42,000,000** |
+| Weekly base total | 12 × 1,000,000 = **12,000,000** |
+| Season 1 base maximum | **54,000,000** |
+| With +25 % bonuses everywhere | **67,500,000** |
+| Reward / dev allocation (`seasonRewardAllocation`, unchanged) | 20,000,000 |
+| Theoretical buffer | **−47,500,000** — the plan **exceeds** the allocation |
 
-`seasonPlanWeeks` and `seasonRewardAllocation` are settings; Admin warns if a plan exceeds its allocation.
+`seasonPlanWeeks` and `seasonRewardAllocation` are settings; Admin warns if a plan exceeds its allocation — and **it does at the current pools** (Daily 500,000 / Weekly 1,000,000, set 2026-10-15; they were 100,000 / 500,000 when the allocation was sized: 14,400,000 base, 18,000,000 with bonuses, inside 20,000,000). The 20,000,000 is a planning figure the owner set, not a fact the code knows about the treasury, so it was **not** changed with the pools: set `seasonRewardAllocation` to what the reward treasury can really fund (or shorten `seasonPlanWeeks` / retune the pools) and the warning clears. Paid-reroll fees (see [`TOKEN_UTILITY.md`](TOKEN_UTILITY.md)) flow back to the reward treasury and offset this.
 
 ## Admin → Arena Picks
 
@@ -254,7 +254,7 @@ The Leaderboard page now has three sections (Arena Picks · Hero Arena · Hero R
 ## Player surfaces
 
 * **Arena → Picks panel:** (owned by the arena-lifecycle work) free unlimited picks; short copy from `state.picks.reward` (`PicksRewardDto`: points per correct pick, the Daily/Weekly minimums and pools — no per-battle token amount, no daily cap); results show Points and whether the pick counted toward the boards.
-  * **Prize tiles (presentation only; compact since 2026-10-09):** under the title the panel shows two small tiles — **Daily pool 100,000 $CLANKRPG** and **Weekly pool 500,000 $CLANKRPG** — one link "Prize rules & countdowns →" (to the Leaderboards), then the two short lines "Correct Pick = +10 Points" / "Free to play", then the Telegram sign-in strip or the member's own pick state, then the eight fighters. The Arena is a *quick summary*: the Top-10 banner, the reset countdowns, the fine print, the token-launch note, the big medal/crown art and the animations were removed (they replaced the earlier "plaques", ~290 px tall; the tiles are ~85 px). Every number comes from `state.picks.reward` (built from the `arena_picks` settings — an admin who changes a pool changes the tile; nothing is typed twice). The tiles are server-renderable (no state, no timer), so nothing on the Arena re-renders because of them. The rules, Top-N, minimum Picks, holder bonus, token status and live countdowns are on the Leaderboards page — see [`HERO_FREE_REROLL.md`](HERO_FREE_REROLL.md) § 6.
+  * **Prize tiles (presentation only; compact since 2026-10-09):** under the title the panel shows two small tiles — **Daily pool 500,000 $CLANKRPG** and **Weekly pool 1,000,000 $CLANKRPG** — one link "Prize rules & countdowns →" (to the Leaderboards), then the two short lines "Correct Pick = +10 Points" / "Free to play", then the Telegram sign-in strip or the member's own pick state, then the eight fighters. The Arena is a *quick summary*: the Top-10 banner, the reset countdowns, the fine print, the token-launch note, the big medal/crown art and the animations were removed (they replaced the earlier "plaques", ~290 px tall; the tiles are ~85 px). Every number comes from `state.picks.reward` (built from the `arena_picks` settings — an admin who changes a pool changes the tile; nothing is typed twice). The tiles are server-renderable (no state, no timer), so nothing on the Arena re-renders because of them. The rules, Top-N, minimum Picks, holder bonus, token status and live countdowns are on the Leaderboards page — see [`HERO_FREE_REROLL.md`](HERO_FREE_REROLL.md) § 6.
 * **Leaderboard → Arena Picks → Daily | Weekly:** title with the (i) popover, a highlighted **countdown card** (*DAILY LEADERBOARD · ENDS IN · 23H 59M 59S* / *WEEKLY … 06D 23H 59M*, server-anchored; a finished period says **COMPLETED**; the exact UTC times are in a collapsed "Exact times"), the pool and `TOP 10 REWARDED`, **My score**, **Picks · Correct · Accuracy · Points · Current rank** (Daily and Weekly, no `n / 20` counter), the Top-10 prize ladder, **Reward details** (both pools, who shares them, the 20 / 100 valid-Picks qualification, the holder bonus, the token launch status), the day/week selector, then the board (rank, hero, correct/picks, accuracy, streak, points, projected/final prize, `TIE`, `NOT YET PRIZE ELIGIBLE`; a finished row adds the holder tier label, bonus and total). The (i) popover is **HOW DAILY ARENA PICKS WORKS** / **HOW WEEKLY ARENA PICKS WORKS** with the spec's wording and every number from the server's rules; hover/click on desktop, tap on a phone.
 * **Profile → Arena Picks:** accuracy and streaks; **Points** (Daily and Weekly picks · correct · accuracy · points · rank, lifetime Clank Points); the **HOLDER REWARD BONUS** card (FREE: *0% bonus · Hold $CLANKRPG to boost leaderboard prizes you earn · ladder · Connect wallet · Holdings NEVER affect your Arena Picks score or chance to rank*; holder: tier and `+15 % Leaderboard Prize Bonus`, balance, short wallet, **Daily bonus QUALIFIED / QUALIFYING / BROKEN / NEEDS VERIFICATION**, **Weekly qualification progress 5D 7H / 7D required before the next eligible week**, Refresh holdings); Arena Rewards; Latest rewards; Claim history (**CLAIM REWARDS** → *Where should we send your rewards? (•) Connected Wallet / ( ) Another Wallet → SUBMIT CLAIM*); recent picks (+10 when correct).
 
@@ -302,7 +302,7 @@ pnpm db:migrate -- --up-to 20261005001400   # applies pending migrations up to a
 4. A **real-RPC check** against Robinhood Chain: token `decimals()`/`symbol()`, a holder `balanceOf`, the **close verification** at an actual boundary, and one real manual payout through *Mark sent* with a tiny amount (all exercised only against a simulated chain and a mocked node so far).
 5. Check a **real wallet extension** and **real Telegram** sign-in once (QA used a mock EIP-1193 wallet with real signatures).
 6. Load-test finalization and scoring on **real Postgres** (PGlite is single-connection: concurrency tests prove logic, not true parallelism).
-7. Review the numbers (pools, ladder, minimums, bonus tiers, the 24 h / 7 d windows) as **product decisions**; the Season 1 plan fits a 20,000,000 allocation only at these defaults.
+7. Review the numbers (pools, ladder, minimums, bonus tiers, the 24 h / 7 d windows) as **product decisions**; at the current pools (500,000 / 1,000,000) the Season 1 plan (54,000,000 base, 67,500,000 with bonuses) does **not** fit the 20,000,000 planning allocation — set `seasonRewardAllocation` to the real reserve first.
 8. Decide the policy for REVIEW/SUSPENDED accounts, legal/regulatory review of token rewards, and the stale live betting rows (cleanup SQL above, unrun).
 
 ## Tests

@@ -19,9 +19,12 @@ async function handlePOST(req: Request) {
   if (!parsed.ok) return parsed.response;
   const db = await getReadyDb();
   const characterId = viewer.characterId;
+  // Read the (briefly cached) settings and classes BEFORE the transaction opens. They go through the shared handle, which on the production driver has ONE
+  // connection: asked for from inside the transaction, a cold cache needs a second connection that does not exist, and the request waits behind itself.
+  const [settings, classes] = await Promise.all([getSettings(), getEnabledClasses()]);
   const result = await db.transaction(async (tx) => {
     const r = await setEquipped(tx, characterId, parsed.data.itemId, parsed.data.equip);
-    if (r.ok) await refreshPower(tx, characterId, await getSettings(), await getEnabledClasses());
+    if (r.ok) await refreshPower(tx, characterId, settings, classes);
     return r;
   });
   if (!result.ok) return fail(result.reason, result.reason === "NOT_FOUND" ? 404 : 403);

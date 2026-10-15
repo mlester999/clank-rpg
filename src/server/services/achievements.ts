@@ -1,11 +1,20 @@
-import { isRetiredAchievement, type AchievementCriteria } from "@/domain/content/achievements";
+import { isRetiredAchievement, type AchievementCriteria, type AchievementReward } from "@/domain/content/achievements";
 import { applyLedger } from "./economy";
 import { json, type Queryable } from "../db/types";
 
 interface AchievementRow {
   id: string;
   criteria: AchievementCriteria;
-  reward: { badge: string; title?: string; gold?: number };
+  reward: AchievementReward;
+}
+
+/**
+ * Pays an unlock's one-off Clank Gold. The idempotency key names the UNLOCK ROW (`character_achievements.id`), so a replay, a retry or the one-off backfill in
+ * migration 20261015002900 (which uses the very same key) can never pay the same unlock twice. A reward without Gold pays nothing.
+ */
+async function payUnlockGold(q: Queryable, characterId: string, achievementId: string, unlockId: string, reward: AchievementReward): Promise<void> {
+  if (!reward.gold || reward.gold <= 0) return;
+  await applyLedger(q, { characterId, amount: reward.gold, reason: "achievement", refType: "achievement", refId: achievementId, idempotencyKey: `achv:${characterId}:${achievementId}:${unlockId}` });
 }
 
 export interface Metrics {
@@ -77,22 +86,57 @@ export async function evaluateAchievements(q: Queryable, characterId: string, at
     );
     if (inserted.length === 0) continue;
     unlocked.push(def.id);
-    if (def.reward.title) {
-      await q.query("update public.characters set title = coalesce(title, $2) where id = $1", [characterId, def.reward.title]);
-    }
-    if (def.reward.gold && def.reward.gold > 0) {
-      await applyLedger(q, { characterId, amount: def.reward.gold, reason: "achievement", refType: "achievement", refId: def.id, idempotencyKey: `achv:${characterId}:${def.id}:${inserted[0]!.id}` });
-    }
+    // The title is NOT put on the hero automatically: it joins the member's collection, and they choose which one to show (`setDisplayTitle`).
+    await payUnlockGold(q, characterId, def.id, inserted[0]!.id, def.reward);
   }
   return unlocked;
 }
 
-/** Admin-granted achievement (OG Clanker, Seasonal Champion, …). */
+/** Admin-granted achievement (OG Clanker, Seasonal Champion, …). Pays the achievement's Gold like any other unlock. */
 export async function grantAchievement(q: Queryable, characterId: string, achievementId: string): Promise<boolean> {
-  const rows = await q.query(
+  const rows = await q.query<{ id: string }>(
     `insert into public.character_achievements (character_id, achievement_id, context) values ($1, $2, '{"granted":"admin"}'::jsonb)
-     on conflict do nothing returning achievement_id`,
+     on conflict do nothing returning id`,
     [characterId, achievementId],
   );
-  return rows.length > 0;
+  const unlock = rows[0];
+  if (!unlock) return false;
+  const [def] = await q.query<{ reward: AchievementReward }>("select reward from public.achievements where id = $1", [achievementId]);
+  if (def) await payUnlockGold(q, characterId, achievementId, unlock.id, def.reward);
+  return true;
+}
+
+export type DisplayTitleResult =
+  | { ok: true; title: string | null }
+  | { ok: false; reason: "NOT_FOUND" | "NOT_CLAIMED" | "NOT_UNLOCKED" | "NO_TITLE" };
+
+/**
+ * Chooses the ONE title shown above the hero's name (the Arena's name plate, the Current Round list, the results and the hero page). `achievementId` names an
+ * achievement the hero has UNLOCKED (an archived unlock — one from the development run — no longer counts) and the title is read from that achievement's own
+ * reward, never from the request. `null` removes the title. Only the claimed owner manages it, like every other piece of hero management.
+ *
+ * `characters.title` stays the single place the title lives (every read path and the Season 1 reset already use it); which achievement it came from is
+ * simply the achievement whose reward carries that text.
+ */
+export async function setDisplayTitle(q: Queryable, characterId: string, achievementId: string | null): Promise<DisplayTitleResult> {
+  const [hero] = await q.query<{ claimed: boolean }>(
+    "select (cl.character_id is not null) as claimed from public.characters c left join public.character_claims cl on cl.character_id = c.id where c.id = $1 for update of c",
+    [characterId],
+  );
+  if (!hero) return { ok: false, reason: "NOT_FOUND" };
+  if (!hero.claimed) return { ok: false, reason: "NOT_CLAIMED" };
+  if (achievementId === null) {
+    await q.query("update public.characters set title = null where id = $1", [characterId]);
+    return { ok: true, title: null };
+  }
+  const [row] = await q.query<{ title: string | null }>(
+    `select a.reward->>'title' as title from public.achievements a
+      where a.id = $2 and a.enabled and exists (select 1 from public.character_achievements ca where ca.character_id = $1 and ca.achievement_id = a.id and ca.archived_at is null)`,
+    [characterId, achievementId],
+  );
+  if (!row) return { ok: false, reason: "NOT_UNLOCKED" };
+  const title = row.title?.trim();
+  if (!title) return { ok: false, reason: "NO_TITLE" };
+  await q.query("update public.characters set title = $2 where id = $1", [characterId, title]);
+  return { ok: true, title };
 }

@@ -42,8 +42,8 @@ describe("migration 2500 — placement and shape", () => {
   it("comes directly after the Arena Chat's 2400, and the only new file for the reroll — forward-only (no existing migration is edited)", async () => {
     const all = (await readMigrations()).map((m) => m.version);
     expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
-    // only hero renderer v3 (one settings value, migration 2600) follows it
-    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW, "20261014002600", "20261015002700"]);
+    // only hero renderer v3 (2600), the champion snapshots (2700), the prize pools (2800), the achievement rewards (2900) and the paid reroll (3000) follow it
+    expect(all.filter((v) => v > PREVIOUS)).toEqual([NEW, "20261014002600", "20261015002700", "20261015002800", "20261015002900", "20261015003000"]);
     const sql = await readFile(path.join(MIGRATIONS_DIR, FILE), "utf8");
     expect(sql.trimEnd().endsWith("select public.clank_harden_schema();")).toBe(true);
   });

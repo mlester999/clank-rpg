@@ -161,8 +161,8 @@ describe("the Admin payout summary works before launch (every bonus 0)", () => {
     expect(o.token).toMatchObject({ launched: false, available: false });
     expect(o.notices.join(" ")).toMatch(/has not launched yet/);
     expect(o.warnings.join(" ")).not.toMatch(/launched|unusable|not configured/i);
-    expect(o.economy.daily).toMatchObject({ basePool: "100,000", maxBonusExposure: "25,000", maxLiability: "125,000" });
-    expect(o.economy.weekly).toMatchObject({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.daily).toMatchObject({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.weekly).toMatchObject({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
   });
 });
 

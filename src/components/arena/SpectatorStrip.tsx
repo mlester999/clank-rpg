@@ -82,6 +82,7 @@ const FighterCard = memo(function FighterCard({ f, state, hpFrac, alive, kills, 
         <span className="flex items-center gap-2">
           <HeroAvatar avatarUrl={null} look={lookFor(f.appearance, visual, state.visuals.disabledCosmetics)} size={34} label={f.name} className="shrink-0 rounded" />
           <span className="min-w-0 flex-1">
+            {f.title ? <span className="block truncate text-[0.56rem] leading-tight font-bold tracking-[0.12em] text-gold uppercase" title={f.title} data-testid="fighter-title">{f.title}</span> : null}
             <span className="block truncate text-[0.78rem] leading-tight font-bold text-paper" title={f.name} data-testid="fighter-name">{f.name}</span>
             <span className="flex min-w-0 items-center gap-1 text-[0.66rem] leading-tight text-steel-300">
               <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: visual?.colors[0] ?? "#8b97ab" }} aria-hidden />

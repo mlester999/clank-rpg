@@ -114,6 +114,19 @@ export const DOC_PAGES: readonly DocPageMeta[] = [
     keywords: ["pwr", "power", "hp", "str", "def", "int", "agi", "cha", "luck", "stats"],
   },
   {
+    slug: "gold-and-gear",
+    title: "Gold, gear & titles",
+    summary: "What Clank Gold is for: the Gear Shop, achievement rewards and titles, and rerolling your hero.",
+    group: "Heroes",
+    sections: [
+      { id: "what-clank-gold-is", title: "What Clank Gold is" },
+      { id: "the-gear-shop", title: "The Gear Shop" },
+      { id: "achievements-and-titles", title: "Achievements and titles" },
+      { id: "rerolling-your-hero", title: "Rerolling your hero" },
+    ],
+    keywords: ["gold", "shop", "buy", "sell", "gear", "inventory", "achievement", "title", "reroll", "free reroll", "paid reroll", "currency", "items"],
+  },
+  {
     slug: "hero-profiles",
     title: "Hero profiles",
     summary: "The public hero page and card: share it, download it, link it.",

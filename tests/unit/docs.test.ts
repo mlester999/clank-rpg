@@ -195,9 +195,10 @@ describe("docs content states CURRENT product truth, from the shared rules", () 
     expect(x).toContain(`Top ${r.picks.topRewarded}`);
     expect(x).toMatch(/Every valid Pick counts/);
     for (const [i, percent] of r.picks.prizeLadderPercent.entries()) expect(x, `#${i + 1}`).toContain(`${percent}%`);
-    expect(x).toContain("30,000"); // #1 of the daily pool, computed from the ladder
-    expect(x).toContain("150,000"); // #1 of the weekly pool
-    expect(prizeShare(1, r.picks.daily.pool).amount).toBe(30_000);
+    expect(x).toContain("150,000"); // #1 of the daily pool (30% of 500,000), computed from the ladder
+    expect(x).toContain("300,000"); // #1 of the weekly pool (30% of 1,000,000)
+    expect(prizeShare(1, r.picks.daily.pool).amount).toBe(150_000);
+    expect(prizeShare(1, r.picks.weekly.pool).amount).toBe(300_000);
     expect(x).toMatch(/no effect/i);
   });
 
@@ -287,7 +288,10 @@ describe("docs hygiene", () => {
   });
 
   it("never advertises admin tools or an admin reroll, and never leaks internals (seeds, secrets, hashes, env names)", () => {
-    expect(ALL_TEXT).not.toMatch(/\badmin\b|reroll|backfill|migration|CLASS_ROLL_SECRET|PEPPER|service[_ ]role/i);
+    // `\badmin\b` already keeps any "admin reroll" / admin tool out. The bare word "reroll" is allowed since members have their OWN reroll (the free daily one, and the paid one):
+    // it is documented on the Gold, gear & titles page. What stays forbidden is the operator's vocabulary — previews, rollbacks, versions of a hero.
+    expect(ALL_TEXT).not.toMatch(/\badmin\b|reroll (preview|rollback)|roll ?back|backfill|migration|CLASS_ROLL_SECRET|PEPPER|service[_ ]role/i);
+    expect(text("gold-and-gear")).toMatch(/reroll/i); // …and the member-facing reroll IS explained
   });
 
   it("the Telegram threshold, PWR bands, pools, minimums, odds and holder tiers are NEVER typed into a page — every one comes from GAME_RULES", () => {

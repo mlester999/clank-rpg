@@ -240,10 +240,10 @@ function NoChampions({ state, view }: { state: EventsStateDto; view: EventsViewS
   return (
     <div className="plate plate-flat px-5 py-7 text-center" data-testid="events-empty" data-reason={pre ? "PRE_SEASON" : "NO_CHAMPIONS_YET"}>
       <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-gold/30 bg-gold/10 text-gold" aria-hidden><TrophyIcon size={24} /></span>
-      <h3 className="mt-3 font-display text-lg tracking-[0.14em] text-paper uppercase">{pre ? "Season 1 coming soon" : "No champions yet"}</h3>
+      <h3 className="mt-3 font-display text-lg tracking-[0.14em] text-paper uppercase">No winners yet</h3>
       <p className="mx-auto mt-1.5 max-w-md text-sm text-steel-300">
         {pre
-          ? "The first official winners will appear here once Season 1 launches and its first period closes. Pre-season results are practice: they are never shown as official champions."
+          ? "Season 1 is coming soon. The first official winners will appear here once it launches and its first period closes. Pre-season results are practice: they are never shown as official champions."
           : `The first ${state.season?.label ?? "Season"} winners will appear after the first eligible ${view.kind === "daily" ? "day" : "week"} is finalized.`}
       </p>
     </div>

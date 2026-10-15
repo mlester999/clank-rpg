@@ -131,7 +131,7 @@ export function FreeRerollCard({ status, loading = false, failed = false, onRetr
 }
 
 // ------------------------------------------------------------------------------------------------ pieces of the dialogs
-function HeroLine({ card, size }: { card: HeroCardModel; size: number }) {
+export function HeroLine({ card, size }: { card: HeroCardModel; size: number }) {
   return (
     <div className="flex items-center gap-3">
       <HeroArena look={card.look} label={`${card.name}, ${rarityClassLine(card)}`} width={size} className="shrink-0" />
@@ -252,7 +252,7 @@ function ChangeRow({ label, before, after, testId }: { label: string; before: Re
   );
 }
 
-export function RerollResultView({ result, titleId, onView }: { result: FreeRerollResultDto; titleId: string; onView: () => void }) {
+export function RerollResultView({ result, titleId, onView, footnote }: { result: FreeRerollResultDto; titleId: string; onView: () => void; /** The line under the comparison (default: the free reroll's). */ footnote?: string }) {
   const { before, after } = result;
   // Recomputed from the two cards so the words can never disagree with the numbers shown.
   const c = compareRerolled(before, after);
@@ -285,7 +285,7 @@ export function RerollResultView({ result, titleId, onView }: { result: FreeRero
         <ChangeRow label="Rarity" testId="reroll-row-rarity" before={<RarityBadge rarity={before.rarity} size="xs" />} after={<RarityBadge rarity={after.rarity} size="xs" />} />
         <ChangeRow label="Class" testId="reroll-row-class" before={<span className="break-words">{before.className}</span>} after={<span className="break-words">{after.className}</span>} />
       </dl>
-      <p className="mt-3 text-center text-[0.72rem] leading-snug text-steel-300">Your old hero stays in your history. Today&apos;s free reroll is used.</p>
+      <p className="mt-3 text-center text-[0.72rem] leading-snug text-steel-300" data-testid="reroll-footnote">{footnote ?? "Your old hero stays in your history. Today's free reroll is used."}</p>
 
       <div className="mt-4 flex justify-center">
         <button type="button" className="btn w-full justify-center sm:w-auto" onClick={onView} data-autofocus data-testid="reroll-view-hero">
@@ -305,7 +305,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), a[href], [tabi
  * screens. Focus: when the dialog opens — and whenever its step changes — the SAFE control (`data-autofocus`: Cancel, or the result's "View my hero") takes focus,
  * and Tab / Shift+Tab wrap inside the dialog instead of leaving it for the browser's own chrome.
  */
-function RerollDialog({ labelledBy, step, onEscape, onBackdrop, children }: { labelledBy: string; step: string; onEscape: () => void; onBackdrop: () => void; children: ReactNode }) {
+export function RerollDialog({ labelledBy, step, onEscape, onBackdrop, children }: { labelledBy: string; step: string; onEscape: () => void; onBackdrop: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;

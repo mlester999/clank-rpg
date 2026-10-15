@@ -43,7 +43,7 @@ describe("migration 2600 — hero renderer v3 (settings only)", () => {
   it("sits right after the free reroll, and only updates one guarded settings value", async () => {
     const all = (await readMigrations()).map((m) => m.version);
     expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
-    expect(all.at(-1)).toBe("20261015002700"); // the champion-snapshot migration is the only file after it
+    expect(all.slice(all.indexOf("20261014002600") + 1)).toEqual(["20261015002700", "20261015002800", "20261015002900", "20261015003000"]); // the champion snapshots, the prize pools, the achievement rewards and the paid reroll are the only files after it
     const code = (await readFile(path.join(process.cwd(), "supabase", "migrations", FILE), "utf8")).split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n").toLowerCase();
     expect(code).not.toMatch(/\b(delete|drop|truncate|insert|alter|create)\b/);
     expect(code.match(/\bupdate\b/g)).toHaveLength(1);

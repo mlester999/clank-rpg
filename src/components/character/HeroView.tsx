@@ -18,6 +18,7 @@ import type { CharacterDto, ClassVisual, InventoryItemView } from "@/lib/dto";
 import { useRemote } from "@/lib/useRemote";
 
 import { FreeRerollPanel } from "./FreeReroll";
+import { PaidRerollPanel } from "./PaidReroll";
 import { HeroIdentityPanel, HeroStandingPanel } from "./HeroIdentity";
 import { ArenaPicksPanel } from "@/components/rewards/ArenaPicksPanel";
 import { WalletPanel } from "./WalletPanel";
@@ -67,6 +68,10 @@ export function HeroView({ id }: { id: string }) {
   const [tab, setTab] = useState<"overview" | "picks" | "tactics" | "wallet">("overview");
   const [claimNote, setClaimNote] = useState<string | null>(null);
   const [tacticNote, setTacticNote] = useState<string | null>(null);
+  const [titleNote, setTitleNote] = useState<string | null>(null);
+  const [titleBusy, setTitleBusy] = useState<string | null>(null);
+  /** The title the server just accepted, shown at once while the hero is re-read: it applies only to the page data that was current when it was chosen — the next read replaces that data and is the truth again. */
+  const [titlePending, setTitlePending] = useState<{ value: string | null; atBundle: HeroBundle | null } | null>(null);
   // After a reroll the hero is re-read from the server. Until that read lands the old class / rarity / PWR must not look current: dim them (the reroll panel itself stays).
   const [staleBundle, setStaleBundle] = useState<HeroBundle | null>(null);
   const staleAfterReroll = staleBundle !== null && bundle === staleBundle && loading;
@@ -75,7 +80,9 @@ export function HeroView({ id }: { id: string }) {
   if (state === "missing") return <EmptyState title="Hero not found" body="This hero doesn't exist (or hasn't been created yet)." action={<Link href="/leaderboard" className="btn btn-sm">See the leaderboard</Link>} />;
   if (state === "error" || !data) return <EmptyState title="Couldn't load this hero" body="Something went wrong on our side. Give it a moment and try again." action={<button className="btn btn-sm" onClick={reload} type="button">Retry</button>} />;
 
-  const { hero, isOwner, owner, classVisual } = data;
+  const { hero: loadedHero, isOwner, owner, classVisual } = data;
+  const shownTitle = titlePending && bundle === titlePending.atBundle ? titlePending.value : loadedHero.title;
+  const hero = shownTitle === loadedHero.title ? loadedHero : { ...loadedHero, title: shownTitle };
   const look = lookFor(hero.appearance, classVisual ?? undefined);
   const winRate = formatWinRate(hero.record.battles, hero.record.wins);
   const ownership = heroOwnership({ hero: { id: hero.id, kind: hero.kind, isDemo: hero.isDemo, claimed: hero.claimed }, viewer });
@@ -104,6 +111,17 @@ export function HeroView({ id }: { id: string }) {
     if (r.ok) await load();
   }
 
+  /** Shows an unlocked achievement's title above the hero's name (null removes it). The server reads the text from the achievement and checks the unlock. */
+  async function chooseTitle(achievementId: string | null) {
+    setTitleNote(null);
+    setTitleBusy(achievementId ?? "none");
+    const r = await api<{ title: string | null }>("/api/me/title", { method: "POST", json: { achievementId } });
+    setTitleBusy(null);
+    if (r.ok) setTitlePending({ value: r.data.title, atBundle: bundle });
+    setTitleNote(r.ok ? (r.data.title ? `“${r.data.title}” now shows above your name — in the Arena from your next fight.` : "Title removed.") : friendly(r.error));
+    if (r.ok) await load();
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1200px] px-3 py-5 sm:px-6">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -124,6 +142,8 @@ export function HeroView({ id }: { id: string }) {
           </div>
           {/* the member's own hero only: the free daily reroll (feature-flagged on the server; a disabled feature says so plainly) */}
           {isMine && <FreeRerollPanel onRerolled={() => { setStaleBundle(bundle); void load(); }} />}
+          {/* …and, once the free one is used, the paid option: pay $CLANKRPG (default 100,000) from your own wallet for another roll (feature-flagged; says so plainly when it is not open) */}
+          {isMine && <PaidRerollPanel onRerolled={() => { setStaleBundle(bundle); void load(); }} />}
         </div>
 
         {/* details */}
@@ -201,18 +221,50 @@ export function HeroView({ id }: { id: string }) {
                 </section>
               </div>
               {isOwner && owner && <GearStrip items={owner.inventory} gold={owner.gold} />}
-              <section className="plate p-5" aria-labelledby="ach">
+              <section className="plate p-5" aria-labelledby="ach" data-testid="achievements">
                 <h2 id="ach" className="label">Achievements · {hero.achievements.filter((a) => a.unlocked).length}/{hero.achievements.length}</h2>
+                <p className="mt-1.5 text-xs text-steel-300">
+                  Every achievement pays a one-off <b className="text-gold">Clank Gold</b> reward and unlocks a <b className="text-paper">title</b>.
+                  {isOwner && owner ? " Pick one unlocked title to show above your name in the Arena." : ""}
+                </p>
+                {isOwner && owner && (
+                  <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-steel-300" data-testid="current-title">
+                    <span>Showing in the Arena:</span>
+                    {hero.title ? (
+                      <>
+                        <b className="font-display tracking-wide text-clank-300 uppercase">{hero.title}</b>
+                        <button type="button" className="underline hover:text-paper disabled:opacity-50" disabled={titleBusy !== null} onClick={() => void chooseTitle(null)} data-testid="title-remove">Remove</button>
+                      </>
+                    ) : (
+                      <span className="text-steel-400">no title</span>
+                    )}
+                  </p>
+                )}
+                {titleNote && <p role="status" className="mt-2 text-xs text-clank-300" data-testid="title-note">{titleNote}</p>}
                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {hero.achievements.map((a) => (
-                    <li key={a.id} className={`flex items-start gap-3 rounded-md border p-2.5 ${a.unlocked ? "border-clank-500/40 bg-clank-500/10" : "border-white/5 bg-white/[0.03] opacity-60"}`}>
-                      <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${a.unlocked ? "bg-clank-400 text-ink-900" : "bg-white/10 text-steel-400"}`}>{a.unlocked ? <CheckIcon size={16} /> : <LockIcon size={14} />}</span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold text-paper">{a.name}</span>
-                        <span className="block text-xs text-steel-300">{a.description}</span>
-                      </span>
-                    </li>
-                  ))}
+                  {hero.achievements.map((a) => {
+                    const showing = a.unlocked && Boolean(a.title) && hero.title === a.title;
+                    return (
+                      <li key={a.id} className={`flex items-start gap-3 rounded-md border p-2.5 ${a.unlocked ? "border-clank-500/40 bg-clank-500/10" : "border-white/5 bg-white/[0.03] opacity-60"}`} data-testid="achievement" data-id={a.id} data-unlocked={a.unlocked}>
+                        <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${a.unlocked ? "bg-clank-400 text-ink-900" : "bg-white/10 text-steel-400"}`}>{a.unlocked ? <CheckIcon size={16} /> : <LockIcon size={14} />}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-bold text-paper">{a.name}</span>
+                          <span className="block text-xs text-steel-300">{a.description}</span>
+                          {(a.gold || a.title) && (
+                            <span className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="achievement-reward">
+                              {a.gold ? <span className="chip !text-gold tnum" title="Clank Gold paid once, when you unlock it">{a.unlocked ? "Earned" : "Reward"} +{a.gold.toLocaleString()} Gold</span> : null}
+                              {a.title ? <span className="chip !text-clank-300" title="A title you can show above your name">Title: {a.title}</span> : null}
+                            </span>
+                          )}
+                          {a.unlocked && a.title && isOwner && owner && (
+                            <button type="button" className={`btn btn-sm mt-2 ${showing ? "btn-ghost" : ""}`} disabled={showing || titleBusy !== null} aria-pressed={showing} onClick={() => void chooseTitle(a.id)} data-testid="title-use">
+                              {titleBusy === a.id ? "…" : showing ? "Showing in the Arena" : "Show this title"}
+                            </button>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
               {hero.recentBattles.length > 0 && (

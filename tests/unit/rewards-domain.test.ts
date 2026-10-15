@@ -120,7 +120,7 @@ describe("manual claim state machine", () => {
 
 describe("arena_picks settings", () => {
   it("ships the FINAL economy in ONE place and validates it", () => {
-    expect(DEFAULT_SETTINGS.arena_picks).toMatchObject({ enabled: true, minimumClaim: "10000", pointsPerCorrectPick: 10, dailyPrizePool: "100000", weeklyPrizePool: "500000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100, holderDailyQualifyHours: 24, holderWeeklyQualifyHours: 168, holderMaxAgeHours: 6 });
+    expect(DEFAULT_SETTINGS.arena_picks).toMatchObject({ enabled: true, minimumClaim: "10000", pointsPerCorrectPick: 10, dailyPrizePool: "500000", weeklyPrizePool: "1000000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100, holderDailyQualifyHours: 24, holderWeeklyQualifyHours: 168, holderMaxAgeHours: 6 });
     expect(parseSettings("arena_picks", DEFAULT_SETTINGS.arena_picks)).toEqual(DEFAULT_SETTINGS.arena_picks);
   });
   it("rejects floats-as-numbers, negatives, junk and unknown keys", () => {
