@@ -199,7 +199,7 @@ describe("LAUNCH SEASON 1 — development progress does not carry over", () => {
     const earned = await evaluateAchievements(db, s.hero);
     expect(earned.sort()).toEqual(["arena_debut", "first_blood", "victor"]); // exactly what ONE official win earns — nothing pre-completed
     expect(earned).not.toContain("champion");
-    expect(await gold(s.hero)).toBe(10); // victor pays its 10 Gold again (a different unlock row)
+    expect(await gold(s.hero)).toBe(30); // every achievement pays its Gold again (a different unlock row each): Arena Debut 10 + First Blood 10 + Victor 10
     expect(await ledgerAudit()).toEqual([]);
   });
 

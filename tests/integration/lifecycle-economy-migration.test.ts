@@ -120,7 +120,8 @@ describe("applied to a database that holds development progress", () => {
     // archive it by hand the way the launch does: clean
     await db.exec(`update public.character_achievements set archived_at = now() where achievement_id = 'arena_debut';
                    update public.inventory_items set equipped = false, archived_at = now();
-                   insert into public.currency_ledger (character_id, delta, reason, idempotency_key) values ('${hero}', -500, 'season_launch_reset', 'mig-reset-1');`);
+                   insert into public.currency_ledger (character_id, delta, reason, idempotency_key)
+                     select character_id, -balance, 'season_launch_reset', 'mig-reset-1' from public.currency_accounts where balance > 0;`); // the launch offsets the WHOLE balance (500 seeded + the Gold migration 2900 backfilled for the unlocks)
     // (the launch's own reset entry is stamped with the launch transaction's time: launched_at = that moment)
     await db.exec("set session_replication_role = replica; update public.game_state set launched_at = (select max(created_at) from public.currency_ledger); set session_replication_role = origin;");
     expect(await db.query("select * from public.audit_development_economy()")).toEqual([]);
