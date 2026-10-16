@@ -33,32 +33,32 @@ const overview = async (reader: SimulatedChainReader | null = funded(), nowMs = 
   rewardsOverview(db, { settings, tokenDecimals: reader ? DECIMALS : null, token, reader, nowMs });
 
 describe("admin: the LEADERBOARD ECONOMY — what the rules can cost at most", () => {
-  it("DAILY base 100,000 + max holder bonus exposure 25,000 = max liability 125,000; WEEKLY 500,000 + 125,000 = 625,000", async () => {
+  it("DAILY base 500,000 + max holder bonus exposure 125,000 = max liability 625,000; WEEKLY 1,000,000 + 250,000 = 1,250,000", async () => {
     const o = await overview();
-    expect(o.economy.daily).toEqual({ basePool: "100,000", maxBonusExposure: "25,000", maxLiability: "125,000" });
-    expect(o.economy.weekly).toEqual({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.daily).toEqual({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.weekly).toEqual({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
     expect(o.economy.maxBonusPercent).toBe(25);
   });
-  it("SEASON 1 PLAN: 84 days × 100,000 + 12 weeks × 500,000 = 14,400,000 base; 18,000,000 with every bonus at 25%; inside a 20,000,000 allocation with a 2,000,000 buffer — a planning metric only", async () => {
+  it("SEASON 1 PLAN: 84 days × 500,000 + 12 weeks × 1,000,000 = 54,000,000 base; 67,500,000 with every bonus at 25%; inside a 75,000,000 allocation with a 7,500,000 buffer — a planning metric only", async () => {
     const { season } = (await overview()).economy;
-    expect(season).toEqual({ weeks: 12, days: 84, dailyBaseTotal: "8,400,000", weeklyBaseTotal: "6,000,000", baseMaximum: "14,400,000", maximumWithBonuses: "18,000,000", allocation: "20,000,000", buffer: "2,000,000", fits: true });
+    expect(season).toEqual({ weeks: 12, days: 84, dailyBaseTotal: "42,000,000", weeklyBaseTotal: "12,000,000", baseMaximum: "54,000,000", maximumWithBonuses: "67,500,000", allocation: "75,000,000", buffer: "7,500,000", fits: true });
     expect((await overview()).warnings.join(" ")).not.toMatch(/Season plan/);
     // Nothing was minted or reserved by looking at it.
     expect(await db.query("select 1 from public.arena_reward_ledger")).toHaveLength(0);
   });
   it("a plan that does not fit the allocation raises a warning; the numbers follow the settings", async () => {
-    const o = await overview(undefined, Date.now(), tokenStatus(), settingsWith({ seasonRewardAllocation: "15000000" }));
-    expect(o.economy.season).toMatchObject({ fits: false, buffer: "-3,000,000" });
-    expect(o.warnings.join(" ")).toMatch(/Season plan: the maximum payout with every holder bonus \(18,000,000\) exceeds the reward allocation \(15,000,000\)/);
+    const o = await overview(undefined, Date.now(), tokenStatus(), settingsWith({ seasonRewardAllocation: "60000000" }));
+    expect(o.economy.season).toMatchObject({ fits: false, buffer: "-7,500,000" });
+    expect(o.warnings.join(" ")).toMatch(/Season plan: the maximum payout with every holder bonus \(67,500,000\) exceeds the reward allocation \(60,000,000\)/);
     expect((await overview(undefined, Date.now(), tokenStatus(), settingsWith({ dailyPrizePool: "50000" }))).economy.daily.maxLiability).toBe("62,500");
   });
   it("carries the rules the boards run on: the minimum picks, points, the ladder, the bonus tiers and the qualification windows — and no per-battle pool or daily emission cap exists", async () => {
     const o = await overview();
     expect(o).toMatchObject({ prizesEnabled: true, minimumPicks: { daily: 20, weekly: 100 }, pointsPerCorrectPick: 10, holderQualifyHours: { daily: 24, weekly: 168 }, holderMaxAgeHours: 6, holderRefreshMinutes: 30 });
-    expect(o.rules.daily).toMatchObject({ prizePool: "100,000", topRewarded: 10, minimumPicks: 20 });
+    expect(o.rules.daily).toMatchObject({ prizePool: "500,000", topRewarded: 10, minimumPicks: 20 });
     expect(o).not.toHaveProperty("scoredPicksPerDay");
-    expect(o.rules.weekly).toMatchObject({ prizePool: "500,000", topRewarded: 10, minimumPicks: 100 });
-    expect(o.rules.daily.prizes.map((p) => p.amount)).toEqual(["30,000", "20,000", "15,000", "10,000", "8,000", "6,000", "4,000", "3,000", "2,000", "2,000"]);
+    expect(o.rules.weekly).toMatchObject({ prizePool: "1,000,000", topRewarded: 10, minimumPicks: 100 });
+    expect(o.rules.daily.prizes.map((p) => p.amount)).toEqual(["150,000", "100,000", "75,000", "50,000", "40,000", "30,000", "20,000", "15,000", "10,000", "10,000"]);
     expect(o.holderBonusTiers.map((t) => `${t.label} ${t.bonus}`)).toEqual(["100K +5%", "500K +10%", "1M +15%", "5M +20%", "10M +25%"]);
     expect(Object.keys(o)).not.toEqual(expect.arrayContaining(["rewardPerBattle", "dailyEmissionCap", "emittedToday"]));
     expect(o.warnings.join(" ")).not.toMatch(/emission cap/i);
@@ -86,9 +86,9 @@ describe("admin: Arena Picks overview & reserve health", () => {
     chain.setBalance(walletFor(9001), chainTokens(10_250_000)); // what the close verification will read
     await finalize(db, "DAILY", "2026-10-07", utc(2026, 10, 8, 0, 0, 5), { reader: chain });
     const after = await overview();
-    expect(after.awarded).toMatchObject({ base: "50,000", bonus: "7,500" });
-    expect(after).toMatchObject({ outstanding: "57,500", claimableLiability: "57,500" });
-    expect(after.coverageRatio).toBeCloseTo(1_000_000 / 57_500, 3);
+    expect(after.awarded).toMatchObject({ base: "250,000", bonus: "37,500" });
+    expect(after).toMatchObject({ outstanding: "287,500", claimableLiability: "287,500" });
+    expect(after.coverageRatio).toBeCloseTo(1_000_000 / 287_500, 3);
   });
 
   it("watches the reward wallet READ-ONLY: warns BEFORE liabilities exceed its balance, when coverage is thin, when the token is off, and when a retired private key is still in the environment", async () => {
@@ -155,13 +155,13 @@ describe("admin: leaderboards, finalized Top 10 with evidence, and holder qualif
     await db.query("insert into public.arena_reward_accounts (telegram_user_id, review_state) values (9002, 'REVIEW') on conflict (telegram_user_id) do update set review_state = 'REVIEW'");
     const nowMs = utc(2026, 10, 8, 12, 0, 0);
     let ov = await boardsAdminOverview(db, { settings: settingsWith(), nowMs });
-    expect(ov.current.DAILY).toMatchObject({ start: "2026-10-08", prizePool: "100,000", participants: 1, minimumPicks: 20 });
-    expect(ov.current.WEEKLY).toMatchObject({ start: "2026-10-05", prizePool: "500,000" });
+    expect(ov.current.DAILY).toMatchObject({ start: "2026-10-08", prizePool: "500,000", participants: 1, minimumPicks: 20 });
+    expect(ov.current.WEEKLY).toMatchObject({ start: "2026-10-05", prizePool: "1,000,000" });
     expect(ov.unfinalized).toEqual([{ kind: "DAILY", start: DAY }]); // ended, scored, not frozen yet
     await finalizeDueBoards(db, { now: () => new Date(nowMs), settings: settingsWith(), reader: null });
     ov = await boardsAdminOverview(db, { settings: settingsWith(), nowMs });
     expect(ov.unfinalized).toEqual([]);
-    expect(ov.finalized[0]).toMatchObject({ kind: "DAILY", start: DAY, participants: 2, eligible: 2, prizePool: "100,000", baseAwarded: "50,000", returned: "50,000", credited: 1, held: 1, bonusesCredited: 0 });
+    expect(ov.finalized[0]).toMatchObject({ kind: "DAILY", start: DAY, participants: 2, eligible: 2, prizePool: "500,000", baseAwarded: "250,000", returned: "250,000", credited: 1, held: 1, bonusesCredited: 0 });
   });
 
   it("each finalized Top-10 row carries rank, hero, points, accuracy, base prize, holder tier, bonus %, bonus amount, total, review status and the qualification evidence summary", async () => {
@@ -172,9 +172,9 @@ describe("admin: leaderboards, finalized Top 10 with evidence, and holder qualif
     chain.setBalance(walletFor(9001), chainTokens(10_250_000));
     await finalize(db, "DAILY", DAY, CLOSE, { reader: chain });
     const rows = await boardResultsAdmin(db, "DAILY", DAY);
-    expect(rows[0]).toMatchObject({ rank: 1, hero: "Hero 9001", points: 200, accuracyBps: 10000, basePrize: "30,000", holderTier: "10M", holderBonusPercent: "+25%", holderBonus: "7,500", totalReward: "37,500", baseStatus: "CREDITED", bonusStatus: "CREDITED", telegramUserId: 9001 });
+    expect(rows[0]).toMatchObject({ rank: 1, hero: "Hero 9001", points: 200, accuracyBps: 10000, basePrize: "150,000", holderTier: "10M", holderBonusPercent: "+25%", holderBonus: "37,500", totalReward: "187,500", baseStatus: "CREDITED", bonusStatus: "CREDITED", telegramUserId: 9001 });
     expect(String(rows[0]!.evidenceSummary)).toMatch(/QUALIFIED/);
-    expect(rows[1]).toMatchObject({ rank: 2, basePrize: "20,000", holderTier: null, holderBonus: "0", totalReward: "20,000", bonusStatus: "NONE", evidenceSummary: null });
+    expect(rows[1]).toMatchObject({ rank: 2, basePrize: "100,000", holderTier: null, holderBonus: "0", totalReward: "100,000", bonusStatus: "NONE", evidenceSummary: null });
   });
 
   it("an admin's evidence line says WHY a buyer near the close did not qualify", async () => {
@@ -185,7 +185,7 @@ describe("admin: leaderboards, finalized Top 10 with evidence, and holder qualif
     chain.setBalance(walletFor(9001), chainTokens(10_250_000));
     await finalize(db, "DAILY", DAY, CLOSE, { reader: chain });
     const [row] = await boardResultsAdmin(db, "DAILY", DAY);
-    expect(row).toMatchObject({ bonusStatus: "NONE", basePrize: "30,000" });
+    expect(row).toMatchObject({ bonusStatus: "NONE", basePrize: "150,000" });
     expect(String(row!.evidenceSummary)).toMatch(/Not qualified — .*held only since 2026-10-07T23:55:00Z \(needed ≤ 2026-10-06T00:00:00Z\)/);
   });
 
@@ -238,7 +238,7 @@ describe("admin: lists and analytics", () => {
     await requestClaim(db, { now: () => new Date(), allowDemo: true }, { userId: 9001, idempotencyKey: "admin-test-claim-2", destination: { kind: "CUSTOM", address: WALLET_A }, settings: DEFAULT_SETTINGS, target: targetFor(newChain()) });
     const accounts = await listAccounts(db, 10);
     expect(accounts.length).toBe(0); // account analytics list members who made real picks; this fixture only has scored rows
-    expect((await listClaims(db, { limit: 10 }))[0]).toMatchObject({ status: "PENDING", amount: "30,000", telegram_user_id: 9001, destination_kind: "CUSTOM", review_state: "NORMAL" });
+    expect((await listClaims(db, { limit: 10 }))[0]).toMatchObject({ status: "PENDING", amount: "150,000", telegram_user_id: 9001, destination_kind: "CUSTOM", review_state: "NORMAL" });
     expect((await listReview(db)).held).toEqual([]);
     await setReviewState(db, 9001, "REVIEW", "manual look", "admin");
     expect((await listReview(db)).held[0]).toMatchObject({ telegram_user_id: 9001, review_state: "REVIEW", review_reason: "manual look", claimable: "0" });
@@ -249,7 +249,7 @@ describe("admin: lists and analytics", () => {
     await db.query("insert into public.arena_reward_accounts (telegram_user_id, review_state) values (9001, 'SUSPENDED') on conflict (telegram_user_id) do update set review_state = 'SUSPENDED'");
     await finalize(db, "DAILY", "2026-10-07", utc(2026, 10, 8, 0, 0, 5));
     const held = (await listReview(db)).heldPrizes;
-    expect(held[0]).toMatchObject({ kind: "DAILY", period_start: "2026-10-07", telegram_user_id: 9001, rank: 1, prize: "30,000", bonus: "0", hold_reason: "SUSPENDED" });
+    expect(held[0]).toMatchObject({ kind: "DAILY", period_start: "2026-10-07", telegram_user_id: 9001, rank: 1, prize: "150,000", bonus: "0", hold_reason: "SUSPENDED" });
   });
 
   it("review states are audited, need a reason when holding, and can be cleared", async () => {

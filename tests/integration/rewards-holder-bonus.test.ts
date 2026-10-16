@@ -43,15 +43,15 @@ const close = (over: { settings?: ReturnType<typeof settingsWith> } = {}) => fin
 const ledgerOf = (userId: number) => db.query<{ kind: string; claimable_delta: string }>("select kind, claimable_delta::text from public.arena_reward_ledger where telegram_user_id = $1 order by id", [userId]);
 
 describe("CASE A — the #1 player buys 10M five minutes before the Daily closes", () => {
-  it("gets the BASE prize (30,000) and NO holder bonus; the evidence says the 10M run began too recently", async () => {
+  it("gets the BASE prize (150,000) and NO holder bonus; the evidence says the 10M run began too recently", async () => {
     await podium();
     await holder(9001, utc(2026, 10, 5), chainTokens(10_250_000));
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 7, 23, 30), chainTokens(1_000)); // FREE balance all along…
     await observe(db, 9001, [{ at: utc(2026, 10, 7, 23, 55), balance: chainTokens(10_250_000) }]); // …then the buy, five minutes before the close
     await close();
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ rank: 1, base_status: "CREDITED", base_prize_micro: tokens(30_000).toString(), bonus_status: "NONE", bonus_bps: 0, bonus_micro: "0" });
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ rank: 1, base_status: "CREDITED", base_prize_micro: tokens(150_000).toString(), bonus_status: "NONE", bonus_bps: 0, bonus_micro: "0" });
     expect((await ledgerOf(9001)).map((l) => l.kind)).toEqual(["DAILY_LEADERBOARD_BASE_REWARD"]);
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(30_000));
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(150_000));
     const ev = (await resultOf(db, "DAILY", DAY, 9001))!.bonus_evidence as { decision: string; tiers: Array<{ tierIndex: number; reason: string }> };
     expect(ev.decision).toBe("NONE");
     expect(ev.tiers.find((t) => t.tierIndex === 5)!.reason).toBe("RUN_TOO_RECENT");
@@ -60,22 +60,22 @@ describe("CASE A — the #1 player buys 10M five minutes before the Daily closes
 });
 
 describe("CASE B — held 10M for the previous 24 h and all day", () => {
-  it("+25%: BASE 30,000 and a separate HOLDER BONUS of 7,500 = 37,500 claimable; nobody else's base prize shrinks", async () => {
+  it("+25%: BASE 150,000 and a separate HOLDER BONUS of 37,500 = 187,500 claimable; nobody else's base prize shrinks", async () => {
     await podium();
     await holder(9001, utc(2026, 10, 5), chainTokens(10_250_000));
     await observeSteady(db, 9001, utc(2026, 10, 6, 0, 0), utc(2026, 10, 7, 23, 30), chainTokens(10_250_000));
     expect(await close()).toMatchObject({ status: "FINALIZED", bonusesCredited: 1, bonusesPending: 0 });
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(30_000).toString(), base_status: "CREDITED", bonus_status: "CREDITED", bonus_tier_index: 5, bonus_label: "10M", bonus_bps: 2500, bonus_micro: tokens(7_500).toString() });
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(150_000).toString(), base_status: "CREDITED", bonus_status: "CREDITED", bonus_tier_index: 5, bonus_label: "10M", bonus_bps: 2500, bonus_micro: tokens(37_500).toString() });
     expect(await ledgerOf(9001)).toEqual([
-      { kind: "DAILY_LEADERBOARD_BASE_REWARD", claimable_delta: tokens(30_000).toString() },
-      { kind: "DAILY_LEADERBOARD_HOLDER_BONUS", claimable_delta: tokens(7_500).toString() },
+      { kind: "DAILY_LEADERBOARD_BASE_REWARD", claimable_delta: tokens(150_000).toString() },
+      { kind: "DAILY_LEADERBOARD_HOLDER_BONUS", claimable_delta: tokens(37_500).toString() },
     ]);
-    expect(await balanceOf(db, 9001)).toEqual({ claimable: tokens(37_500), reserved: 0n, claimed: 0n, earned: tokens(37_500) });
+    expect(await balanceOf(db, 9001)).toEqual({ claimable: tokens(187_500), reserved: 0n, claimed: 0n, earned: tokens(187_500) });
     // The bonus is EXTRA: #2 and #3 still receive exactly their ladder prizes, and the board's base accounting is untouched.
-    expect(await resultOf(db, "DAILY", DAY, 9002)).toMatchObject({ base_prize_micro: tokens(20_000).toString(), bonus_status: "NONE" });
-    expect(await resultOf(db, "DAILY", DAY, 9003)).toMatchObject({ base_prize_micro: tokens(15_000).toString() });
+    expect(await resultOf(db, "DAILY", DAY, 9002)).toMatchObject({ base_prize_micro: tokens(100_000).toString(), bonus_status: "NONE" });
+    expect(await resultOf(db, "DAILY", DAY, 9003)).toMatchObject({ base_prize_micro: tokens(75_000).toString() });
     const [board] = await db.query<{ base_awarded_micro: string; returned_to_reserve_micro: string }>("select base_awarded_micro::text, returned_to_reserve_micro::text from public.arena_leaderboards");
-    expect(board).toEqual({ base_awarded_micro: tokens(65_000).toString(), returned_to_reserve_micro: tokens(35_000).toString() });
+    expect(board).toEqual({ base_awarded_micro: tokens(325_000).toString(), returned_to_reserve_micro: tokens(175_000).toString() });
     await healthy();
   });
 
@@ -86,7 +86,7 @@ describe("CASE B — held 10M for the previous 24 h and all day", () => {
     await close();
     const rows = await boardResultsAdmin(db, "DAILY", DAY);
     const first = rows[0] as Record<string, unknown>;
-    expect(first).toMatchObject({ rank: 1, basePrize: "30,000", holderTier: "10M", holderBonusPercent: "+25%", holderBonus: "7,500", totalReward: "37,500", baseStatus: "CREDITED", bonusStatus: "CREDITED" });
+    expect(first).toMatchObject({ rank: 1, basePrize: "150,000", holderTier: "10M", holderBonusPercent: "+25%", holderBonus: "37,500", totalReward: "187,500", baseStatus: "CREDITED", bonusStatus: "CREDITED" });
     expect(String(first.evidenceSummary)).toMatch(/QUALIFIED: verified at\/above the threshold at every one of \d+ checks since 2026-10-06T00:00:00Z/);
     expect(first.evidence).toMatchObject({ decision: "QUALIFIED", wallet: walletFor(9001) });
   });
@@ -97,8 +97,8 @@ describe("CASE B — held 10M for the previous 24 h and all day", () => {
     await observeSteady(db, 9001, utc(2026, 10, 6, 0, 0), utc(2026, 10, 7, 23, 30), chainTokens(10_250_000));
     await close();
     const final = await getFinalBoard(db, "DAILY", DAY, { nowMs: CLOSE });
-    expect(final!.board.rows[0]).toMatchObject({ rank: 1, basePrize: "30,000", holderBonus: "7,500", holderTier: "10M", bonusStatus: "CREDITED", totalReward: "37,500" });
-    expect(final!.board.rows[1]).toMatchObject({ holderBonus: "0", holderTier: null, totalReward: "20,000" });
+    expect(final!.board.rows[0]).toMatchObject({ rank: 1, basePrize: "150,000", holderBonus: "37,500", holderTier: "10M", bonusStatus: "CREDITED", totalReward: "187,500" });
+    expect(final!.board.rows[1]).toMatchObject({ holderBonus: "0", holderTier: null, totalReward: "100,000" });
     expect(JSON.stringify(final)).not.toMatch(/evidence|wallet|0x[0-9a-f]{40}|10,250,000|balance/i);
   });
 });
@@ -110,8 +110,8 @@ describe("CASE C — qualified, then the balance drops before the close", () => 
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 7, 13, 30), chainTokens(10_250_000));
     await observeSteady(db, 9001, utc(2026, 10, 7, 14, 0), utc(2026, 10, 7, 23, 30), chainTokens(1_200_000));
     await close();
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(30_000).toString(), bonus_status: "CREDITED", bonus_label: "1M", bonus_bps: 1500, bonus_micro: tokens(4_500).toString() });
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(34_500));
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(150_000).toString(), bonus_status: "CREDITED", bonus_label: "1M", bonus_bps: 1500, bonus_micro: tokens(22_500).toString() });
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(172_500));
   });
 
   it("selling EVERYTHING before the close removes the bonus entirely; rank, points and the base prize are untouched", async () => {
@@ -120,7 +120,7 @@ describe("CASE C — qualified, then the balance drops before the close", () => 
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 7, 13, 30), chainTokens(10_250_000));
     await observeSteady(db, 9001, utc(2026, 10, 7, 14, 0), utc(2026, 10, 7, 23, 30), 0n);
     await close();
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ rank: 1, points: 200, base_status: "CREDITED", base_prize_micro: tokens(30_000).toString(), bonus_status: "NONE" });
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ rank: 1, points: 200, base_status: "CREDITED", base_prize_micro: tokens(150_000).toString(), bonus_status: "NONE" });
   });
 
   it("TIER FALLBACK: a 10M holder who fell to 6M keeps the 5M bonus (+20%) — not all the way down to FREE", async () => {
@@ -129,7 +129,7 @@ describe("CASE C — qualified, then the balance drops before the close", () => 
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 7, 9, 30), chainTokens(10_000_000));
     await observeSteady(db, 9001, utc(2026, 10, 7, 10, 0), utc(2026, 10, 7, 23, 30), chainTokens(6_000_000));
     await close();
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ bonus_label: "5M", bonus_bps: 2000, bonus_micro: tokens(6_000).toString() });
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ bonus_label: "5M", bonus_bps: 2000, bonus_micro: tokens(30_000).toString() });
   });
 
   it("buying DURING the day (20:00) while #1 grants nothing for that day", async () => {
@@ -160,8 +160,8 @@ describe("CASE F — the same 10M moved between wallets/accounts: no instant reu
     await observeSteady(db, 9001, utc(2026, 10, 7, 22, 0), utc(2026, 10, 7, 23, 30), 0n);
     await observeSteady(db, 9002, utc(2026, 10, 7, 22, 0), utc(2026, 10, 7, 23, 30), chainTokens(10_250_000));
     await close();
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(30_000).toString(), bonus_status: "NONE" });
-    expect(await resultOf(db, "DAILY", DAY, 9002)).toMatchObject({ base_prize_micro: tokens(20_000).toString(), bonus_status: "NONE" });
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(150_000).toString(), bonus_status: "NONE" });
+    expect(await resultOf(db, "DAILY", DAY, 9002)).toMatchObject({ base_prize_micro: tokens(100_000).toString(), bonus_status: "NONE" });
     expect(await ledgerCount(db, "DAILY_LEADERBOARD_HOLDER_BONUS")).toBe(0);
   });
 
@@ -179,24 +179,24 @@ describe("WEEKLY bonus — 7 days before AND throughout the week", () => {
   const weekScores = () => seedScores(db, [{ user: 9001, day: "2026-10-13", picks: 20, correct: 20 }, ...[9002, 9003].map((user, i) => ({ user, day: "2026-10-13", picks: 20, correct: 15 - i * 5 })), ...Array.from({ length: 3 }, (_, d) => ({ user: 9001, day: `2026-10-${14 + d}`, picks: 20, correct: 20 })), ...[9002].flatMap((user) => Array.from({ length: 3 }, (_, d) => ({ user, day: `2026-10-${14 + d}`, picks: 20, correct: 12 })))]);
   const weekClose = () => finalize(db, "WEEKLY", WEEK, WEEK_CLOSE, { reader: chain, settings: settingsWith({ weeklyMinimumPicks: 50 }) });
 
-  it("CASE D — buys 10M on Sunday night while already #1 for the week: NO instant +25% (base 150,000 only)", async () => {
+  it("CASE D — buys 10M on Sunday night while already #1 for the week: NO instant +25% (base 300,000 only)", async () => {
     await weekScores();
     await holder(9001, utc(2026, 10, 5), chainTokens(10_250_000));
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 18, 21, 30), 0n);
     await observeSteady(db, 9001, utc(2026, 10, 18, 22, 0), utc(2026, 10, 18, 23, 30), chainTokens(10_250_000));
     await weekClose();
-    expect(await resultOf(db, "WEEKLY", WEEK, 9001)).toMatchObject({ rank: 1, base_prize_micro: tokens(150_000).toString(), bonus_status: "NONE" });
+    expect(await resultOf(db, "WEEKLY", WEEK, 9001)).toMatchObject({ rank: 1, base_prize_micro: tokens(300_000).toString(), bonus_status: "NONE" });
     expect(await ledgerCount(db, "WEEKLY_LEADERBOARD_HOLDER_BONUS")).toBe(0);
   });
 
-  it("CASE E — satisfied the 7-day pre-week requirement and the entire week: +25% Weekly bonus (37,500 on the 150,000)", async () => {
+  it("CASE E — satisfied the 7-day pre-week requirement and the entire week: +25% Weekly bonus (75,000 on the 300,000)", async () => {
     await weekScores();
     await holder(9001, utc(2026, 10, 5), chainTokens(10_250_000));
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 18, 23, 30), chainTokens(10_250_000), HOUR);
     await weekClose();
-    expect(await resultOf(db, "WEEKLY", WEEK, 9001)).toMatchObject({ base_prize_micro: tokens(150_000).toString(), bonus_status: "CREDITED", bonus_label: "10M", bonus_micro: tokens(37_500).toString() });
+    expect(await resultOf(db, "WEEKLY", WEEK, 9001)).toMatchObject({ base_prize_micro: tokens(300_000).toString(), bonus_status: "CREDITED", bonus_label: "10M", bonus_micro: tokens(75_000).toString() });
     expect((await ledgerOf(9001)).map((l) => l.kind)).toEqual(["WEEKLY_LEADERBOARD_BASE_REWARD", "WEEKLY_LEADERBOARD_HOLDER_BONUS"]);
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(187_500));
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(375_000));
   });
 
   it("the weekly bar is HARDER than the daily one: the same holding (since Oct 7 18:00) qualifies a Daily board but not the Weekly", async () => {
@@ -213,7 +213,7 @@ describe("WEEKLY bonus — 7 days before AND throughout the week", () => {
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 14, 9, 0), chainTokens(10_250_000), HOUR);
     await observeSteady(db, 9001, utc(2026, 10, 14, 10, 0), utc(2026, 10, 18, 23, 0), chainTokens(300_000), HOUR);
     await weekClose();
-    expect(await resultOf(db, "WEEKLY", WEEK, 9001)).toMatchObject({ rank: 1, base_prize_micro: tokens(150_000).toString(), bonus_label: "100K", bonus_micro: tokens(7_500).toString() });
+    expect(await resultOf(db, "WEEKLY", WEEK, 9001)).toMatchObject({ rank: 1, base_prize_micro: tokens(300_000).toString(), bonus_label: "100K", bonus_micro: tokens(15_000).toString() });
   });
 });
 
@@ -238,8 +238,8 @@ describe("the FINAL CLOSE verification and the PENDING window — never granted 
     chain.setOutage(true);
     expect(await close()).toMatchObject({ status: "FINALIZED", credited: 3, bonusesCredited: 0, bonusesPending: 1 });
     expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_status: "CREDITED", bonus_status: "PENDING_VERIFICATION", bonus_micro: "0", bonus_bps: 0 });
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(30_000)); // base only, for now
-    expect((await finalizedPublic()).rows[0]).toMatchObject({ bonusStatus: "PENDING", holderBonus: "0", totalReward: "30,000" });
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(150_000)); // base only, for now
+    expect((await finalizedPublic()).rows[0]).toMatchObject({ bonusStatus: "PENDING", holderBonus: "0", totalReward: "150,000" });
     await healthy();
   });
 
@@ -252,9 +252,9 @@ describe("the FINAL CLOSE verification and the PENDING window — never granted 
     chain.setOutage(false);
     const ctx = { now: () => new Date(CLOSE + HOUR), settings: settingsWith(), reader: chain };
     expect(await reconcileBonus(db, ctx, "DAILY", DAY, 9001)).toBe("CREDITED");
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ bonus_status: "CREDITED", bonus_label: "10M", bonus_micro: tokens(7_500).toString() });
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ bonus_status: "CREDITED", bonus_label: "10M", bonus_micro: tokens(37_500).toString() });
     expect((await ledgerOf(9001)).map((l) => l.kind)).toEqual(["DAILY_LEADERBOARD_BASE_REWARD", "DAILY_LEADERBOARD_HOLDER_BONUS"]);
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(37_500));
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(187_500));
     expect(await reconcileBonus(db, ctx, "DAILY", DAY, 9001)).toBe("NOT_PENDING"); // idempotent
     expect(await ledgerCount(db, "DAILY_LEADERBOARD_HOLDER_BONUS")).toBe(1);
     await healthy();
@@ -275,7 +275,7 @@ describe("the FINAL CLOSE verification and the PENDING window — never granted 
     chain.setOutage(false);
     expect(await reconcileBonus(db, { ...after, now: () => new Date(CLOSE + 26 * HOUR) }, "DAILY", DAY, 9001)).toBe("NOT_PENDING"); // expired is final
     expect(await ledgerCount(db, "DAILY_LEADERBOARD_HOLDER_BONUS")).toBe(0);
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(30_000));
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(150_000));
   });
 
   it("a pending bonus that no longer qualifies by the time it is re-checked (the balance is gone) resolves to NONE — never credited on the old promise", async () => {
@@ -329,15 +329,15 @@ describe("a prize HELD for review carries its bonus with it", () => {
     await observeSteady(db, 9002, utc(2026, 10, 5), utc(2026, 10, 7, 23, 30), chainTokens(10_250_000));
     for (const u of [9001, 9002]) await db.query("insert into public.arena_reward_accounts (telegram_user_id, review_state, review_reason) values ($1, 'REVIEW', 'test') on conflict (telegram_user_id) do update set review_state = 'REVIEW'", [u]);
     await close();
-    for (const [u, base, bonus] of [[9001, 30_000, 7_500], [9002, 20_000, 5_000]] as const) {
+    for (const [u, base, bonus] of [[9001, 150_000, 37_500], [9002, 100_000, 25_000]] as const) {
       expect(await resultOf(db, "DAILY", DAY, u)).toMatchObject({ base_status: "HELD", bonus_status: "HELD", base_prize_micro: tokens(base).toString(), bonus_micro: tokens(bonus).toString() });
       expect((await balanceOf(db, u)).earned).toBe(0n);
     }
     const clock = { now: () => new Date(CLOSE + HOUR) };
-    expect(await resolveHeldPrize(db, clock, { kind: "DAILY", start: DAY, userId: 9001, action: "release", reason: "reviewed — fine", actor: "admin" })).toMatchObject({ ok: true, status: "CREDITED", baseMicro: tokens(30_000), bonusMicro: tokens(7_500) });
+    expect(await resolveHeldPrize(db, clock, { kind: "DAILY", start: DAY, userId: 9001, action: "release", reason: "reviewed — fine", actor: "admin" })).toMatchObject({ ok: true, status: "CREDITED", baseMicro: tokens(150_000), bonusMicro: tokens(37_500) });
     expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_status: "CREDITED", bonus_status: "CREDITED" });
     expect((await ledgerOf(9001)).map((l) => l.kind)).toEqual(["DAILY_LEADERBOARD_BASE_REWARD", "DAILY_LEADERBOARD_HOLDER_BONUS"]);
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(37_500));
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(187_500));
     expect(await resolveHeldPrize(db, clock, { kind: "DAILY", start: DAY, userId: 9002, action: "forfeit", reason: "confirmed abuse", actor: "admin" })).toMatchObject({ ok: true, status: "FORFEITED" });
     expect(await resultOf(db, "DAILY", DAY, 9002)).toMatchObject({ base_status: "FORFEITED", bonus_status: "FORFEITED" });
     expect((await balanceOf(db, 9002)).earned).toBe(0n);
@@ -346,7 +346,7 @@ describe("a prize HELD for review carries its bonus with it", () => {
 });
 
 describe("holdings NEVER affect rank, points, ties or the base prize", () => {
-  it("a qualified 10M holder tied EXACTLY with a FREE player shares the SAME base (17,500 each); the bonus is the only difference and is added on top", async () => {
+  it("a qualified 10M holder tied EXACTLY with a FREE player shares the SAME base (87,500 each); the bonus is the only difference and is added on top", async () => {
     await seedScores(db, [
       { user: 9001, day: DAY, picks: 20, correct: 19 },
       { user: 9002, day: DAY, picks: 20, correct: 15 }, // the holder
@@ -356,10 +356,10 @@ describe("holdings NEVER affect rank, points, ties or the base prize", () => {
     await observeSteady(db, 9002, utc(2026, 10, 5), utc(2026, 10, 7, 23, 30), chainTokens(10_250_000));
     await close();
     const [holderRow, freeRow] = [await resultOf(db, "DAILY", DAY, 9002), await resultOf(db, "DAILY", DAY, 9003)];
-    expect(holderRow).toMatchObject({ rank: 2, tie_size: 2, points: 150, base_prize_micro: tokens(17_500).toString(), bonus_micro: tokens(4_375).toString() });
-    expect(freeRow).toMatchObject({ rank: 2, tie_size: 2, points: 150, base_prize_micro: tokens(17_500).toString(), bonus_status: "NONE" });
-    expect((await balanceOf(db, 9002)).claimable).toBe(tokens(21_875));
-    expect((await balanceOf(db, 9003)).claimable).toBe(tokens(17_500));
+    expect(holderRow).toMatchObject({ rank: 2, tie_size: 2, points: 150, base_prize_micro: tokens(87_500).toString(), bonus_micro: tokens(21_875).toString() });
+    expect(freeRow).toMatchObject({ rank: 2, tie_size: 2, points: 150, base_prize_micro: tokens(87_500).toString(), bonus_status: "NONE" });
+    expect((await balanceOf(db, 9002)).claimable).toBe(tokens(109_375));
+    expect((await balanceOf(db, 9003)).claimable).toBe(tokens(87_500));
   });
 
   it("the same scores produce IDENTICAL ranks, points, tie sizes and base prizes with and without a holder in the field", async () => {
@@ -395,7 +395,7 @@ describe("base and bonus stay apart all the way to a claim", () => {
     await close();
     const r = await requestClaim(db, { now: () => new Date(CLOSE + HOUR), allowDemo: true }, { userId: 9001, idempotencyKey: "claim-base-and-bonus", destination: { kind: "HOLDER_WALLET" }, settings: DEFAULT_SETTINGS, target: targetFor(chain) });
     expect(r).toMatchObject({ ok: true });
-    expect(await balanceOf(db, 9001)).toEqual({ claimable: 0n, reserved: tokens(37_500), claimed: 0n, earned: tokens(37_500) });
+    expect(await balanceOf(db, 9001)).toEqual({ claimable: 0n, reserved: tokens(187_500), claimed: 0n, earned: tokens(187_500) });
     expect((await ledgerOf(9001)).map((l) => l.kind)).toEqual(["DAILY_LEADERBOARD_BASE_REWARD", "DAILY_LEADERBOARD_HOLDER_BONUS", "CLAIM_RESERVED"]);
     await healthy();
   });

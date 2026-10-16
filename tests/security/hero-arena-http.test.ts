@@ -187,14 +187,14 @@ describe("Admin: reward programs", () => {
     expect((await a.send("GET", ["hero-arena", "overview"], undefined, { cookie: null })).status).toBe(401);
   });
 
-  it("shows BOTH programs side by side: Arena Picks 100,000 / 500,000 and Hero Arena 'REWARD POOL NOT SET' — nothing copied from one to the other", async () => {
+  it("shows BOTH programs side by side: Arena Picks 500,000 / 1,000,000 and Hero Arena 'REWARD POOL NOT SET' — nothing copied from one to the other", async () => {
     const a = await admin();
     const res = await a.get("hero-arena", "overview");
     const { overview } = (await res.json()) as { overview: { programs: Array<{ id: string; dailyPool: string | null; weeklyPool: string | null; notSet: string[]; ladderBps: number[]; setting: string }>; notices: string[] } };
     expect(res.status).toBe(200);
     const picks = overview.programs.find((p) => p.id === "ARENA_PICKS")!;
     const hero = overview.programs.find((p) => p.id === "HERO_ARENA")!;
-    expect(picks).toMatchObject({ dailyPool: "100,000", weeklyPool: "500,000", setting: "arena_picks" });
+    expect(picks).toMatchObject({ dailyPool: "500,000", weeklyPool: "1,000,000", setting: "arena_picks" });
     expect(hero).toMatchObject({ dailyPool: null, weeklyPool: null, notSet: ["daily", "weekly"], setting: "hero_arena" });
     expect(hero.ladderBps).toEqual(picks.ladderBps); // the same default SHAPE, but it is Hero Arena's own setting
     expect(overview.notices.join(" ")).toMatch(/Daily and Weekly reward pool is NOT SET/);
@@ -209,7 +209,7 @@ describe("Admin: reward programs", () => {
     expect(await db.query("select action, entity_id from public.admin_audit_log where action = 'settings.put' and entity_id = 'hero_arena'")).toEqual([{ action: "settings.put", entity_id: "hero_arena" }]);
     const { overview } = (await (await a.get("hero-arena", "overview")).json()) as { overview: { programs: Array<{ id: string; dailyPool: string | null; weeklyPool: string | null; notSet: string[] }> } };
     expect(overview.programs.find((p) => p.id === "HERO_ARENA")).toMatchObject({ dailyPool: "50,000", weeklyPool: "250,000", notSet: [] });
-    expect(overview.programs.find((p) => p.id === "ARENA_PICKS")).toMatchObject({ dailyPool: "100,000", weeklyPool: "500,000" }); // untouched
+    expect(overview.programs.find((p) => p.id === "ARENA_PICKS")).toMatchObject({ dailyPool: "500,000", weeklyPool: "1,000,000" }); // untouched
   });
 
   it("releasing a HELD prize: same-origin only, a reason is required, it is audited under its own source, and it credits the OWNER once", async () => {

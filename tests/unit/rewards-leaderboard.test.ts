@@ -171,23 +171,23 @@ describe("ranking: CORRECT PICKS, then accuracy; ties are never broken by anythi
 describe("the payout ladder: ONE configured ladder, two pools", () => {
   const eligible = (rows: BoardRowInput[]) => rankBoard(rows, 0).filter((r) => r.prizeEligible).map((r) => ({ userId: r.row.userId, row: r.row }));
   const byUser = (res: ReturnType<typeof distributePrizes>) => Object.fromEntries(res.awards.map((a) => [a.userId, a.prizeMicro]));
-  const DAILY = 100_000n * E18;
-  const WEEKLY = 500_000n * E18;
+  const DAILY = 500_000n * E18;
+  const WEEKLY = 1_000_000n * E18;
   const tenWinners = Array.from({ length: 12 }, (_, i) => row(i + 1, 40, 30 - i));
 
-  it("ships the FINAL defaults as settings: daily 100,000, weekly 500,000, Top 10 at 30/20/15/10/8/6/4/3/2/2 %", () => {
+  it("ships the FINAL defaults as settings: daily 500,000, weekly 1,000,000, Top 10 at 30/20/15/10/8/6/4/3/2/2 %", () => {
     const c = DEFAULT_SETTINGS.arena_picks;
-    expect([c.dailyPrizePool, c.weeklyPrizePool]).toEqual(["100000", "500000"]);
+    expect([c.dailyPrizePool, c.weeklyPrizePool]).toEqual(["500000", "1000000"]);
     expect(c.prizeSplitBps).toEqual([3000, 2000, 1500, 1000, 800, 600, 400, 300, 200, 200]);
     expect(c.prizeSplitBps.reduce((a, b) => a + b, 0)).toBe(10_000);
     expect([c.pointsPerCorrectPick, c.dailyMinimumPicks, c.weeklyMinimumPicks]).toEqual([10, 20, 100]);
     expect("scoredPicksPerDay" in c).toBe(false); // the per-day scoring cap is gone from the configuration entirely
   });
-  it("DAILY 100,000: 30,000 / 20,000 / 15,000 / 10,000 / 8,000 / 6,000 / 4,000 / 3,000 / 2,000 / 2,000", () => {
-    expect(positionPrizes(DAILY, LADDER).map((p) => p / E18)).toEqual([30_000n, 20_000n, 15_000n, 10_000n, 8_000n, 6_000n, 4_000n, 3_000n, 2_000n, 2_000n]);
+  it("DAILY 500,000: 150,000 / 100,000 / 75,000 / 50,000 / 40,000 / 30,000 / 20,000 / 15,000 / 10,000 / 10,000", () => {
+    expect(positionPrizes(DAILY, LADDER).map((p) => p / E18)).toEqual([150_000n, 100_000n, 75_000n, 50_000n, 40_000n, 30_000n, 20_000n, 15_000n, 10_000n, 10_000n]);
   });
-  it("WEEKLY 500,000: 150,000 / 100,000 / 75,000 / 50,000 / 40,000 / 30,000 / 20,000 / 15,000 / 10,000 / 10,000 — the SAME percentages", () => {
-    expect(positionPrizes(WEEKLY, LADDER).map((p) => p / E18)).toEqual([150_000n, 100_000n, 75_000n, 50_000n, 40_000n, 30_000n, 20_000n, 15_000n, 10_000n, 10_000n]);
+  it("WEEKLY 1,000,000: 300,000 / 200,000 / 150,000 / 100,000 / 80,000 / 60,000 / 40,000 / 30,000 / 20,000 / 20,000 — the SAME percentages", () => {
+    expect(positionPrizes(WEEKLY, LADDER).map((p) => p / E18)).toEqual([300_000n, 200_000n, 150_000n, 100_000n, 80_000n, 60_000n, 40_000n, 30_000n, 20_000n, 20_000n]);
   });
   it("twelve eligible players: exactly the Top 10 are paid, #11 and #12 get nothing, and the whole pool is awarded", () => {
     const res = distributePrizes(eligible(tenWinners), DAILY, LADDER);
@@ -196,22 +196,22 @@ describe("the payout ladder: ONE configured ladder, two pools", () => {
     expect(res.awards.reduce((a, x) => a + x.prizeMicro, 0n)).toBe(DAILY);
     expect(res.returnedMicro).toBe(0n);
   });
-  it("TIE EXAMPLE: two exactly tied for #2 share positions 2+3 (20,000 + 15,000 = 35,000) → 17,500 each, and the next player occupies #4 (10,000)", () => {
+  it("TIE EXAMPLE: two exactly tied for #2 share positions 2+3 (100,000 + 75,000 = 175,000) → 87,500 each, and the next player occupies #4 (50,000)", () => {
     const res = distributePrizes(eligible([row(1, 20, 15), row(2, 20, 10), row(3, 20, 10), row(4, 20, 8), row(5, 20, 5)]), DAILY, LADDER);
-    expect(byUser(res)).toEqual({ 1: 30_000n * E18, 2: 17_500n * E18, 3: 17_500n * E18, 4: 10_000n * E18, 5: 8_000n * E18 });
-    expect(res.returnedMicro).toBe(DAILY - (30_000n + 17_500n + 17_500n + 10_000n + 8_000n) * E18);
+    expect(byUser(res)).toEqual({ 1: 150_000n * E18, 2: 87_500n * E18, 3: 87_500n * E18, 4: 50_000n * E18, 5: 40_000n * E18 });
+    expect(res.returnedMicro).toBe(DAILY - (150_000n + 87_500n + 87_500n + 50_000n + 40_000n) * E18);
   });
   it("a tie that reaches past the last rewarded position: everyone tied for a rewarded rank shares the positions that exist", () => {
     const rows = Array.from({ length: 9 }, (_, i) => row(i + 1, 40, 30 - i));
     const res = distributePrizes(eligible([...rows, row(10, 40, 20), row(11, 40, 20), row(12, 40, 20)]), DAILY, LADDER);
-    // positions 10 only exists once; three players tied for #10 split its 2,000: each 666.66…, remainder to the reserve.
-    expect(res.awards.filter((a) => a.userId >= 10).map((a) => a.prizeMicro)).toEqual([(2_000n * E18) / 3n, (2_000n * E18) / 3n, (2_000n * E18) / 3n]);
+    // Position 10 exists once; three players tied for #10 split its 10,000: each 3,333.33…, remainder to the reserve.
+    expect(res.awards.filter((a) => a.userId >= 10).map((a) => a.prizeMicro)).toEqual([(10_000n * E18) / 3n, (10_000n * E18) / 3n, (10_000n * E18) / 3n]);
     expect(res.awards.reduce((a, x) => a + x.prizeMicro, 0n) + res.returnedMicro).toBe(DAILY);
   });
   it("fewer eligible players than positions: unfilled prizes return to the reserve — never rolled over, never reassigned", () => {
     const res = distributePrizes(eligible([row(1, 20, 15)]), DAILY, LADDER);
-    expect(byUser(res)).toEqual({ 1: 30_000n * E18 });
-    expect(res.returnedMicro).toBe(70_000n * E18);
+    expect(byUser(res)).toEqual({ 1: 150_000n * E18 });
+    expect(res.returnedMicro).toBe(350_000n * E18);
     expect(distributePrizes([], DAILY, LADDER)).toMatchObject({ awards: [], returnedMicro: DAILY });
   });
   it("integer remainders are deterministic and CONSERVE the pool for any pool, ladder and tie shape; an exact tie always pays identical amounts", () => {

@@ -11,11 +11,11 @@ import type { BoardDto, BoardPayload, BoardRowDto, BoardRuleView } from "@/domai
 const text = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, " ").replace(/<\/?(b|strong|em|i)(\s[^>]*)?>/g, "").replace(/<[^>]+>/g, " ").replace(/&#x27;|&apos;/g, "'").replace(/\s+/g, " ");
 const T = (iso: string) => Date.parse(iso);
 
-const LADDER = [["30%", "30,000"], ["20%", "20,000"], ["15%", "15,000"], ["10%", "10,000"], ["8%", "8,000"], ["6%", "6,000"], ["4%", "4,000"], ["3%", "3,000"], ["2%", "2,000"], ["2%", "2,000"]];
-const WEEKLY_LADDER = [["30%", "150,000"], ["20%", "100,000"], ["15%", "75,000"], ["10%", "50,000"], ["8%", "40,000"], ["6%", "30,000"], ["4%", "20,000"], ["3%", "15,000"], ["2%", "10,000"], ["2%", "10,000"]];
+const LADDER = [["30%", "150,000"], ["20%", "100,000"], ["15%", "75,000"], ["10%", "50,000"], ["8%", "40,000"], ["6%", "30,000"], ["4%", "20,000"], ["3%", "15,000"], ["2%", "10,000"], ["2%", "10,000"]];
+const WEEKLY_LADDER = [["30%", "300,000"], ["20%", "200,000"], ["15%", "150,000"], ["10%", "100,000"], ["8%", "80,000"], ["6%", "60,000"], ["4%", "40,000"], ["3%", "30,000"], ["2%", "20,000"], ["2%", "20,000"]];
 const BONUSES = [{ label: "100K", minimum: "100,000", bonus: "+5%" }, { label: "500K", minimum: "500,000", bonus: "+10%" }, { label: "1M", minimum: "1,000,000", bonus: "+15%" }, { label: "5M", minimum: "5,000,000", bonus: "+20%" }, { label: "10M", minimum: "10,000,000", bonus: "+25%" }];
 const rules = (kind: "DAILY" | "WEEKLY"): BoardRuleView => ({
-  kind, minimumPicks: kind === "DAILY" ? 20 : 100, pointsPerCorrectPick: 10, prizePool: kind === "DAILY" ? "100,000" : "500,000", prizePoolPlain: kind === "DAILY" ? "100000" : "500000", symbol: "$CLANKRPG", topRewarded: 10,
+  kind, minimumPicks: kind === "DAILY" ? 20 : 100, pointsPerCorrectPick: 10, prizePool: kind === "DAILY" ? "500,000" : "1,000,000", prizePoolPlain: kind === "DAILY" ? "500000" : "1000000", symbol: "$CLANKRPG", topRewarded: 10,
   prizes: (kind === "DAILY" ? LADDER : WEEKLY_LADDER).map(([share, amount], i) => ({ position: i + 1, share: share!, amount: amount! })), prizesPaused: false, holderBonuses: BONUSES,
 });
 const row = (rank: number, name: string, over: Partial<BoardRowDto> = {}): BoardRowDto => ({
@@ -34,11 +34,11 @@ const payload = (b: BoardDto, over: Partial<BoardPayload> = {}): BoardPayload =>
 const view = (p: BoardPayload, selected = "CURRENT") => renderToStaticMarkup(createElement(BoardView, { payload: p, selected, onSelect: () => undefined, onReload: () => undefined, officialAddress: null }));
 
 describe("DAILY ARENA PICKS — the header", () => {
-  it("shows the title, the 100,000 pool, TOP 10 REWARDED, a daily countdown with NO days (14H 23M 18S), my score, and the unlimited-picks stats (Picks, Correct, Accuracy, Points, Current rank) — never a 17 / 20 counter", () => {
+  it("shows the title, the 500,000 pool, TOP 10 REWARDED, a daily countdown with NO days (14H 23M 18S), my score, and the unlimited-picks stats (Picks, Correct, Accuracy, Points, Current rank) — never a 17 / 20 counter", () => {
     const html = view(payload(board()));
     const t = text(html);
     expect(t).toMatch(/Daily Arena Picks/i);
-    expect(t).toMatch(/100,000 \$CLANKRPG Daily prize pool/);
+    expect(t).toMatch(/500,000 \$CLANKRPG Daily prize pool/);
     expect(t).toMatch(/Top 10 rewarded/i);
     expect(t).toMatch(/Ends in 14H 23M 18S/);
     expect(t).not.toMatch(/\dD \d\dH/); // a day never shows days
@@ -58,11 +58,11 @@ describe("DAILY ARENA PICKS — the header", () => {
     expect(t).toMatch(/No ranked players yet\. Make an Arena Pick to enter today's standings\./); // a compact, intentional state — not a large awkward card
   });
 
-  it("WEEKLY reads 06D 23H 59M one second into the week (days, hours, minutes), with the 500,000 pool", () => {
+  it("WEEKLY reads 06D 23H 59M one second into the week (days, hours, minutes), with the 1,000,000 pool", () => {
     const b = board({ kind: "WEEKLY", start: "2026-10-12", serverNow: T("2026-10-12T00:00:01Z"), startsAt: T("2026-10-12T00:00:00Z"), endsAt: T("2026-10-19T00:00:00Z"), rules: rules("WEEKLY"), rows: [] });
     const t = text(view(payload(b)));
     expect(t).toMatch(/Weekly Arena Picks/i);
-    expect(t).toMatch(/500,000 \$CLANKRPG Weekly prize pool/);
+    expect(t).toMatch(/1,000,000 \$CLANKRPG Weekly prize pool/);
     expect(t).toMatch(/Weekly leaderboard Ends in 06D 23H 59M/);
     expect(t).not.toMatch(/06D 23H 59M \d\dS/); // with days the seconds are not shown
   });
@@ -76,9 +76,9 @@ describe("DAILY ARENA PICKS — the header", () => {
 describe("the Top 10 ladder and the rows", () => {
   it("lists all ten prizes from the server's rules — daily and weekly — in order", () => {
     const d = text(view(payload(board())));
-    expect(d).toMatch(/Prize ladder · Top 10 #1 30% 30,000 #2 20% 20,000 #3 15% 15,000 #4 10% 10,000 #5 8% 8,000 #6 6% 6,000 #7 4% 4,000 #8 3% 3,000 #9 2% 2,000 #10 2% 2,000/);
+    expect(d).toMatch(/Prize ladder · Top 10 #1 30% 150,000 #2 20% 100,000 #3 15% 75,000 #4 10% 50,000 #5 8% 40,000 #6 6% 30,000 #7 4% 20,000 #8 3% 15,000 #9 2% 10,000 #10 2% 10,000/);
     const w = text(view(payload(board({ kind: "WEEKLY", rules: rules("WEEKLY") }))));
-    expect(w).toMatch(/#1 30% 150,000 #2 20% 100,000 #3 15% 75,000 #4 10% 50,000 #5 8% 40,000 #6 6% 30,000 #7 4% 20,000 #8 3% 15,000 #9 2% 10,000 #10 2% 10,000/);
+    expect(w).toMatch(/#1 30% 300,000 #2 20% 200,000 #3 15% 150,000 #4 10% 100,000 #5 8% 80,000 #6 6% 60,000 #7 4% 40,000 #8 3% 30,000 #9 2% 20,000 #10 2% 20,000/);
   });
 
   it("a phone gets three tiles to a row (five from sm up), so a six-figure prize is never cut to \"150,0…\" — the same ladder serves both programs", () => {
@@ -87,7 +87,7 @@ describe("the Top 10 ladder and the rows", () => {
     expect(ladder).toContain("grid-cols-3");
     expect(ladder).toContain("sm:grid-cols-5");
     expect(ladder).not.toContain("grid-cols-5 gap-1 "); // the old phone-width five-up that clipped the amounts
-    expect(text(w)).toContain("150,000");
+    expect(text(w)).toContain("300,000");
   });
 
   it("a RUNNING board shows prizes as projections and says holder bonuses are decided at the close; a member under the minimum is marked NOT YET PRIZE ELIGIBLE (never hidden)", () => {
@@ -95,7 +95,7 @@ describe("the Top 10 ladder and the rows", () => {
     const t = text(html);
     expect(t).toMatch(/Prizes shown are a projection from the current standings/);
     expect(t).toMatch(/Holder bonuses are decided at the close/);
-    expect(t).toMatch(/Celsius[\s\S]*\+30,000 projected/);
+    expect(t).toMatch(/Celsius[\s\S]*\+150,000 projected/);
     expect(t).toMatch(/Mia[\s\S]*Not yet prize eligible/i);
     expect(html.match(/data-testid="not-prize-eligible"/g)).toHaveLength(1);
     expect(t).toMatch(/Mia/);
@@ -168,7 +168,7 @@ describe("the (i) info popover — HOW DAILY / WEEKLY ARENA PICKS WORKS", () => 
     expect(t).toMatch(/Correct Pick = \+10 Points\./);
     expect(t).toContain("The leaderboard is a race for the most correct Picks.");
     expect(t).toMatch(/Minimum 20 Picks required for Daily prize eligibility\./);
-    expect(t).toMatch(/Top 10 receive \$CLANKRPG — Daily prize pool 100,000\./);
+    expect(t).toMatch(/Top 10 receive \$CLANKRPG — Daily prize pool 500,000\./);
     expect(t).toContain("Holder bonuses increase rewards, never your rank.");
     expect(t).toMatch(/Qualified holders can receive up to \+25%\./);
     expect(t).toContain("Buying tokens during the active leaderboard does not grant an instant bonus.");
@@ -180,7 +180,7 @@ describe("the (i) info popover — HOW DAILY / WEEKLY ARENA PICKS WORKS", () => 
     expect(t).toContain("Every valid Pick throughout the week counts.");
     expect(t).toMatch(/Correct Pick = \+10 Points\./);
     expect(t).toMatch(/Minimum 100 Picks required for Weekly prize eligibility\./);
-    expect(t).toMatch(/Top 10 rewarded — Weekly prize pool 500,000 \$CLANKRPG\./);
+    expect(t).toMatch(/Top 10 rewarded — Weekly prize pool 1,000,000 \$CLANKRPG\./);
     expect(t).toContain("Qualified holder bonus requires verified holding continuity before AND throughout the week.");
     expect(t).toContain("Holder tier never affects leaderboard score.");
     expect(t).toContain("Exact prize-boundary ties share affected prize positions fairly.");

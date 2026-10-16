@@ -31,7 +31,7 @@ const HOLDER_CARD: HolderCardDto = {
   weekly: bonus({ status: "QUALIFYING", tier: "1M", heldMs: 5 * D + 7 * H, requiredMs: 7 * D, eligibleFrom: Date.parse("2026-10-12T00:00:00Z") }),
 };
 const RULES = (kind: "DAILY" | "WEEKLY") => ({
-  kind, minimumPicks: kind === "DAILY" ? 20 : 100, pointsPerCorrectPick: 10, prizePool: kind === "DAILY" ? "100,000" : "500,000", prizePoolPlain: kind === "DAILY" ? "100000" : "500000", symbol: "$CLANKRPG", topRewarded: 10,
+  kind, minimumPicks: kind === "DAILY" ? 20 : 100, pointsPerCorrectPick: 10, prizePool: kind === "DAILY" ? "500,000" : "1,000,000", prizePoolPlain: kind === "DAILY" ? "500000" : "1000000", symbol: "$CLANKRPG", topRewarded: 10,
   prizes: [], prizesPaused: false, holderBonuses: [],
 });
 const summary = (over: Partial<RewardsSummary> = {}): RewardsSummary => ({

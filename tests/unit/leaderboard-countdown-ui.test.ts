@@ -21,10 +21,10 @@ const text = (html: string) => html.replace(/<script[\s\S]*?<\/script>/g, " ").r
 const primary = (html: string) => text(html.replace(/<details[\s\S]*?<\/details>/g, " "));
 const T = (iso: string) => Date.parse(iso);
 
-const LADDER = [["30%", "30,000"], ["20%", "20,000"], ["15%", "15,000"], ["10%", "10,000"], ["8%", "8,000"], ["6%", "6,000"], ["4%", "4,000"], ["3%", "3,000"], ["2%", "2,000"], ["2%", "2,000"]];
+const LADDER = [["30%", "150,000"], ["20%", "100,000"], ["15%", "75,000"], ["10%", "50,000"], ["8%", "40,000"], ["6%", "30,000"], ["4%", "20,000"], ["3%", "15,000"], ["2%", "10,000"], ["2%", "10,000"]];
 const BONUSES = [{ label: "100K", minimum: "100,000", bonus: "+5%" }, { label: "10M", minimum: "10,000,000", bonus: "+25%" }];
 const rules = (kind: "DAILY" | "WEEKLY"): BoardRuleView => ({
-  kind, minimumPicks: kind === "DAILY" ? 20 : 100, pointsPerCorrectPick: 10, prizePool: kind === "DAILY" ? "100,000" : "500,000", prizePoolPlain: kind === "DAILY" ? "100000" : "500000", symbol: "$CLANKRPG", topRewarded: 10,
+  kind, minimumPicks: kind === "DAILY" ? 20 : 100, pointsPerCorrectPick: 10, prizePool: kind === "DAILY" ? "500,000" : "1,000,000", prizePoolPlain: kind === "DAILY" ? "500000" : "1000000", symbol: "$CLANKRPG", topRewarded: 10,
   prizes: LADDER.map(([share, amount], i) => ({ position: i + 1, share: share!, amount: amount! })), prizesPaused: false, holderBonuses: BONUSES,
 });
 const board = (over: Partial<BoardDto> = {}): BoardDto => ({
@@ -75,7 +75,7 @@ describe("DAILY and WEEKLY headers: the countdown is the highlight", () => {
   });
 
   it("the ranking table is not overshadowed: the countdown sits in the header (before the stats and the rows), never between rows", () => {
-    const html = view(payload(board({ rows: [{ rank: 1, characterId: null, heroPublicId: null, rarity: null, name: "Celsius", classId: "warrior", points: 190, picks: 20, correctPicks: 19, accuracy: 95, currentStreak: 3, bestStreak: 7, prizeEligible: true, basePrize: "30,000", holderBonus: "0", holderTier: null, bonusStatus: "NONE", totalReward: "30,000", tied: false }] })));
+    const html = view(payload(board({ rows: [{ rank: 1, characterId: null, heroPublicId: null, rarity: null, name: "Celsius", classId: "warrior", points: 190, picks: 20, correctPicks: 19, accuracy: 95, currentStreak: 3, bestStreak: 7, prizeEligible: true, basePrize: "150,000", holderBonus: "0", holderTier: null, bonusStatus: "NONE", totalReward: "150,000", tied: false }] })));
     expect(html.indexOf('data-testid="board-countdown"')).toBeGreaterThan(-1);
     expect(html.indexOf('data-testid="board-countdown"')).toBeLessThan(html.indexOf('data-testid="board-rows"'));
   });
@@ -100,16 +100,16 @@ describe("a FINISHED period says COMPLETED — an accurate state, never a live c
 });
 
 describe("the richer reward information lives on the Leaderboards page", () => {
-  it("shows BOTH pools (Daily 100,000 · Weekly 500,000), who shares them, the qualification (20 / 100 valid Picks), the holder bonus and the token status — from the server's rules", () => {
+  it("shows BOTH pools (Daily 500,000 · Weekly 1,000,000), who shares them, the qualification (20 / 100 valid Picks), the holder bonus and the token status — from the server's rules", () => {
     const html = view(payload(board()));
     const t = primary(html);
     expect(html).toContain('data-testid="reward-details"');
-    expect(t).toMatch(/Prize pools Daily pool 100,000 \$CLANKRPG Weekly pool 500,000 \$CLANKRPG/);
+    expect(t).toMatch(/Prize pools Daily pool 500,000 \$CLANKRPG Weekly pool 1,000,000 \$CLANKRPG/);
     expect(t).toMatch(/Each pool is shared by the Top 10, by rank/);
     expect(t).toMatch(/Prizes need 20 valid Picks in the day \(Daily\) or 100 in the week \(Weekly\)/);
     expect(t).toMatch(/Every valid Pick counts for your rank; a correct Pick is \+10 Points/);
     expect(t).toMatch(/Holder bonus: qualified holders can add up to \+25% to a prize they earned\. It never changes your rank or score\./);
-    expect(t).toMatch(/Prize ladder · Top 10 #1 30% 30,000/); // the rank-based distribution
+    expect(t).toMatch(/Prize ladder · Top 10 #1 30% 150,000/); // the rank-based distribution
     expect(t).toMatch(/Daily prize pool/); // the shown board's own pool card
   });
 
@@ -131,7 +131,7 @@ describe("the richer reward information lives on the Leaderboards page", () => {
     expect(t).toMatch(/Top 5 \(Daily\) and Top 20 \(Weekly\)/);
     expect(t).toMatch(/15 valid Picks in the day \(Daily\) or 80 in the week \(Weekly\)/);
     expect(t).toMatch(/Prizes are paused right now/);
-    expect(t).not.toMatch(/\b100,000\b.*Weekly pool 500,000/);
+    expect(t).not.toMatch(/\b500,000\b.*Weekly pool 1,000,000/);
   });
 
   it("an older payload without the programme simply omits the extra block (nothing is invented)", () => {

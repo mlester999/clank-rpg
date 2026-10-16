@@ -27,24 +27,24 @@ const REWARD: PicksRewardDto = {
   pointsPerCorrectPick: 10,
   dailyMinimumPicks: 20,
   weeklyMinimumPicks: 100,
-  daily: { prizePool: "100,000", topRewarded: 10, endsAt: Date.UTC(2026, 9, 6, 0, 0, 0) },
-  weekly: { prizePool: "500,000", topRewarded: 10, endsAt: Date.UTC(2026, 9, 12, 0, 0, 0) },
+  daily: { prizePool: "500,000", topRewarded: 10, endsAt: Date.UTC(2026, 9, 6, 0, 0, 0) },
+  weekly: { prizePool: "1,000,000", topRewarded: 10, endsAt: Date.UTC(2026, 9, 12, 0, 0, 0) },
 };
 const render = (reward: PicksRewardDto | undefined) => renderToStaticMarkup(createElement(PrizePools, { reward }));
 const cssFile = readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
 
 describe("what the tiles say", () => {
-  it("shows the DAILY and WEEKLY pools — 100,000 and 500,000 $CLANKRPG — and nothing else", () => {
+  it("shows the DAILY and WEEKLY pools — 500,000 and 1,000,000 $CLANKRPG — and nothing else", () => {
     const html = render(REWARD);
     expect(html).toContain('data-testid="prize-daily"');
     expect(html).toContain('data-testid="prize-weekly"');
     expect(html).toMatch(/data-testid="prize-daily-label"[^>]*>Daily pool</);
     expect(html).toMatch(/data-testid="prize-weekly-label"[^>]*>Weekly pool</);
-    expect(html).toMatch(/data-testid="prize-daily-amount"[^>]*>100,000</);
-    expect(html).toMatch(/data-testid="prize-weekly-amount"[^>]*>500,000</);
+    expect(html).toMatch(/data-testid="prize-daily-amount"[^>]*>500,000</);
+    expect(html).toMatch(/data-testid="prize-weekly-amount"[^>]*>1,000,000</);
     expect(html).toMatch(/data-testid="prize-daily-symbol"[^>]*>\$CLANKRPG</);
     expect(html).toMatch(/data-testid="prize-weekly-symbol"[^>]*>\$CLANKRPG</);
-    expect(text(html)).toMatch(/^Daily pool 100,000 \$CLANKRPG Weekly pool 500,000 \$CLANKRPG /);
+    expect(text(html)).toMatch(/^Daily pool 500,000 \$CLANKRPG Weekly pool 1,000,000 \$CLANKRPG /);
   });
 
   it("REMOVED from the Arena: the TOP 10 banner, the reset countdown, the fine print and every repeated explanation", () => {
@@ -93,11 +93,11 @@ describe("the numbers come from the server's reward configuration — nothing is
     expect(text(html)).not.toMatch(/100,000|500,000/);
   });
 
-  it("is built from the very DTO the server sends: the real settings produce exactly 100,000 and 500,000; an admin change follows", async () => {
+  it("is built from the very DTO the server sends: the real settings produce exactly 500,000 and 1,000,000; an admin change follows", async () => {
     const noDb: Queryable = { query: async () => [{ ok: true }] as never, exec: async () => undefined };
     const live = await getPicksRewardDto(noDb, DEFAULT_SETTINGS, MON_OCT_5);
     const p = prizeTiles(live)!;
-    expect([p.daily.amount, p.weekly.amount, p.daily.symbol, p.daily.label, p.weekly.label]).toEqual(["100,000", "500,000", "$CLANKRPG", "Daily pool", "Weekly pool"]);
+    expect([p.daily.amount, p.weekly.amount, p.daily.symbol, p.daily.label, p.weekly.label]).toEqual(["500,000", "1,000,000", "$CLANKRPG", "Daily pool", "Weekly pool"]);
     const admin = { ...DEFAULT_SETTINGS, arena_picks: { ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: "75000", weeklyPrizePool: "300000" } };
     const changed = prizeTiles(await getPicksRewardDto(noDb, admin, MON_OCT_5))!;
     expect([changed.daily.amount, changed.weekly.amount]).toEqual(["75,000", "300,000"]);
@@ -140,9 +140,9 @@ describe("number formatting", () => {
 describe("compact and restrained", () => {
   const html = render(REWARD);
 
-  it("each tile is a labelled article ('Daily pool: 100,000 $CLANKRPG'); the pictures are decorative; one labelled region", () => {
-    expect(html).toContain('aria-label="Daily pool: 100,000 $CLANKRPG"');
-    expect(html).toContain('aria-label="Weekly pool: 500,000 $CLANKRPG"');
+  it("each tile is a labelled article ('Daily pool: 500,000 $CLANKRPG'); the pictures are decorative; one labelled region", () => {
+    expect(html).toContain('aria-label="Daily pool: 500,000 $CLANKRPG"');
+    expect(html).toContain('aria-label="Weekly pool: 1,000,000 $CLANKRPG"');
     expect(html).toContain('aria-label="Arena Picks prize pools"');
     expect((html.match(/<svg[^>]*aria-hidden/g) ?? []).length).toBe(2);
   });

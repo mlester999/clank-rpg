@@ -88,13 +88,13 @@ describe("no CLANKRPG_TOKEN_ADDRESS: the token is NOT LAUNCHED (a normal state)"
 });
 
 describe("the Daily board finalizes with NO token: base prizes, ledger and balances are exactly as after launch", () => {
-  it("ten winners: 30,000 / 20,000 / … / 2,000 credited as claimable, every holder bonus 0 %, nothing waiting on anything", async () => {
+  it("ten winners: 150,000 / 100,000 / … / 10,000 credited as claimable, every holder bonus 0 %, nothing waiting on anything", async () => {
     await dailyField();
     const r = await close("DAILY", DAY, CLOSE);
     expect(r.status).toBe("FINALIZED");
     const [board] = await db.query<Record<string, string>>("select prize_pool_micro::text, base_awarded_micro::text, returned_to_reserve_micro::text from public.arena_leaderboards where kind = 'DAILY'");
-    expect(board).toEqual({ prize_pool_micro: tokens(100_000).toString(), base_awarded_micro: tokens(100_000).toString(), returned_to_reserve_micro: "0" });
-    const expected = [30_000, 20_000, 15_000, 10_000, 8_000, 6_000, 4_000, 3_000, 2_000, 2_000];
+    expect(board).toEqual({ prize_pool_micro: tokens(500_000).toString(), base_awarded_micro: tokens(500_000).toString(), returned_to_reserve_micro: "0" });
+    const expected = [150_000, 100_000, 75_000, 50_000, 40_000, 30_000, 20_000, 15_000, 10_000, 10_000];
     for (let i = 0; i < 10; i++) {
       const row = await resultOf(db, "DAILY", DAY, 9001 + i);
       expect(row, `rank ${i + 1}`).toMatchObject({ rank: i + 1, base_prize_micro: tokens(expected[i]!).toString(), base_status: "CREDITED", bonus_status: "NONE", bonus_bps: 0, bonus_micro: "0" });
@@ -113,11 +113,11 @@ describe("the Daily board finalizes with NO token: base prizes, ledger and balan
     await close("DAILY", DAY, CLOSE);
     const rows = [await resultOf(db, "DAILY", DAY, 9001), await resultOf(db, "DAILY", DAY, 9002), await resultOf(db, "DAILY", DAY, 9003)];
     expect(rows.map((r) => [r!.rank, r!.points, r!.base_prize_micro, r!.bonus_status, r!.bonus_bps])).toEqual([
-      [1, 200, tokens(30_000).toString(), "NONE", 0],
-      [2, 190, tokens(20_000).toString(), "NONE", 0],
-      [3, 180, tokens(15_000).toString(), "NONE", 0],
+      [1, 200, tokens(150_000).toString(), "NONE", 0],
+      [2, 190, tokens(100_000).toString(), "NONE", 0],
+      [3, 180, tokens(75_000).toString(), "NONE", 0],
     ]);
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(30_000));
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(150_000));
     await healthy();
   });
 
@@ -130,39 +130,39 @@ describe("the Daily board finalizes with NO token: base prizes, ledger and balan
 });
 
 describe("the Weekly board finalizes with NO token", () => {
-  it("ten winners: 150,000 / 100,000 / … credited, bonuses 0 %", async () => {
+  it("ten winners: 300,000 / 200,000 / … credited, bonuses 0 %", async () => {
     await weeklyField();
     expect((await close("WEEKLY", WEEK, WEEK_CLOSE)).status).toBe("FINALIZED");
     const first = await resultOf(db, "WEEKLY", WEEK, 9001);
     expect(first).toMatchObject({ rank: 1, picks: 100, base_prize_micro: tokens(150_000).toString(), bonus_status: "NONE" });
-    expect((await balanceOf(db, 9010)).claimable).toBe(tokens(10_000));
+    expect((await balanceOf(db, 9010)).claimable).toBe(tokens(20_000));
     await healthy();
   }, 120_000);
 });
 
 describe("the Admin payout summary works before launch (every bonus 0)", () => {
-  it("Daily: base 100,000 + holder bonuses 0 = TOTAL 100,000 (the ceiling the summary reports is the post-launch maximum, 125,000)", async () => {
+  it("Daily: base 500,000 + holder bonuses 0 = TOTAL 500,000 (the ceiling the summary reports is the post-launch maximum, 625,000)", async () => {
     await dailyField();
     await close("DAILY", DAY, CLOSE);
     const p = await boardPayout(db, "DAILY", DAY);
-    expect(p!.summary).toMatchObject({ basePool: "100,000", baseAwarded: "100,000", holderBonuses: "0", totalPayout: "100,000", totalPayoutPlain: "100000", prizeWinners: 10, bonusesPending: 0 });
+    expect(p!.summary).toMatchObject({ basePool: "500,000", baseAwarded: "500,000", holderBonuses: "0", totalPayout: "500,000", totalPayoutPlain: "500000", prizeWinners: 10, bonusesPending: 0 });
     expect(p!.rows.every((r) => r.holderTier === null && r.holderBonus === "0")).toBe(true);
   });
 
-  it("Weekly: base 500,000 + holder bonuses 0 = TOTAL 500,000", async () => {
+  it("Weekly: base 1,000,000 + holder bonuses 0 = TOTAL 1,000,000", async () => {
     await weeklyField();
     await close("WEEKLY", WEEK, WEEK_CLOSE);
     const p = await boardPayout(db, "WEEKLY", WEEK);
-    expect(p!.summary).toMatchObject({ basePool: "500,000", baseAwarded: "500,000", holderBonuses: "0", totalPayout: "500,000", totalPayoutPlain: "500000", prizeWinners: 10 });
+    expect(p!.summary).toMatchObject({ basePool: "1,000,000", baseAwarded: "1,000,000", holderBonuses: "0", totalPayout: "1,000,000", totalPayoutPlain: "1000000", prizeWinners: 10 });
   }, 120_000);
 
-  it("the Admin overview reports the not-launched state as a NOTICE (not a warning) and the economy ceilings 100,000→125,000 and 500,000→625,000", async () => {
+  it("the Admin overview reports the not-launched state as a NOTICE (not a warning) and the economy ceilings 500,000→625,000 and 1,000,000→1,250,000", async () => {
     const o = await rewardsOverview(db, { settings: DEFAULT_SETTINGS, token: getTokenStatus(), tokenDecimals: null, reader: null, nowMs: Date.now() });
     expect(o.token).toMatchObject({ launched: false, available: false });
     expect(o.notices.join(" ")).toMatch(/has not launched yet/);
     expect(o.warnings.join(" ")).not.toMatch(/launched|unusable|not configured/i);
-    expect(o.economy.daily).toMatchObject({ basePool: "100,000", maxBonusExposure: "25,000", maxLiability: "125,000" });
-    expect(o.economy.weekly).toMatchObject({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.daily).toMatchObject({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.weekly).toMatchObject({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
   });
 });
 
@@ -175,7 +175,7 @@ describe("claims before launch: 'not yet', never denied — and nothing is lost"
     expect(r).toEqual({ ok: false, reason: "TOKEN_NOT_LAUNCHED" });
     expect(REWARD_MESSAGES.TOKEN_NOT_LAUNCHED).toMatch(/Claims will open after \$CLANKRPG launches/);
     expect(REWARD_MESSAGES.TOKEN_NOT_LAUNCHED).toMatch(/nothing is lost or denied/);
-    expect(await balanceOf(db, 9001)).toMatchObject({ claimable: tokens(30_000), reserved: 0n, claimed: 0n });
+    expect(await balanceOf(db, 9001)).toMatchObject({ claimable: tokens(150_000), reserved: 0n, claimed: 0n });
     expect(await db.query("select 1 from public.arena_reward_claims")).toEqual([]);
     expect(await db.query("select 1 from public.arena_reward_claims where status = 'DENIED'")).toEqual([]);
     await healthy();

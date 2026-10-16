@@ -42,8 +42,8 @@ const REWARD: PicksRewardDto = {
   pointsPerCorrectPick: 10,
   dailyMinimumPicks: 20,
   weeklyMinimumPicks: 100,
-  daily: { prizePool: "100,000", topRewarded: 10, endsAt: Date.parse("2026-10-05T00:00:00Z") + 86_400_000 },
-  weekly: { prizePool: "500,000", topRewarded: 10, endsAt: Date.parse("2026-10-12T00:00:00Z") },
+  daily: { prizePool: "500,000", topRewarded: 10, endsAt: Date.parse("2026-10-05T00:00:00Z") + 86_400_000 },
+  weekly: { prizePool: "1,000,000", topRewarded: 10, endsAt: Date.parse("2026-10-12T00:00:00Z") },
 };
 
 /** An arena with battle A on stage and battle B UPCOMING (picks OPEN), at the clock's current instant (A has just taken the stage). */
@@ -100,10 +100,10 @@ describe("Arena Picks panel — picks OPEN while the current fight is on", () =>
     // the prizes are two compact tiles: the TOTAL pools and the token — and nothing else (no Top 10 banner, no countdown, no fine print)
     expect(html).toContain('data-testid="prize-daily"');
     expect(html).toContain('data-testid="prize-weekly"');
-    expect(t).toContain("Daily pool 100,000 $CLANKRPG");
-    expect(t).toContain("Weekly pool 500,000 $CLANKRPG");
+    expect(t).toContain("Daily pool 500,000 $CLANKRPG");
+    expect(t).toContain("Weekly pool 1,000,000 $CLANKRPG");
     expect(t).not.toMatch(/Top 10 winners|Resets in|Prize pool/);
-    expect(t).not.toContain("Daily 100,000 · Weekly 500,000"); // the old plain line is gone
+    expect(t).not.toContain("Daily 500,000 · Weekly 1,000,000"); // the old plain line is gone
     for (const f of state.upcoming!.fighters) {
       expect(t).toContain(f.name);
       expect(t).toContain(state.classes[f.classId]!.name);
