@@ -236,10 +236,10 @@ describe("claim eligibility and availability (claims fail closed; rewards keep a
     // Finalized with no token at all (logical accounting carries no decimals); the contract appears later with its own scale.
     await seedScores(db, [{ user: 9901, day: "2026-10-06", picks: 20, correct: 12 }]);
     await finalizePeriod(db, { now: () => new Date(Date.UTC(2026, 9, 7, 0, 0, 5)), settings: settingsWith(), reader: null }, "DAILY", "2026-10-06");
-    expect((await balanceOf(db, 9901)).claimable).toBe(tokens(30_000)); // the sole winner takes the first rung of the 100,000 pool
+    expect((await balanceOf(db, 9901)).claimable).toBe(tokens(150_000)); // the sole winner takes the first rung of the 500,000 fixture pool
     const c = okClaim(await claim(9901, custom(WALLET_A), { target: targetFor(chain, { tokenDecimals: 9 }) }));
-    expect(c).toMatchObject({ amount: "30,000", amountRaw: (30_000n * 10n ** 9n).toString() });
-    expect(await balanceOf(db, 9901)).toMatchObject({ claimable: 0n, reserved: tokens(30_000) });
+    expect(c).toMatchObject({ amount: "150,000", amountRaw: (150_000n * 10n ** 9n).toString() });
+    expect(await balanceOf(db, 9901)).toMatchObject({ claimable: 0n, reserved: tokens(150_000) });
     await healthy();
   });
   it("the same logical amount converts exactly at 6 and 18 decimals; a token with FEWER than 6 decimals pays the representable part and the dust stays claimable", async () => {

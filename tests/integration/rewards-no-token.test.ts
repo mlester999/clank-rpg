@@ -134,7 +134,7 @@ describe("the Weekly board finalizes with NO token", () => {
     await weeklyField();
     expect((await close("WEEKLY", WEEK, WEEK_CLOSE)).status).toBe("FINALIZED");
     const first = await resultOf(db, "WEEKLY", WEEK, 9001);
-    expect(first).toMatchObject({ rank: 1, picks: 100, base_prize_micro: tokens(150_000).toString(), bonus_status: "NONE" });
+    expect(first).toMatchObject({ rank: 1, picks: 100, base_prize_micro: tokens(300_000).toString(), bonus_status: "NONE" });
     expect((await balanceOf(db, 9010)).claimable).toBe(tokens(20_000));
     await healthy();
   }, 120_000);
@@ -156,12 +156,12 @@ describe("the Admin payout summary works before launch (every bonus 0)", () => {
     expect(p!.summary).toMatchObject({ basePool: "1,000,000", baseAwarded: "1,000,000", holderBonuses: "0", totalPayout: "1,000,000", totalPayoutPlain: "1000000", prizeWinners: 10 });
   }, 120_000);
 
-  it("the Admin overview reports the not-launched state as a NOTICE (not a warning) and the economy ceilings 500,000→625,000 and 1,000,000→1,250,000", async () => {
+  it("the Admin overview reports the not-launched state as a NOTICE (not a warning) and the economy ceilings 200,000→250,000 and 1,000,000→1,250,000", async () => {
     const o = await rewardsOverview(db, { settings: DEFAULT_SETTINGS, token: getTokenStatus(), tokenDecimals: null, reader: null, nowMs: Date.now() });
     expect(o.token).toMatchObject({ launched: false, available: false });
     expect(o.notices.join(" ")).toMatch(/has not launched yet/);
     expect(o.warnings.join(" ")).not.toMatch(/launched|unusable|not configured/i);
-    expect(o.economy.daily).toMatchObject({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.daily).toMatchObject({ basePool: "200,000", maxBonusExposure: "50,000", maxLiability: "250,000" });
     expect(o.economy.weekly).toMatchObject({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
   });
 });

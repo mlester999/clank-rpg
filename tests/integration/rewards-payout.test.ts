@@ -165,8 +165,8 @@ describe("DAILY PAYOUT SUMMARY — Base Prize Pool, Holder Bonuses, TOTAL PAYOUT
     ]);
     await closeDaily();
     const p = await payoutOf("DAILY", DAY);
-    expect(p.rows.map((r) => [r.telegramUserId, r.rank, r.basePrizePlain])).toEqual([[9102, 2, "100000"]]);
-    expect(p.summary).toMatchObject({ prizeWinners: 1, totalPayout: "100,000" });
+    expect(p.rows.map((r) => [r.telegramUserId, r.rank, r.basePrizePlain])).toEqual([[9102, 2, "150000"]]); // the only prize-eligible player takes the first rung (the below-minimum leader takes no position)
+    expect(p.summary).toMatchObject({ prizeWinners: 1, totalPayout: "150,000" });
   });
 });
 

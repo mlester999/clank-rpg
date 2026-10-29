@@ -175,9 +175,9 @@ describe("the payout ladder: ONE configured ladder, two pools", () => {
   const WEEKLY = 1_000_000n * E18;
   const tenWinners = Array.from({ length: 12 }, (_, i) => row(i + 1, 40, 30 - i));
 
-  it("ships the FINAL defaults as settings: daily 500,000, weekly 1,000,000, Top 10 at 30/20/15/10/8/6/4/3/2/2 %", () => {
+  it("ships the FINAL defaults as settings: daily 200,000, weekly 1,000,000, Top 10 at 30/20/15/10/8/6/4/3/2/2 %", () => {
     const c = DEFAULT_SETTINGS.arena_picks;
-    expect([c.dailyPrizePool, c.weeklyPrizePool]).toEqual(["500000", "1000000"]);
+    expect([c.dailyPrizePool, c.weeklyPrizePool]).toEqual(["200000", "1000000"]);
     expect(c.prizeSplitBps).toEqual([3000, 2000, 1500, 1000, 800, 600, 400, 300, 200, 200]);
     expect(c.prizeSplitBps.reduce((a, b) => a + b, 0)).toBe(10_000);
     expect([c.pointsPerCorrectPick, c.dailyMinimumPicks, c.weeklyMinimumPicks]).toEqual([10, 20, 100]);

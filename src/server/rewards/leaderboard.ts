@@ -18,7 +18,7 @@ import { verifiedTokenMetadata } from "./tokenMetadata";
 /**
  * THE DAILY AND WEEKLY ARENA PICKS LEADERBOARDS.
  *
- *  DAILY   00:00:00 UTC → next 00:00:00 UTC      (default pool 500,000 $CLANKRPG)
+ *  DAILY   00:00:00 UTC → next 00:00:00 UTC      (default pool 200,000 $CLANKRPG)
  *  WEEKLY  Monday 00:00:00 UTC → next Monday     (default pool 1,000,000 $CLANKRPG)
  *
  * Both rank by CORRECT PICKS, then ACCURACY (correct / picks), from ONE source: the per-pick score rows (`arena_pick_scores`), one per

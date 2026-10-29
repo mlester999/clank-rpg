@@ -65,7 +65,7 @@ describe.each([2, 6, 9, 18])("a contract with %i decimals", (decimals) => {
     expect(await getClaimTarget(db)).toMatchObject({ enabled: true, reason: null, tokenAddress: TOKEN, tokenDecimals: decimals });
   });
 
-  it("a 10M holder qualifies for +25 % of the SAME logical prize: the balance is compared at the contract's decimals, the bonus is logical (7,500 either way)", async () => {
+  it("a 10M holder qualifies for +25 % of the SAME logical prize: the balance is compared at the contract's decimals, the bonus is logical (37,500 either way)", async () => {
     const chain = useContract({ decimals });
     await field();
     const wallet = await bindWallet(db, 9001, { wallet: walletFor(9001), verifiedAtMs: utc(2026, 10, 5) });
@@ -73,8 +73,8 @@ describe.each([2, 6, 9, 18])("a contract with %i decimals", (decimals) => {
     await observeSteady(db, 9001, utc(2026, 10, 5), utc(2026, 10, 7, 22, 0), balance, 4 * HOUR);
     chain.setBalance(wallet, balance);
     await finalize(db, "DAILY", DAY, CLOSE, { reader: chain });
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(30_000).toString(), bonus_status: "CREDITED", bonus_bps: 2500, bonus_micro: tokens(7_500).toString(), bonus_label: "10M" });
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(37_500));
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ base_prize_micro: tokens(150_000).toString(), bonus_status: "CREDITED", bonus_bps: 2500, bonus_micro: tokens(37_500).toString(), bonus_label: "10M" });
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(187_500));
     await healthy();
   });
 
@@ -123,16 +123,16 @@ describe("a contract that cannot be verified closes holder verification and payo
     chain.setBalance(wallet, chainTokens(10_250_000));
     chain.setMetadata(null); // decimals() / symbol() cannot be verified
     expect((await finalize(db, "DAILY", DAY, CLOSE, { reader: chain })).status).toBe("FINALIZED");
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ rank: 1, base_status: "CREDITED", base_prize_micro: tokens(30_000).toString(), bonus_status: "PENDING_VERIFICATION", bonus_micro: "0" });
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(30_000)); // the base prize never waits
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ rank: 1, base_status: "CREDITED", base_prize_micro: tokens(150_000).toString(), bonus_status: "PENDING_VERIFICATION", bonus_micro: "0" });
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(150_000)); // the base prize never waits
     expect((await getClaimTarget(db))).toMatchObject({ enabled: false, reason: "UNVERIFIED", tokenDecimals: null });
     // the contract becomes verifiable: the bonus is decided from the evidence and credited
     chain.setMetadata({ decimals: 18 });
     await observeSteady(db, 9001, utc(2026, 10, 8, 0, 0), utc(2026, 10, 8, 0, 0, 1), chainTokens(10_250_000), 1000);
     const out = await reconcileBonus(db, { now: () => new Date(CLOSE + HOUR), settings: DEFAULT_SETTINGS, reader: chain }, "DAILY", DAY, 9001);
     expect(out).toBe("CREDITED");
-    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ bonus_status: "CREDITED", bonus_bps: 2500, bonus_micro: tokens(7_500).toString() });
-    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(37_500));
+    expect(await resultOf(db, "DAILY", DAY, 9001)).toMatchObject({ bonus_status: "CREDITED", bonus_bps: 2500, bonus_micro: tokens(37_500).toString() });
+    expect((await balanceOf(db, 9001)).claimable).toBe(tokens(187_500));
     await healthy();
   });
 

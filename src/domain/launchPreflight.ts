@@ -12,7 +12,7 @@ import { arenaIsStopped, type ArenaRuntimeStatus, type GamePhase } from "@/domai
  * The newest migration this version of the application needs. A test pins it to the highest file in supabase/migrations, so it can never drift. (The runner
  * cannot read that folder on a serverless deployment, so the version the code needs is a constant.)
  */
-export const REQUIRED_SCHEMA_VERSION = "20261015002700";
+export const REQUIRED_SCHEMA_VERSION = "20261029002900";
 
 /** The database objects the launch and the Events page rely on: if one is missing the schema is not the one this code expects, whatever the version table says. */
 export const REQUIRED_SCHEMA_OBJECTS = [

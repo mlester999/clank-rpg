@@ -105,7 +105,7 @@ describe("the Top 10 ladder and the rows", () => {
     const final = board({
       state: "FINAL", finalizedAt: T("2026-10-08T00:00:06Z"), serverNow: T("2026-10-08T01:00:00Z"),
       rows: [
-        row(1, "Celsius", { holderBonus: "7,500", holderTier: "10M", bonusStatus: "CREDITED", totalReward: "37,500" }),
+        row(1, "Celsius", { basePrize: "30,000", holderBonus: "7,500", holderTier: "10M", bonusStatus: "CREDITED", totalReward: "37,500" }),
         row(2, "Leon", { bonusStatus: "PENDING" }),
         row(3, "Mia", { prizeEligible: false, basePrize: "0", totalReward: "0" }),
       ],

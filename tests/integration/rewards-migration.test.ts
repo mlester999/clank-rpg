@@ -103,6 +103,9 @@ describe("on an EMPTY scratch database", () => {
   });
 });
 
+/** What migration 1400 itself writes: the pools and allocation of THAT era. Later migrations (2800, 2900) and the code default have moved on since. */
+const AS_WRITTEN_BY_1400 = { ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: "100000", weeklyPrizePool: "500000", seasonRewardAllocation: "20000000" };
+
 describe("on a database in the state LIVE is in today (…001300 applied, old settings row, empty reward tables)", () => {
   it("applies on top, rewrites the untouched v1 settings row to the FINAL economy (audited), and the app reads it", async () => {
     const db = await liveToday();
@@ -113,8 +116,8 @@ describe("on a database in the state LIVE is in today (…001300 applied, old se
     for (const gone of ["rewardPerBattle", "dailyEmissionCap", "holderTiers", "holderTierActivationHours", "weeklyScoredPicksPerDay", "weeklyPrizeSplitBps", "scoredPicksPerDay", "dailyMinimumScoredPicks", "weeklyMinimumScoredPicks"]) expect(row!.value).not.toHaveProperty(gone);
     expect(row!.value).toMatchObject({ dailyPrizePool: "100000", weeklyPrizePool: "500000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100, holderWeeklyQualifyHours: 168, holderDailyQualifyHours: 24 });
     // The SQL rewrite and the application's own reader agree: strict validation accepts the stored row as-is.
-    expect(parseSettings("arena_picks", row!.value)).toEqual(DEFAULT_SETTINGS.arena_picks);
-    expect((await loadSettings(db)).arena_picks).toEqual(DEFAULT_SETTINGS.arena_picks);
+    expect(parseSettings("arena_picks", row!.value)).toEqual(AS_WRITTEN_BY_1400);
+    expect((await loadSettings(db)).arena_picks).toEqual(AS_WRITTEN_BY_1400);
     expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]); // re-running touches nothing (version stays 2)
     expect((await db.query<{ version: number }>("select version from public.game_settings where key = 'arena_picks'"))[0]!.version).toBe(2);
   });
@@ -140,7 +143,7 @@ describe("on a database in the state LIVE is in today (…001300 applied, old se
     const db = await liveToday();
     resetRewardsReadyCache();
     const settings = await loadSettings(db);
-    expect(settings.arena_picks).toMatchObject({ dailyPrizePool: "100000", weeklyPrizePool: "500000", dailyMinimumPicks: 20, weeklyMinimumPicks: 100 });
+    expect(settings.arena_picks).toMatchObject({ dailyPrizePool: DEFAULT_SETTINGS.arena_picks.dailyPrizePool, weeklyPrizePool: DEFAULT_SETTINGS.arena_picks.weeklyPrizePool, dailyMinimumPicks: 20, weeklyMinimumPicks: 100 }); // upgraded in memory to the code default
     expect(settings.arena_picks).not.toHaveProperty("scoredPicksPerDay");
     expect((await db.query<{ version: number }>("select version from public.game_settings where key = 'arena_picks'"))[0]!.version).toBe(1);
     // …and the sweep is a quiet no-op until the migration exists: no errors, nothing touched.
@@ -197,7 +200,7 @@ describe("on a database in the state LIVE is in today (…001300 applied, old se
     await migrate(db, undefined, { upTo: NEW });
     const settings = await loadSettings(db); // must not throw on the unknown stored key
     expect(settings).not.toHaveProperty("betting");
-    expect(settings.arena_picks).toEqual(DEFAULT_SETTINGS.arena_picks);
+    expect(settings.arena_picks).toEqual(AS_WRITTEN_BY_1400);
   });
 });
 

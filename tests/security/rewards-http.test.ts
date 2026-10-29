@@ -576,9 +576,9 @@ describe("the DAILY and WEEKLY leaderboards over HTTP: server clock, canonical p
     expect(body.board.endsAt - body.board.startsAt).toBe(86_400_000);
     expect(body.board.startsAt).toBeLessThanOrEqual(body.serverNow);
     expect(body.board.endsAt).toBeGreaterThan(body.serverNow);
-    expect(body.board.rules).toMatchObject({ kind: "DAILY", prizePool: "500,000", minimumPicks: 20, pointsPerCorrectPick: 10, topRewarded: 10, symbol: "$CLANKRPG" });
+    expect(body.board.rules).toMatchObject({ kind: "DAILY", prizePool: "200,000", minimumPicks: 20, pointsPerCorrectPick: 10, topRewarded: 10, symbol: "$CLANKRPG" });
     expect(body.board.rules).not.toHaveProperty("scoredPicksPerDay"); // no per-day cap in what the server tells the client
-    expect(body.board.rules.prizes.map((p: { amount: string }) => p.amount)).toEqual(["150,000", "100,000", "75,000", "50,000", "40,000", "30,000", "20,000", "15,000", "10,000", "10,000"]);
+    expect(body.board.rules.prizes.map((p: { amount: string }) => p.amount)).toEqual(["60,000", "40,000", "30,000", "20,000", "16,000", "12,000", "8,000", "6,000", "4,000", "4,000"]);
     expect(body.current).toMatchObject({ kind: "DAILY", start: body.board.start, startsAt: body.board.startsAt, endsAt: body.board.endsAt });
     expect(body.me).toBeNull(); // anonymous: no personal standing
     // The default period is the DAILY board.
@@ -642,7 +642,7 @@ describe("the DAILY and WEEKLY leaderboards over HTTP: server clock, canonical p
     // the member's own reward summary lists each prize on its own line — Daily and Weekly distinguished — and the rules for both boards
     const mine = (await summary(cookie)).rewards;
     expect(mine.latestRewards.map((r: { label: string; amount: string }) => [r.label, r.amount])).toEqual(expect.arrayContaining([["DAILY #1", "150,000"], ["WEEKLY #1", "300,000"]]));
-    expect(mine.boards.daily).toMatchObject({ prizePool: "500,000", minimumPicks: 20 }); // the shipped minimum (the test only lowered it for the freeze)
+    expect(mine.boards.daily).toMatchObject({ prizePool: "200,000", minimumPicks: 20 }); // the shipped minimum (the test only lowered it for the freeze)
     expect(mine.boards.daily).not.toHaveProperty("scoredPicksPerDay");
     expect(mine.boards.weekly).toMatchObject({ prizePool: "1,000,000" });
     // a PUBLIC reader never sees someone's prize status (only the owner's `me` does)
@@ -777,7 +777,7 @@ describe("the MANUAL claim lifecycle through the admin API (Pending → Sent / D
 describe("the admin boards / holder / token views over HTTP", () => {
   it("boards: the running Daily and Weekly with rules and counts; finalize is a safe, idempotent, audited sweep (and nothing can reset)", async () => {
     const w = await (await admin("GET", "picks/boards")).json();
-    expect(w.boards.current.DAILY).toMatchObject({ prizePool: "500,000", minimumPicks: 20, participants: 0 });
+    expect(w.boards.current.DAILY).toMatchObject({ prizePool: "200,000", minimumPicks: 20, participants: 0 });
     expect(w.boards.current.WEEKLY).toMatchObject({ prizePool: "1,000,000", minimumPicks: 100, participants: 0 });
     expect(w.boards.finalized).toEqual([]);
     expect(w.boards.unfinalized).toEqual([]);
@@ -819,9 +819,9 @@ describe("the admin boards / holder / token views over HTTP", () => {
 
   it("the economy: maximum liabilities and the Season 1 plan are served to admins (and only to admins)", async () => {
     const o = (await (await admin("GET", "picks/overview")).json()).overview;
-    expect(o.economy.daily).toEqual({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.daily).toEqual({ basePool: "200,000", maxBonusExposure: "50,000", maxLiability: "250,000" });
     expect(o.economy.weekly).toEqual({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
-    expect(o.economy.season).toMatchObject({ baseMaximum: "54,000,000", maximumWithBonuses: "67,500,000", allocation: "75,000,000", buffer: "7,500,000", fits: true });
+    expect(o.economy.season).toMatchObject({ baseMaximum: "28,800,000", maximumWithBonuses: "36,000,000", allocation: "75,000,000", buffer: "39,000,000", fits: true });
     expect((await admin("GET", "picks/overview", { cookie: null })).status).toBe(401);
   });
 

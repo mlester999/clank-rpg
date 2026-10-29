@@ -33,15 +33,15 @@ const overview = async (reader: SimulatedChainReader | null = funded(), nowMs = 
   rewardsOverview(db, { settings, tokenDecimals: reader ? DECIMALS : null, token, reader, nowMs });
 
 describe("admin: the LEADERBOARD ECONOMY — what the rules can cost at most", () => {
-  it("DAILY base 500,000 + max holder bonus exposure 125,000 = max liability 625,000; WEEKLY 1,000,000 + 250,000 = 1,250,000", async () => {
+  it("DAILY base 200,000 + max holder bonus exposure 50,000 = max liability 250,000; WEEKLY 1,000,000 + 250,000 = 1,250,000", async () => {
     const o = await overview();
-    expect(o.economy.daily).toEqual({ basePool: "500,000", maxBonusExposure: "125,000", maxLiability: "625,000" });
+    expect(o.economy.daily).toEqual({ basePool: "200,000", maxBonusExposure: "50,000", maxLiability: "250,000" });
     expect(o.economy.weekly).toEqual({ basePool: "1,000,000", maxBonusExposure: "250,000", maxLiability: "1,250,000" });
     expect(o.economy.maxBonusPercent).toBe(25);
   });
-  it("SEASON 1 PLAN: 84 days × 500,000 + 12 weeks × 1,000,000 = 54,000,000 base; 67,500,000 with every bonus at 25%; inside a 75,000,000 allocation with a 7,500,000 buffer — a planning metric only", async () => {
+  it("SEASON 1 PLAN: 84 days × 200,000 + 12 weeks × 1,000,000 = 28,800,000 base; 36,000,000 with every bonus at 25%; inside a 75,000,000 allocation with a 39,000,000 buffer — a planning metric only", async () => {
     const { season } = (await overview()).economy;
-    expect(season).toEqual({ weeks: 12, days: 84, dailyBaseTotal: "42,000,000", weeklyBaseTotal: "12,000,000", baseMaximum: "54,000,000", maximumWithBonuses: "67,500,000", allocation: "75,000,000", buffer: "7,500,000", fits: true });
+    expect(season).toEqual({ weeks: 12, days: 84, dailyBaseTotal: "16,800,000", weeklyBaseTotal: "12,000,000", baseMaximum: "28,800,000", maximumWithBonuses: "36,000,000", allocation: "75,000,000", buffer: "39,000,000", fits: true });
     expect((await overview()).warnings.join(" ")).not.toMatch(/Season plan/);
     // Nothing was minted or reserved by looking at it.
     expect(await db.query("select 1 from public.arena_reward_ledger")).toHaveLength(0);
@@ -55,10 +55,10 @@ describe("admin: the LEADERBOARD ECONOMY — what the rules can cost at most", (
   it("carries the rules the boards run on: the minimum picks, points, the ladder, the bonus tiers and the qualification windows — and no per-battle pool or daily emission cap exists", async () => {
     const o = await overview();
     expect(o).toMatchObject({ prizesEnabled: true, minimumPicks: { daily: 20, weekly: 100 }, pointsPerCorrectPick: 10, holderQualifyHours: { daily: 24, weekly: 168 }, holderMaxAgeHours: 6, holderRefreshMinutes: 30 });
-    expect(o.rules.daily).toMatchObject({ prizePool: "500,000", topRewarded: 10, minimumPicks: 20 });
+    expect(o.rules.daily).toMatchObject({ prizePool: "200,000", topRewarded: 10, minimumPicks: 20 });
     expect(o).not.toHaveProperty("scoredPicksPerDay");
     expect(o.rules.weekly).toMatchObject({ prizePool: "1,000,000", topRewarded: 10, minimumPicks: 100 });
-    expect(o.rules.daily.prizes.map((p) => p.amount)).toEqual(["150,000", "100,000", "75,000", "50,000", "40,000", "30,000", "20,000", "15,000", "10,000", "10,000"]);
+    expect(o.rules.daily.prizes.map((p) => p.amount)).toEqual(["60,000", "40,000", "30,000", "20,000", "16,000", "12,000", "8,000", "6,000", "4,000", "4,000"]);
     expect(o.holderBonusTiers.map((t) => `${t.label} ${t.bonus}`)).toEqual(["100K +5%", "500K +10%", "1M +15%", "5M +20%", "10M +25%"]);
     expect(Object.keys(o)).not.toEqual(expect.arrayContaining(["rewardPerBattle", "dailyEmissionCap", "emittedToday"]));
     expect(o.warnings.join(" ")).not.toMatch(/emission cap/i);

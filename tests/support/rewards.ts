@@ -25,7 +25,13 @@ export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
 export const utc = (y: number, m: number, d: number, h = 0, min = 0, s = 0): number => Date.UTC(y, m - 1, d, h, min, s);
 
-export const settingsWith = (over: Partial<GameSettings["arena_picks"]> = {}): GameSettings => ({ ...DEFAULT_SETTINGS, arena_picks: { ...DEFAULT_SETTINGS.arena_picks, ...over } });
+/**
+ * The reward-mechanics suites are written against a fixed 500,000 Daily pool (ladder 150,000 / 100,000 / 75,000 …, +25 % bonus 37,500), so the
+ * fixture pins it instead of following the product default — changing the default pool must not silently re-baseline every payout assertion.
+ * The default itself is asserted where it is the subject (arena-prize-pools, rewards-economy, docs, the admin economy view).
+ */
+export const FIXTURE_DAILY_POOL = "500000";
+export const settingsWith = (over: Partial<GameSettings["arena_picks"]> = {}): GameSettings => ({ ...DEFAULT_SETTINGS, arena_picks: { ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: FIXTURE_DAILY_POOL, ...over } });
 
 export const TOKEN = "0x00000000000000000000000000000000000c1a4c";
 export const TREASURY = "0x0000000000000000000000000000000000007ea5";

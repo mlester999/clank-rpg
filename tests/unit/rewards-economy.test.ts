@@ -10,20 +10,20 @@ const UNIT = 10n ** BigInt(LOGICAL_DECIMALS);
 const plan = economyPlan(DEFAULT_SETTINGS.arena_picks);
 
 describe("the reward economy is a PRODUCT OF SETTINGS — maximum emission is predictable", () => {
-  it("DAILY: base pool 500,000 · maximum holder-bonus exposure 125,000 · maximum liability 625,000", () => {
-    expect(plan.daily).toEqual({ basePool: 500_000n * UNIT, maxBonusExposure: 125_000n * UNIT, maxLiability: 625_000n * UNIT });
+  it("DAILY: base pool 200,000 · maximum holder-bonus exposure 50,000 · maximum liability 250,000", () => {
+    expect(plan.daily).toEqual({ basePool: 200_000n * UNIT, maxBonusExposure: 50_000n * UNIT, maxLiability: 250_000n * UNIT });
   });
   it("WEEKLY: base pool 1,000,000 · maximum holder-bonus exposure 250,000 · maximum liability 1,250,000", () => {
     expect(plan.weekly).toEqual({ basePool: 1_000_000n * UNIT, maxBonusExposure: 250_000n * UNIT, maxLiability: 1_250_000n * UNIT });
   });
-  it("SEASON 1 (12 weeks = 84 days): daily 42,000,000 + weekly 12,000,000 = 54,000,000 base; 67,500,000 with 25% bonuses everywhere; fits a 75,000,000 allocation with a 7,500,000 buffer", () => {
-    expect(plan.season).toMatchObject({ weeks: 12, days: 84, dailyBaseTotal: 42_000_000n * UNIT, weeklyBaseTotal: 12_000_000n * UNIT, baseMaximum: 54_000_000n * UNIT, maximumWithBonuses: 67_500_000n * UNIT, allocation: 75_000_000n * UNIT, buffer: 7_500_000n * UNIT, fits: true });
+  it("SEASON 1 (12 weeks = 84 days): daily 16,800,000 + weekly 12,000,000 = 28,800,000 base; 36,000,000 with 25% bonuses everywhere; fits a 75,000,000 allocation with a 39,000,000 buffer", () => {
+    expect(plan.season).toMatchObject({ weeks: 12, days: 84, dailyBaseTotal: 16_800_000n * UNIT, weeklyBaseTotal: 12_000_000n * UNIT, baseMaximum: 28_800_000n * UNIT, maximumWithBonuses: 36_000_000n * UNIT, allocation: 75_000_000n * UNIT, buffer: 39_000_000n * UNIT, fits: true });
   });
   it("the Admin view carries the same numbers as display strings, and a season that cannot fit its allocation is reported (negative buffer, fits=false)", () => {
     const v = economyPlanView(plan);
-    expect(v).toMatchObject({ maxBonusPercent: 25, daily: { maxLiability: "625,000" }, weekly: { maxLiability: "1,250,000" }, season: { baseMaximum: "54,000,000", maximumWithBonuses: "67,500,000", buffer: "7,500,000", fits: true } });
+    expect(v).toMatchObject({ maxBonusPercent: 25, daily: { maxLiability: "250,000" }, weekly: { maxLiability: "1,250,000" }, season: { baseMaximum: "28,800,000", maximumWithBonuses: "36,000,000", buffer: "39,000,000", fits: true } });
     const tight = economyPlanView(economyPlan({ ...DEFAULT_SETTINGS.arena_picks, seasonRewardAllocation: "15000000" }));
-    expect(tight.season).toMatchObject({ fits: false, buffer: "-52,500,000" });
+    expect(tight.season).toMatchObject({ fits: false, buffer: "-21,000,000" });
   });
   it("changing a pool, the bonus ladder or the season length moves every figure — nothing is hard-coded", () => {
     const p = economyPlan({ ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: "10000", holderBonusTiers: [{ minimum: "0", bonusBps: 0 }, { minimum: "1", bonusBps: 1000 }], seasonPlanWeeks: 4 });
@@ -40,7 +40,7 @@ describe("settings: a stored row of the superseded per-battle design is UPGRADED
     expect(up).not.toHaveProperty("rewardPerBattle");
     expect(up).not.toHaveProperty("holderTiers");
     expect(up).not.toHaveProperty("scoredPicksPerDay"); // no per-day scoring cap exists any more
-    expect(up).toMatchObject({ dailyPrizePool: "500000", weeklyPrizePool: "1000000", weeklyMinimumPicks: 100, dailyMinimumPicks: 20, minimumClaim: "25000", minConfirmations: 3, holderCheckBatchSize: 40 });
+    expect(up).toMatchObject({ dailyPrizePool: "200000", weeklyPrizePool: "1000000", weeklyMinimumPicks: 100, dailyMinimumPicks: 20, minimumClaim: "25000", minConfirmations: 3, holderCheckBatchSize: 40 });
     expect(up.prizeSplitBps).toEqual([3000, 2000, 1500, 1000, 800, 600, 400, 300, 200, 200]);
     expect(up.holderBonusTiers.map((t) => t.bonusBps)).toEqual([0, 500, 1000, 1500, 2000, 2500]);
   });

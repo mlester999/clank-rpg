@@ -614,7 +614,7 @@ export const DEFAULT_ARENA_PICKS: z.output<typeof arenaPicksBaseSchema> = {
   enabled: true,
   minimumClaim: "10000",
   pointsPerCorrectPick: 10,
-  dailyPrizePool: "500000",
+  dailyPrizePool: "200000",
   weeklyPrizePool: "1000000",
   // #1 30% · #2 20% · #3 15% · #4 10% · #5 8% · #6 6% · #7 4% · #8 3% · #9 2% · #10 2%
   prizeSplitBps: [3000, 2000, 1500, 1000, 800, 600, 400, 300, 200, 200],

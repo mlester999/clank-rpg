@@ -38,7 +38,7 @@ describe("the file", () => {
   it("comes right after hero renderer v3 and nothing at or below 2600 was edited", async () => {
     const all = (await readMigrations()).map((m) => m.version);
     expect(all.indexOf(NEW)).toBe(all.indexOf(PREVIOUS) + 1);
-    expect(all.at(-1)).toBe(NEW);
+    expect(all.filter((v) => v > NEW)).toEqual(["20261017002800", "20261029002900"]); // only the two Arena Picks pool settings migrations follow it
   });
 
   it("is additive: deletes nothing, rewrites no row, backfills nothing, and touches no existing table", () => {
@@ -72,14 +72,14 @@ describe("applying it", () => {
     const tables = ["characters", "hero_versions", "character_appearances", "character_stats", "arena_battles", "arena_participants", "arena_leaderboards", "arena_leaderboard_results", "hero_arena_boards", "hero_arena_results", "seasons", "game_state", "arena_state", "game_settings", "arena_reward_ledger"];
     const snapshot = async () => Object.fromEntries(await Promise.all(tables.map(async (t) => [t, await db.query(`select * from public.${t} order by 1, 2`)])));
     const before = await snapshot();
-    const result = await migrate(db);
+    const result = await migrate(db, undefined, { upTo: NEW }); // the later pool-settings migrations legitimately rewrite game_settings and have their own tests
     expect(result.applied).toEqual([NEW]);
     expect(await snapshot()).toEqual(before);
     // nothing is backfilled: the already-finalized (pre-season) results have no snapshot — they are never shown on Events
     expect((await db.query<{ n: number }>("select count(*)::int as n from public.arena_leaderboard_result_snapshots"))[0]!.n).toBe(0);
     expect((await db.query<{ n: number }>("select count(*)::int as n from public.hero_arena_result_snapshots"))[0]!.n).toBe(0);
     // re-running it is a no-op
-    expect((await migrate(db)).applied).toEqual([]);
+    expect((await migrate(db, undefined, { upTo: NEW })).applied).toEqual([]);
   });
 });
 

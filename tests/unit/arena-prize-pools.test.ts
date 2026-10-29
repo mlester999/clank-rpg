@@ -93,11 +93,11 @@ describe("the numbers come from the server's reward configuration — nothing is
     expect(text(html)).not.toMatch(/100,000|500,000/);
   });
 
-  it("is built from the very DTO the server sends: the real settings produce exactly 500,000 and 1,000,000; an admin change follows", async () => {
+  it("is built from the very DTO the server sends: the real settings produce exactly 200,000 and 1,000,000; an admin change follows", async () => {
     const noDb: Queryable = { query: async () => [{ ok: true }] as never, exec: async () => undefined };
     const live = await getPicksRewardDto(noDb, DEFAULT_SETTINGS, MON_OCT_5);
     const p = prizeTiles(live)!;
-    expect([p.daily.amount, p.weekly.amount, p.daily.symbol, p.daily.label, p.weekly.label]).toEqual(["500,000", "1,000,000", "$CLANKRPG", "Daily pool", "Weekly pool"]);
+    expect([p.daily.amount, p.weekly.amount, p.daily.symbol, p.daily.label, p.weekly.label]).toEqual(["200,000", "1,000,000", "$CLANKRPG", "Daily pool", "Weekly pool"]);
     const admin = { ...DEFAULT_SETTINGS, arena_picks: { ...DEFAULT_SETTINGS.arena_picks, dailyPrizePool: "75000", weeklyPrizePool: "300000" } };
     const changed = prizeTiles(await getPicksRewardDto(noDb, admin, MON_OCT_5))!;
     expect([changed.daily.amount, changed.weekly.amount]).toEqual(["75,000", "300,000"]);

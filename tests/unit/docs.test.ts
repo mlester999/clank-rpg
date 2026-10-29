@@ -195,9 +195,9 @@ describe("docs content states CURRENT product truth, from the shared rules", () 
     expect(x).toContain(`Top ${r.picks.topRewarded}`);
     expect(x).toMatch(/Every valid Pick counts/);
     for (const [i, percent] of r.picks.prizeLadderPercent.entries()) expect(x, `#${i + 1}`).toContain(`${percent}%`);
-    expect(x).toContain("150,000"); // #1 of the daily pool, computed from the ladder
+    expect(x).toContain("60,000"); // #1 of the daily pool, computed from the ladder
     expect(x).toContain("300,000"); // #1 of the weekly pool
-    expect(prizeShare(1, r.picks.daily.pool).amount).toBe(150_000);
+    expect(prizeShare(1, r.picks.daily.pool).amount).toBe(60_000);
     expect(x).toMatch(/no effect/i);
   });
 

@@ -282,7 +282,7 @@ describe("LAUNCH SEASON 1 → the first official period → the first champions"
     expect(day1.champions).toHaveLength(1);
     const champ = day1.champions[0]!;
     expect(champ).toMatchObject({ program: "picks", rank: 2, prizeRank: 1, points: 180, picks: 25, correctPicks: 18, prizeEligible: true, accuracy: 72 }); // #1 among those who QUALIFY; #2 on the raw board
-    expect(champ.allocation).toMatchObject({ status: "ALLOCATED", amount: "30,000", symbol: "$CLANKRPG" }); // 30% of the 100,000 pool, an ALLOCATION
+    expect(champ.allocation).toMatchObject({ status: "ALLOCATED", amount: "150,000", symbol: "$CLANKRPG" }); // 30% of the 500,000 fixture pool, an ALLOCATION
     expect(champ.art).not.toBeNull(); // the hero as it was, rendered from the snapshot
     expect(champ.power).toBeGreaterThan(0);
     // the raw leader (19/19) is said plainly and is NOT a champion or a prize winner
@@ -294,7 +294,7 @@ describe("LAUNCH SEASON 1 → the first official period → the first champions"
     expect(detail.standings.map((r) => [r.rank, r.program === "picks" ? r.correctPicks : -1])).toEqual([[1, 19], [2, 18], [3, 12], [3, 12], [5, 5]]);
     const leaderRow = detail.standings[0]!;
     expect(leaderRow).toMatchObject({ prizeEligible: false, allocation: { status: "NONE" } });
-    expect(detail.standings[1]).toMatchObject({ prizeEligible: true, allocation: { status: "ALLOCATED", amount: "30,000" } });
+    expect(detail.standings[1]).toMatchObject({ prizeEligible: true, allocation: { status: "ALLOCATED", amount: "150,000" } });
     expect(detail.standings.filter((r) => r.rank === 3).every((r) => r.tied && r.allocation.status === "ALLOCATED")).toBe(true); // the tie shares positions 2+3's prizes
     expect(JSON.stringify(detail)).not.toMatch(/telegram|wallet|owner|"userId"|review/i);
 
