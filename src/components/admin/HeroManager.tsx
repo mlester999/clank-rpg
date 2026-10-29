@@ -77,6 +77,11 @@ export function HeroManager() {
   return (
     <>
       <Panel title="Find a hero" actions={<span className="text-xs text-steel-400">{data ? `${n(data.total)} match${data.total === 1 ? "" : "es"}` : ""}</span>}>
+        <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Hero status">
+          {([["", "All"], ["ACTIVE", "Active"], ["SUSPENDED", "Suspended"], ["INACTIVE", "Inactive"]] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={f.status === value} className={`btn btn-sm ${f.status === value ? "btn-teal" : "btn-ghost"}`} onClick={() => set({ status: value })}>{label}</button>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-2">
           <input value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} placeholder="RPG name, Telegram name, @username, Telegram ID or hero ID" aria-label="Search heroes" className={`${sel} min-w-[16rem] flex-1`} />
           <select aria-label="Claimed filter" className={sel} value={f.claimed} onChange={(e) => set({ claimed: e.target.value })}><option value="">Claimed + unclaimed</option><option value="claimed">Claimed</option><option value="unclaimed">Unclaimed</option></select>
